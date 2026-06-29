@@ -1704,7 +1704,6 @@ export function InitiationFounderPainSection({ content }) {
   const bloomRotate = useTransform(scrollYProgress, [0, 1], [-8, 10]);
   const bloomScale = useTransform(scrollYProgress, [0, 1], [1.18, 0.9]);
   const deepY = useTransform(scrollYProgress, [0, 1], [150, -180]);
-  const streakX = useTransform(scrollYProgress, [0, 1], [-260, 260]);
   const headY = useTransform(scrollYProgress, [0, 1], [30, -42]);
 
   function trace(index) {
@@ -1748,12 +1747,6 @@ export function InitiationFounderPainSection({ content }) {
           y: reduce ? 0 : deepY,
           background: "radial-gradient(circle, rgba(212,168,83,0.10), transparent 70%)",
         }}
-        aria-hidden="true"
-      />
-      {/* Parallax layer 3 — a horizontal pressure streak that slides across as you scroll down. */}
-      <motion.div
-        className="pointer-events-none absolute left-0 top-[28%] z-0 h-px w-[62%] bg-gradient-to-r from-transparent via-[#DB2777]/30 to-transparent"
-        style={{ x: reduce ? 0 : streakX }}
         aria-hidden="true"
       />
 
@@ -2813,6 +2806,17 @@ export function InitiationFounderStorySection({ content }) {
                 <p className="mt-2 text-lg font-semibold leading-8 tracking-[-0.02em] text-[#F3EFEC] sm:text-xl lg:mt-3">
                   {movement[1]}
                 </p>
+                {content.demoCta ? (
+                  <Link
+                    href={content.demoCtaTarget}
+                    className="group mt-6 inline-flex min-h-[48px] items-center justify-center gap-2 rounded-full border border-white/20 bg-white/[0.04] px-6 py-3 text-sm font-semibold text-[#E8E6E3] transition hover:border-[#D4A853]/40 hover:bg-[#D4A853]/[0.06] hover:text-white"
+                  >
+                    {content.demoCta}
+                    <span className="transition-transform duration-300 group-hover:translate-x-1" aria-hidden="true">
+                      →
+                    </span>
+                  </Link>
+                ) : null}
               </div>
 
               <div className="mt-8 flex justify-center sm:mt-10 lg:mt-0 lg:justify-end lg:self-center">

@@ -105,6 +105,8 @@ export const INITIATION_HOMEPAGE_CONTENT = {
   founderStory: {
     headline:
       "The scariest part of growing is seeing how much the business still runs on your memory.",
+    demoCta: "See the Demo",
+    demoCtaTarget: OS_DEMO_URL,
     body: [
       "StudioFlows came out of the kind of stress most owners don't talk about.",
       "Big contracts were coming in.",
@@ -377,8 +379,8 @@ export const INITIATION_HOMEPAGE_CONTENT = {
       ],
       bestFor:
         "Owner-led service businesses ready to clean up operations now.",
-      cta: "Take the 60-second Ops Check",
-      ctaTarget: OS_DIAGNOSTIC_URL,
+      cta: "See the Demo",
+      ctaTarget: OS_DEMO_URL,
     },
     card2: {
       tag: "Coming soon · Vessa",

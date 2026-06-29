@@ -4,8 +4,6 @@ export const PUBLIC_SITE_ORIGIN = "https://www.studioflows.co";
 
 export const INDEXABLE_PATHS = [
   "/",
-  "/silent-collapse",
-  "/platform",
   "/services/custom-ops-hub",
   "/vessa",
   "/privacy-policy",

@@ -1,9 +1,9 @@
 // ── CTA destinations ─────────────────────────────────────────────────────────
-// Every homepage CTA routes to the 6-question Ops Check pre-qualifier first.
 const OS_DIAGNOSTIC_URL = "/apply";
+const OS_DEMO_URL = "https://os.studioflows.co/demo/access";
 
 export const HOMEPAGE_FUNNEL_HELPER_COPY =
-  "Not sure if you need help yet? Start with the Ops Check. If you already know things are messy, book the audit.";
+  "Not sure if you need help yet? Start with the Ops Check. Want to see the OS first? Explore the live demo.";
 
 export const INITIATION_HOMEPAGE_CONTENT = {
   hero: {
@@ -20,9 +20,11 @@ export const INITIATION_HOMEPAGE_CONTENT = {
     ],
     primaryCta: "Take the 60-second Ops Check",
     primaryCtaTarget: OS_DIAGNOSTIC_URL,
-    secondaryCta: "Book the Ops Audit",
-    secondaryCtaTarget: OS_DIAGNOSTIC_URL,
+    secondaryCta: "See It Live",
+    secondaryCtaTarget: OS_DEMO_URL,
     funnelHelperCopy: HOMEPAGE_FUNNEL_HELPER_COPY,
+    loginLabel: "Login",
+    loginHref: "https://os.studioflows.co/login",
     // Hero "flashlight in the dark" reveal — the OS is hidden in shadow; the
     // beam roams across it like a detective finding clues. Real product views.
     spotlight: {
@@ -313,8 +315,8 @@ export const INITIATION_HOMEPAGE_CONTENT = {
     lockNote: "Founding customer pricing is locked in as long as your account stays active.",
     primaryCta: "Take the 60-second Ops Check",
     primaryCtaTarget: OS_DIAGNOSTIC_URL,
-    secondaryCta: "Book the Ops Audit",
-    secondaryCtaTarget: OS_DIAGNOSTIC_URL,
+    secondaryCta: "View Demo",
+    secondaryCtaTarget: OS_DEMO_URL,
     funnelHelperCopy: HOMEPAGE_FUNNEL_HELPER_COPY,
   },
 
@@ -379,7 +381,7 @@ export const INITIATION_HOMEPAGE_CONTENT = {
       ctaTarget: OS_DIAGNOSTIC_URL,
     },
     card2: {
-      tag: "Available now · Vessa",
+      tag: "Coming soon · Vessa",
       headline: "Vessa",
       subheadline: "Autonomous AI COO for the tools you already run.",
       body: [
@@ -388,8 +390,7 @@ export const INITIATION_HOMEPAGE_CONTENT = {
       ],
       bestFor:
         "Owners who want AI execution across ClickUp, Slack, and email without replacing their entire operating system.",
-      cta: "Start with Vessa",
-      ctaTarget: OS_DIAGNOSTIC_URL,
+      comingSoon: "Coming Soon",
     },
   },
   // PAIN ⇄ PRODUCT BANDS — terse alternating editorial spreads that blend a
@@ -461,8 +462,8 @@ export const INITIATION_HOMEPAGE_CONTENT = {
     ],
     primaryCta: "Take the 60-second Ops Check",
     primaryCtaTarget: OS_DIAGNOSTIC_URL,
-    secondaryCta: "Book the Ops Audit",
-    secondaryCtaTarget: OS_DIAGNOSTIC_URL,
+    secondaryCta: "Explore OS",
+    secondaryCtaTarget: OS_DEMO_URL,
     funnelHelperCopy: HOMEPAGE_FUNNEL_HELPER_COPY,
   },
 } as const;

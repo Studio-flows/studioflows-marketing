@@ -14,6 +14,28 @@ export const HOMEPAGE_CTA = {
     "Answer the next set of questions and we'll turn them into a clear Ops Teardown based on how you actually run things. Takes about 2 minutes. PDF comes right after.",
 } as const;
 
+export const OPS_CHECK_QUALIFIED_BRIDGE = {
+  eyebrow: "Ops Check Complete",
+  headline: "You found operational drag. Now choose how deep you want to go.",
+  subheadline:
+    "Your answers suggest there may be real execution friction inside the business. You can book a quick Ops Call now, or complete the deeper audit to generate a private StudioFlows Ops Teardown first.",
+  pathsHeading: "Two paths",
+  bookCall: {
+    title: "Book a Quick Ops Call",
+    body: "Prefer to talk it through? Book a short call and we'll walk through where execution is leaking, what's likely costing time, and whether StudioFlows is a fit.",
+    cta: "Book My Ops Call",
+  },
+  teardown: {
+    title: "Generate My Private Ops Teardown",
+    body: "Want the artifact first? Answer the deeper audit and StudioFlows will generate a private teardown showing your drag profile, founder bottlenecks, workflow risk, and recommended next operating-system step.",
+    cta: "Start My Ops Teardown",
+  },
+  trustNote:
+    "This audit is intentionally direct. We ask about founder dependency, handoffs, software trust, workflow volume, and business risk because vague answers create vague systems. Your teardown is private and designed to help you make a clearer operating decision.",
+  privacyNote:
+    "You can download or email your teardown after it's generated. If you choose to share anything publicly, we'll only share the public Ops Check link — never your private results.",
+} as const;
+
 export const OPS_CHECK_LOW_FIT_COPY = {
   eyebrow: "Ops Check complete",
   helper:

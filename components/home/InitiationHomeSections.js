@@ -1446,16 +1446,24 @@ export function InitiationHeroSection({ content }) {
         {/* Header — logo + clearance strip */}
         <header className="relative z-10 flex items-center justify-between gap-4">
           <StudioFlowsLogoMark />
-          <div className="flex items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#D4A853]/70">
-            <span className="relative flex h-1.5 w-1.5">
-              {!reduce ? (
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D4A853]/50" />
-              ) : null}
-              <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#D4A853]" />
-            </span>
-            <span className="hidden sm:inline">restricted</span>
-            <span className="hidden text-[#9B9894]/40 sm:inline">/</span>
-            <span>operator access</span>
+          <div className="flex items-center gap-3 sm:gap-4">
+            <div className="hidden items-center gap-2 font-mono text-[10px] uppercase tracking-[0.24em] text-[#D4A853]/70 md:flex">
+              <span className="relative flex h-1.5 w-1.5">
+                {!reduce ? (
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#D4A853]/50" />
+                ) : null}
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-[#D4A853]" />
+              </span>
+              <span className="hidden sm:inline">restricted</span>
+              <span className="hidden text-[#9B9894]/40 sm:inline">/</span>
+              <span>operator access</span>
+            </div>
+            <Link
+              href={content.loginHref}
+              className="inline-flex min-h-[40px] items-center justify-center rounded-full border border-white/20 bg-white/[0.04] px-4 py-2 font-mono text-[10px] font-semibold uppercase tracking-[0.22em] text-[#E8E6E3] transition hover:border-[#D4A853]/40 hover:bg-[#D4A853]/[0.06] hover:text-white"
+            >
+              {content.loginLabel}
+            </Link>
           </div>
         </header>
 
@@ -6370,7 +6378,11 @@ export function InitiationEntryPathsSection({ content }) {
                     </div>
                     <p className="mt-6 text-sm font-semibold text-[#8A6A1F]">Best for:</p>
                     <p className="mt-2 text-sm leading-7 text-[#3A352C]">{card.bestFor}</p>
-                    {card.cta ? (
+                    {card.comingSoon ? (
+                      <p className="mt-7 font-mono text-xs uppercase tracking-[0.22em] text-[#4E483D]">
+                        {card.comingSoon}
+                      </p>
+                    ) : card.cta ? (
                       <Link
                         href={card.ctaTarget}
                         onClick={(event) => event.stopPropagation()}
@@ -6473,7 +6485,19 @@ export function InitiationFinalCtaSection({ content }) {
             <p className="mt-6 max-w-2xl text-sm leading-7 text-[#6B6557]">{content.funnelHelperCopy}</p>
           ) : null}
           </motion.div>
-          <footer className="mt-12 border-t border-black/10 pt-8 text-sm text-[#6B6557]">StudioFlows</footer>
+          <footer className="mt-12 border-t border-black/10 pt-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-[#6B6557]">© 2026 StudioFlows</p>
+              <nav className="flex flex-wrap gap-x-6 gap-y-2 text-sm text-[#6B6557]" aria-label="Legal">
+                <Link href="/privacy-policy" className="transition hover:text-[#0B0B0C]">
+                  Privacy
+                </Link>
+                <Link href="/terms-of-service" className="transition hover:text-[#0B0B0C]">
+                  Terms
+                </Link>
+              </nav>
+            </div>
+          </footer>
         </div>
       </RevealSection>
     </section>

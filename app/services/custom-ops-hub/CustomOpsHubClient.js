@@ -25,10 +25,9 @@ import {
 
 const QUIZ_SECTIONS = [
   {
-    id: "company-context",
-    title: "Start with how your business actually runs",
-    challenger:
-      "We map your operating model first so recommendations match how work really moves — not how the org chart says it should.",
+    id: "business-snapshot",
+    title: "Business Snapshot",
+    challenger: "Ground the teardown in how the business actually runs — size, volume, and stage shape where drag shows up.",
     fields: [
       {
         name: "businessModel",
@@ -46,13 +45,36 @@ const QUIZ_SECTIONS = [
         required: true,
         options: ["Early traction", "Growing team", "Scaling operations", "Mature and optimizing"],
       },
+      {
+        name: "annualRevenue",
+        label: "What annual revenue range best describes the business today?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: ["Under $500K", "$500K–$1M", "$1M–$3M", "$3M–$5M", "$5M–$10M", "$10M+"],
+      },
+      {
+        name: "deliveryTeamSize",
+        label: "How many people are involved in delivering the work?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: ["Just me", "2–4", "5–9", "10–14", "15–24", "25+"],
+      },
+      {
+        name: "monthlyWorkflowVolume",
+        label: "How many jobs, projects, service requests, client requests, or deals move through this workflow each month?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: ["1–10", "11–25", "26–50", "51–100", "100+"],
+      },
     ],
   },
   {
-    id: "pain-area",
-    title: "Pinpoint where drag is costing you most",
-    challenger:
-      "Pick the area where delays, rework, or founder firefighting show up every week — that is the constraint we design against.",
+    id: "operating-loop",
+    title: "The Operating Loop",
+    challenger: "Map where work enters, where it should land, and what breaks between those points.",
     fields: [
       {
         name: "primaryPainArea",
@@ -62,13 +84,200 @@ const QUIZ_SECTIONS = [
         required: true,
         options: ["Client delivery", "Sales to onboarding handoff", "Team coordination", "Reporting and visibility", "Billing and fulfillment"],
       },
+      {
+        name: "workflowStart",
+        label: "Where does this workflow usually start?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "New lead or inquiry",
+          "Signed client or booked job",
+          "Internal request",
+          "Service call or support request",
+          "Scheduled project/event",
+          "Something else",
+        ],
+      },
+      {
+        name: "workflowEnd",
+        label: "Where should this workflow end?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "Job completed",
+          "Client deliverable sent",
+          "Invoice-ready",
+          "Payment collected",
+          "Follow-up completed",
+          "Reporting updated",
+        ],
+      },
+      {
+        name: "frequentBreakdown",
+        label: "What breaks most often in your current process?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: ["Missed deadlines", "Dropped handoffs", "Rework and quality drift", "Incomplete visibility", "Slow decision cycles"],
+      },
+      {
+        name: "frequentBreakdownDetail",
+        label: "What is the business consequence when this breaks?",
+        type: "textarea",
+        required: true,
+        placeholder:
+          "Example: we lose 2–3 days per month to rework, jobs stall until I personally unblock them, or billing gets delayed because closeout details are missing.",
+      },
     ],
   },
   {
-    id: "bottleneck",
-    title: "Name the bottleneck you want gone first",
-    challenger:
-      "One primary bottleneck per engagement — the pattern that keeps compounding cost until something breaks in front of a client.",
+    id: "founder-bottleneck",
+    title: "Founder Bottleneck",
+    challenger: "Name where the founder or lead operator still carries the operation — and what breaks when they step away.",
+    fields: [
+      {
+        name: "founderRoutesHandoffs",
+        label: "Does the founder or owner still route most handoffs, approvals, or escalations?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: ["No", "Sometimes", "Yes", "Yes, and it is becoming a growth constraint"],
+      },
+      {
+        name: "founderWeeklyHours",
+        label: "How many hours per week does the founder or lead operator personally spend routing, checking, chasing, approving, scheduling, or unblocking work?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: ["0–2 hours", "3–5 hours", "6–10 hours", "11–20 hours", "20+ hours"],
+      },
+      {
+        name: "founderAwayBreaks",
+        label: "If the founder stepped away for 7 business days, what would most likely break first?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "New requests would pile up",
+          "Scheduling or assignment would slow down",
+          "Client communication would slip",
+          "Delivery quality would vary",
+          "Billing or closeout would get delayed",
+          "The team would mostly run fine",
+        ],
+      },
+      {
+        name: "hiddenBottleneck",
+        label: "Who else acts as a hidden bottleneck today?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "One key admin or coordinator",
+          "One operations lead",
+          "One salesperson or account manager",
+          "One field/team lead",
+          "No single person, the process itself is the bottleneck",
+          "Not sure",
+        ],
+      },
+      {
+        name: "leadershipApprovalRequired",
+        label: "What decisions still require founder or leadership approval?",
+        type: "multi",
+        required: true,
+        options: [
+          "Scheduling changes",
+          "Pricing or scope changes",
+          "Client communication",
+          "Work completion or quality review",
+          "Billing or invoice readiness",
+          "Hiring or contractor assignment",
+          "Exceptions/escalations",
+          "Almost everything",
+          "Very little",
+        ],
+      },
+    ],
+  },
+  {
+    id: "tool-fragmentation",
+    title: "Tool Fragmentation and Software Trust",
+    challenger: "Show where work actually lives today and whether past tools earned trust or created resistance.",
+    fields: [
+      {
+        name: "workflowManagement",
+        label: "Where does work currently live? Select all that apply.",
+        type: "multi",
+        required: true,
+        options: [
+          "CRM",
+          "Project management tool",
+          "Scheduling tool",
+          "Spreadsheets",
+          "Paper forms",
+          "Shared drives",
+          "Text messages",
+          "Email",
+          "Slack or Teams",
+          "Founder's head",
+          "One key admin/team member's head",
+          "Custom/internal tools",
+        ],
+      },
+      {
+        name: "softwareTrust",
+        label: "What best describes your relationship with past software or tools?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "We use tools well",
+          "We use tools, but they do not match how we work",
+          "We tried tools and the team resisted them",
+          "We paid for tools that never really got adopted",
+          "We avoid new software unless it is clearly custom-fit",
+        ],
+      },
+      {
+        name: "duplicateWork",
+        label: "Where does duplicate work happen most often?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "Entering the same information into multiple tools",
+          "Rewriting client/job details from messages",
+          "Updating status in more than one place",
+          "Rebuilding checklists or plans from memory",
+          "Manually preparing reports",
+          "Duplicate work is not a major issue",
+        ],
+      },
+      {
+        name: "hardToFindInfo",
+        label: "What information is hardest to find quickly?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "Current job/project status",
+          "Who owns the next step",
+          "Client history or context",
+          "Photos, documents, or closeout details",
+          "Billing or payment readiness",
+          "Team capacity or schedule",
+          "Nothing major",
+        ],
+      },
+    ],
+  },
+  {
+    id: "cost-risk-urgency",
+    title: "Cost, Risk, and Urgency",
+    challenger: "Quantify what breakage costs, how fast you need relief, and what fixing this unlocks in the next 90 days.",
     fields: [
       {
         name: "highestCostBottleneck",
@@ -86,66 +295,45 @@ const QUIZ_SECTIONS = [
       },
       {
         name: "highestCostBottleneckOther",
-        label: "Anything to add about this bottleneck? (optional)",
+        label: "Anything to add about this bottleneck?",
         type: "text",
         required: false,
         placeholder: "One sentence is enough.",
       },
-    ],
-  },
-  {
-    id: "workflow-handling",
-    title: "Show how work actually moves today",
-    challenger:
-      "Tell us which tools and habits carry the workflow today so we know what to connect, replace, or simplify.",
-    fields: [
       {
-        name: "workflowManagement",
-        label: "How are you currently managing this workflow? (select all that apply)",
+        name: "breakageCost",
+        label: "When this workflow breaks, what does it usually cost you? Select all that apply.",
         type: "multi",
         required: true,
-        options: ["Spreadsheets", "CRM", "Project management tool", "Slack and email", "Manual SOPs", "Custom internal tools"],
-      },
-    ],
-  },
-  {
-    id: "breakdown",
-    title: "What breaks on repeat",
-    challenger: "Choose the pattern you see most weeks, not a one-off fire drill.",
-    fields: [
-      {
-        name: "frequentBreakdown",
-        label: "What breaks most often in your current process?",
-        type: "single",
-        autoAdvance: true,
-        required: true,
-        options: ["Missed deadlines", "Dropped handoffs", "Rework and quality drift", "Incomplete visibility", "Slow decision cycles"],
+        options: [
+          "Founder time",
+          "Staff overtime",
+          "Delayed revenue",
+          "Missed follow-up",
+          "Client frustration",
+          "Rework",
+          "Refunds or discounts",
+          "Lost repeat business",
+          "Slower billing/payment",
+          "Team confusion",
+          "Strategic projects get delayed",
+        ],
       },
       {
-        name: "frequentBreakdownDetail",
-        sectionTitle: "What it costs when it breaks again",
-        challenger:
-          "Be specific about the business hit: delayed revenue, rework, client trust, margin, or leadership time stuck in triage.",
-        label: "What is the business consequence when this breaks?",
+        name: "lastBreakageExample",
+        label: "In plain English, describe the last time this broke.",
         type: "textarea",
-        required: true,
-        placeholder: "Example: we lose 2-3 days per month to rework, or deals stall until I personally unblock them.",
+        required: false,
+        placeholder:
+          "Example: a job was completed, but photos/notes were missing, so billing waited three days and I had to chase two people.",
       },
-    ],
-  },
-  {
-    id: "urgency",
-    title: "Timeline and risk if nothing changes",
-    challenger:
-      "Be honest about the window you are operating in — it tells us whether to design for immediate execution or a phased rollout.",
-    fields: [
       {
         name: "urgencyWindow",
         label: "What urgency window are you operating under?",
         type: "single",
         autoAdvance: true,
         required: true,
-        options: ["Now (0-30 days)", "Near term (1-3 months)", "This quarter", "This year"],
+        options: ["Now: 0–30 days", "Near term: 1–3 months", "This quarter", "This year"],
       },
       {
         name: "quarterRisk",
@@ -161,13 +349,28 @@ const QUIZ_SECTIONS = [
           "Strategic initiatives stall",
         ],
       },
+      {
+        name: "workflowUnlock90Days",
+        label: "What would improving this workflow unlock in the next 90 days?",
+        type: "single",
+        autoAdvance: true,
+        required: true,
+        options: [
+          "Founder gets meaningful time back",
+          "Team can execute with less chasing",
+          "More jobs/projects can move through the system",
+          "Billing or closeout gets faster",
+          "Client experience becomes more consistent",
+          "We can scale without adding unnecessary headcount",
+          "We can finally trust the operation enough to grow",
+        ],
+      },
     ],
   },
   {
-    id: "ownership",
-    title: "How hands-on you want us during the build",
-    challenger:
-      "Clarify how much execution you want StudioFlows to own versus collaborate on — it shapes team shape and delivery cadence.",
+    id: "implementation-readiness",
+    title: "Implementation Readiness",
+    challenger: "Confirm how hands-on you want StudioFlows during implementation, pricing fit, and who can approve.",
     fields: [
       {
         name: "implementationOwnership",
@@ -181,14 +384,6 @@ const QUIZ_SECTIONS = [
           "High involvement: I want a strategy/blueprint first, then decide next steps",
         ],
       },
-    ],
-  },
-  {
-    id: "budget-approval",
-    title: "Platform access pricing and who can say yes",
-    challenger:
-      "Founding members get platform access at the launch rate, locked for life. Confirm it works and who signs off so we route you to onboarding, not a sales cycle.",
-    fields: [
       {
         name: "budgetRange",
         sectionTitle: "Platform access pricing",
@@ -207,8 +402,6 @@ const QUIZ_SECTIONS = [
       },
       {
         name: "approvalInvolvement",
-        sectionTitle: "Who can say yes",
-        challenger: "So we know who to bring the founder plan to and how fast you can start.",
         label: "Who signs off on getting started?",
         type: "single",
         autoAdvance: true,
@@ -224,9 +417,8 @@ const QUIZ_SECTIONS = [
   },
   {
     id: "contact",
-    title: "Lock your details for the audit handoff",
-    challenger:
-      "Last step — work email and company site so we can route you to the right next step without another intake form.",
+    title: "Contact Details",
+    challenger: "Lock your details so we can deliver your private teardown and route follow-up without another intake form.",
     fields: [
       { name: "fullName", label: "Full name", type: "text", required: true, placeholder: "Jane Smith" },
       { name: "workEmail", label: "Work email", type: "email", required: true, placeholder: "jane@company.com" },
@@ -239,14 +431,30 @@ const QUIZ_SECTIONS = [
 const INITIAL_ANSWERS = {
   businessModel: "",
   companyStage: "",
+  annualRevenue: "",
+  deliveryTeamSize: "",
+  monthlyWorkflowVolume: "",
   primaryPainArea: "",
-  highestCostBottleneck: "",
-  highestCostBottleneckOther: "",
-  workflowManagement: [],
+  workflowStart: "",
+  workflowEnd: "",
   frequentBreakdown: "",
   frequentBreakdownDetail: "",
+  founderRoutesHandoffs: "",
+  founderWeeklyHours: "",
+  founderAwayBreaks: "",
+  hiddenBottleneck: "",
+  leadershipApprovalRequired: [],
+  workflowManagement: [],
+  softwareTrust: "",
+  duplicateWork: "",
+  hardToFindInfo: "",
+  highestCostBottleneck: "",
+  highestCostBottleneckOther: "",
+  breakageCost: [],
+  lastBreakageExample: "",
   urgencyWindow: "",
   quarterRisk: "",
+  workflowUnlock90Days: "",
   implementationOwnership: "",
   budgetRange: "",
   approvalInvolvement: "",
@@ -341,10 +549,10 @@ function getEmailDomain(value) {
 function getProgressMilestone(questionIndex, totalQuestions) {
   const completed = questionIndex + 1;
   const ratio = completed / totalQuestions;
-  if (ratio < 0.34) return "Fast start. Build momentum.";
-  if (ratio < 0.67) return "You are halfway. Keep going.";
-  if (ratio < 1) return "Final stretch. Lock your call.";
-  return "Ready for your booking step.";
+  if (ratio < 0.34) return "Building your operating snapshot.";
+  if (ratio < 0.67) return "Halfway through the audit.";
+  if (ratio < 1) return "Final questions before your teardown.";
+  return "Ready to generate your teardown.";
 }
 
 function shouldAutoAdvanceQuestion(question) {
@@ -398,6 +606,10 @@ export default function CustomOpsHubClient() {
 
   const currentQuestion = QUIZ_QUESTIONS[questionIndex];
   const totalQuestions = QUIZ_QUESTIONS.length;
+  const currentSectionIndex = QUIZ_SECTIONS.findIndex((section) =>
+    section.fields.some((field) => field.name === currentQuestion.name)
+  );
+  const currentSection = QUIZ_SECTIONS[currentSectionIndex];
   const requiredQuestionCount = QUIZ_QUESTIONS.filter((question) => question.required).length;
   const completedRequiredQuestions = QUIZ_QUESTIONS.filter(
     (question) => question.required && !isMissingValue(question, answers[question.name])
@@ -673,7 +885,7 @@ export default function CustomOpsHubClient() {
           onChange={(event) => updateInputValue(field.name, event.target.value)}
           rows={3}
           placeholder={field.placeholder}
-          className={`mt-3 ${Q_INPUT}`}
+          className={`mt-3 ${Q_INPUT}${field.required ? "" : " border-black/8 bg-white/60"}`}
         />
       );
     }
@@ -696,7 +908,7 @@ export default function CustomOpsHubClient() {
         value={value}
         onChange={(event) => updateInputValue(field.name, event.target.value)}
         placeholder={field.placeholder}
-        className={`mt-3 ${Q_INPUT}`}
+        className={`mt-3 ${Q_INPUT}${field.required ? "" : " border-black/8 bg-white/60"}`}
       />
     );
   };
@@ -779,25 +991,29 @@ export default function CustomOpsHubClient() {
         <section className="py-10 text-center sm:py-14">
           <p className={Q_EYEBROW}>ops teardown</p>
           <h1 className={`mx-auto mt-6 max-w-[900px] text-balance text-[2.2rem] sm:text-[3rem] lg:text-[4.4rem] ${Q_HEADLINE}`}>
-            Let&apos;s build your Ops Teardown
+            Build Your Private Ops Teardown
           </h1>
           <p className={`mx-auto mt-6 max-w-[780px] text-balance sm:text-[17px] ${Q_BODY}`}>
-            Tell us how work actually moves day to day and we&apos;ll give you back a specific breakdown of where the drag is
-            showing up. Most people finish in about 2 minutes.
+            This audit asks direct questions about how work really moves through your business — where the founder gets pulled
+            in, where handoffs break, where tools are failing, and what delays cost. The better your answers, the sharper your
+            teardown.
+          </p>
+          <p className={`mx-auto mt-4 max-w-[720px] text-balance text-sm ${Q_BODY}`}>
+            Takes about 5–7 minutes. Best answered by the owner, founder, or operator closest to daily execution.
           </p>
         </section>
 
         <section className={`p-6 sm:p-8 ${Q_CARD}`}>
-          <p className={`text-sm leading-7 ${Q_BODY}`}>
-            We start with how things really happen so the teardown lines up with your actual operation.
-          </p>
-          <div className="sticky top-2 z-20 -mx-2 mt-5 rounded-xl border border-black/12 bg-[#FBF9F4]/96 px-3 py-2.5 backdrop-blur">
+          <div className="sticky top-2 z-20 -mx-2 mt-2 rounded-xl border border-black/12 bg-[#FBF9F4]/96 px-3 py-2.5 backdrop-blur">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <p className={Q_EYEBROW}>
-                Question {questionIndex + 1} of {totalQuestions}
+                Section {currentSectionIndex + 1} of {QUIZ_SECTIONS.length} — {currentSection?.title}
               </p>
               <p className="text-xs font-medium text-[#4E483D]">{progressMilestone}</p>
             </div>
+            <p className="mt-2 text-xs text-[#4E483D]">
+              Question {questionIndex + 1} of {totalQuestions}
+            </p>
             <div className="mt-3 h-2 w-full rounded-full bg-black/15">
               <div className="h-2 rounded-full bg-[#8A6A1F] transition-all duration-300" style={{ width: `${progressPercent}%` }} />
             </div>
@@ -821,7 +1037,7 @@ export default function CustomOpsHubClient() {
                 <div key={currentQuestion.name} onKeyDown={handleQuestionKeyDown}>
                   <p className="text-sm font-medium text-[#0B0B0C]">
                     {currentQuestion.label}
-                    {currentQuestion.required ? " *" : ""}
+                    {currentQuestion.required ? " *" : " (optional)"}
                   </p>
                   {renderField(currentQuestion)}
                 </div>
@@ -902,7 +1118,7 @@ export default function CustomOpsHubClient() {
                 {questionIndex === totalQuestions - 1
                   ? isSubmitting
                     ? "Submitting..."
-                    : "Submit answers & book a quick call"
+                    : "Generate My Private Ops Teardown"
                   : "Continue"}
               </button>
             )}

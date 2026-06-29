@@ -19,6 +19,7 @@ import { buildOpsHubUrl, getPreQualBand } from "@/lib/lead-attribution";
 import {
   HOMEPAGE_CTA,
   OPS_CHECK_LOW_FIT_COPY,
+  OPS_CHECK_QUALIFIED_BRIDGE,
   PRE_QUALIFIER,
   QUIZ_QUESTIONS,
 } from "@/lib/homepage-content";
@@ -84,6 +85,62 @@ function DiagnosisQuiz() {
   const lowFitResult = assessment.qualified ? null : getLowFitResult(score);
 
   if (isComplete) {
+    if (assessment.qualified) {
+      return (
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.35, ease: "easeOut" }}
+          className={`${Q_CARD} p-6 sm:p-8`}
+        >
+          <p className={Q_EYEBROW}>{OPS_CHECK_QUALIFIED_BRIDGE.eyebrow}</p>
+          <h3 className={`mt-3 text-2xl sm:text-3xl ${Q_HEADLINE}`}>{OPS_CHECK_QUALIFIED_BRIDGE.headline}</h3>
+          <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_QUALIFIED_BRIDGE.subheadline}</p>
+          <p className="mt-2 text-sm text-[#4E483D]">Ops Drag Snapshot: {score} / 18</p>
+
+          <p className={`mt-8 font-mono text-[11px] uppercase tracking-[0.18em] text-[#8A6A1F]`}>
+            {OPS_CHECK_QUALIFIED_BRIDGE.pathsHeading}
+          </p>
+          <div className="mt-4 grid gap-4 md:grid-cols-2">
+            <div className="flex h-full flex-col rounded-2xl border border-black/10 bg-white/85 p-5 sm:p-6">
+              <h4 className="text-lg font-semibold text-[#0B0B0C]">{OPS_CHECK_QUALIFIED_BRIDGE.bookCall.title}</h4>
+              <p className={`mt-3 flex-1 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_QUALIFIED_BRIDGE.bookCall.body}</p>
+              <BookQuickCallButton
+                className={`${Q_CTA_PRIMARY} mt-5 w-full`}
+                label={OPS_CHECK_QUALIFIED_BRIDGE.bookCall.cta}
+                pqScore={score}
+                pqBand={getPreQualBand(score)}
+                opsCheckAnswers={answers.map((item) => item.label)}
+              />
+            </div>
+            <div className="flex h-full flex-col rounded-2xl border border-black/10 bg-white/85 p-5 sm:p-6">
+              <h4 className="text-lg font-semibold text-[#0B0B0C]">{OPS_CHECK_QUALIFIED_BRIDGE.teardown.title}</h4>
+              <p className={`mt-3 flex-1 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_QUALIFIED_BRIDGE.teardown.body}</p>
+              <Link href={opsHubHandoffUrl} className={`${Q_CTA_SECONDARY} mt-5 w-full`}>
+                {OPS_CHECK_QUALIFIED_BRIDGE.teardown.cta}
+              </Link>
+            </div>
+          </div>
+
+          <p className={`mt-6 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_QUALIFIED_BRIDGE.trustNote}</p>
+          <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_QUALIFIED_BRIDGE.privacyNote}</p>
+
+          <div className="mt-6">
+            <button
+              type="button"
+              onClick={() => {
+                setQuestionIndex(0);
+                setAnswers([]);
+              }}
+              className="rounded-full border border-black/20 px-5 py-2.5 text-[11px] uppercase tracking-[0.16em] text-[#3A352C] transition hover:bg-black/[0.05]"
+            >
+              Retake Pre-Qualifier
+            </button>
+          </div>
+        </motion.div>
+      );
+    }
+
     return (
       <motion.div
         initial={{ opacity: 0, y: 16 }}
@@ -92,50 +149,31 @@ function DiagnosisQuiz() {
         className={`${Q_CARD} p-6 sm:p-8`}
       >
         <p className={Q_EYEBROW}>
-          {assessment.qualified ? "Pre-Qualifier Complete" : OPS_CHECK_LOW_FIT_COPY.eyebrow}
+          {OPS_CHECK_LOW_FIT_COPY.eyebrow}
         </p>
         <h3 className={`mt-3 text-2xl sm:text-3xl ${Q_HEADLINE}`}>
-          {assessment.qualified ? assessment.title : lowFitResult.title}
+          {lowFitResult.title}
         </h3>
         <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>
-          {assessment.qualified ? assessment.body : lowFitResult.body}
+          {lowFitResult.body}
         </p>
         <p className="mt-2 text-sm text-[#4E483D]">Ops Drag Snapshot: {score} / 18</p>
-        {assessment.qualified ? (
-          <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{HOMEPAGE_CTA.qualifiedChoiceHelperCopy}</p>
-        ) : (
-          <>
-            <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{lowFitResult.guidance}</p>
-            <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_LOW_FIT_COPY.helper}</p>
-          </>
-        )}
+        <>
+          <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{lowFitResult.guidance}</p>
+          <p className={`mt-3 text-sm leading-7 ${Q_BODY}`}>{OPS_CHECK_LOW_FIT_COPY.helper}</p>
+        </>
 
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:flex-wrap">
-          {assessment.qualified ? (
-            <>
-              <BookQuickCallButton
-                className={Q_CTA_PRIMARY}
-                label={HOMEPAGE_CTA.bookAuditLabel}
-                pqScore={score}
-                pqBand={getPreQualBand(score)}
-                opsCheckAnswers={answers.map((item) => item.label)}
-              />
-              <Link href={opsHubHandoffUrl} className={Q_CTA_SECONDARY}>
-                {HOMEPAGE_CTA.auditLabel}
-              </Link>
-            </>
-          ) : (
-            <Link href={HOMEPAGE_CTA.vessaWaitlistHref} className={Q_CTA_SECONDARY}>
-              {HOMEPAGE_CTA.vessaWaitlistLabel}
-            </Link>
-          )}
+          <Link href={HOMEPAGE_CTA.vessaWaitlistHref} className={Q_CTA_SECONDARY}>
+            {HOMEPAGE_CTA.vessaWaitlistLabel}
+          </Link>
           <button
             type="button"
             onClick={() => {
               setQuestionIndex(0);
               setAnswers([]);
             }}
-            className={assessment.qualified ? Q_CTA_SECONDARY : Q_CTA_PRIMARY}
+            className={Q_CTA_PRIMARY}
           >
             Retake Pre-Qualifier
           </button>

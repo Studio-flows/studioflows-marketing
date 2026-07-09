@@ -366,6 +366,33 @@ function EditorialPanel({ panel, index }) {
   );
 }
 
+function ModuleCard({ title, body, index }) {
+  const objectPositions = ["object-[72%_22%]", "object-[60%_30%]", "object-[80%_36%]", "object-[58%_18%]", "object-[74%_44%]", "object-[66%_28%]"];
+
+  return (
+    <Reveal delay={index * 0.04} className={`${darkGlass} group relative min-h-[190px] overflow-hidden p-5`}>
+      <div className="absolute inset-y-0 right-0 w-[58%] opacity-[0.20] transition duration-500 group-hover:opacity-[0.30]">
+        <Image
+          src={PRODUCT_DASHBOARD_SRC}
+          alt=""
+          fill
+          sizes="(min-width: 1024px) 30vw, 80vw"
+          className={`object-cover ${objectPositions[index % objectPositions.length]}`}
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,1)_0%,rgba(15,23,42,0.82)_32%,rgba(15,23,42,0.35)_72%,rgba(15,23,42,0.16)_100%)]" />
+      </div>
+      <div className="absolute right-4 top-4 h-20 w-20 rounded-full bg-orange-300/10 blur-2xl transition group-hover:bg-sky-300/16" />
+      <div className="relative z-10 max-w-[76%]">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-200 to-sky-200 text-sm font-bold text-slate-950">
+          {String(index + 1).padStart(2, "0")}
+        </div>
+        <h3 className="mt-5 text-xl font-semibold tracking-tight text-white">{title}</h3>
+        <p className="mt-3 text-sm leading-6 text-slate-300">{body}</p>
+      </div>
+    </Reveal>
+  );
+}
+
 function MobileStickyCta() {
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 p-3 shadow-[0_-12px_40px_rgba(2,6,23,0.42)] backdrop-blur md:hidden">
@@ -471,13 +498,7 @@ export function RemNoirLanding() {
           />
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {modules.map(([title, body], index) => (
-              <Reveal key={title} delay={index * 0.04} className={`${darkGlass} p-5`}>
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-200 to-sky-200 text-sm font-bold text-slate-950">
-                  {String(index + 1).padStart(2, "0")}
-                </div>
-                <h3 className="mt-5 text-xl font-semibold tracking-tight text-white">{title}</h3>
-                <p className="mt-3 text-sm leading-6 text-slate-300">{body}</p>
-              </Reveal>
+              <ModuleCard key={title} title={title} body={body} index={index} />
             ))}
           </div>
         </div>

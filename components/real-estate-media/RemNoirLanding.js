@@ -38,14 +38,14 @@ export function RemNoirLanding() {
       <RemNoirCategoryStrip />
       <RemNoirRecognizeSection />
       <RemNoirFrictionSection />
-      <RemNoirToolsSection />
       <RemNoirDemoWorkspaceSection />
-      <RemNoirScoreSection />
-      <RemNoirVoiceSection />
-      <RemNoirResultSection />
+      <RemNoirToolsSection />
       <RemNoirFieldFlowSection />
       <RemNoirFitSection />
       <RemNoirPricingSection />
+      <RemNoirScoreSection />
+      <RemNoirVoiceSection />
+      <RemNoirResultSection />
       <RemNoirProofSection />
       <RemNoirFinalCtaSection />
       <RemStickyMobileCta />

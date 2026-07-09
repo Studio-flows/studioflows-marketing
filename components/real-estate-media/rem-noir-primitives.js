@@ -5,7 +5,7 @@ import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { buildRemScoreHref } from "@/lib/real-estate-media/remLeadAttribution";
-import { REM_SCORE_HREF } from "@/lib/real-estate-media/rem-landing-content";
+import { REM_DEMO_HREF, REM_SCORE_HREF } from "@/lib/real-estate-media/rem-landing-content";
 import {
   REM_CTA,
   REM_CTA_SECONDARY,
@@ -104,7 +104,7 @@ export function RemStickyMobileCta() {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-8 md:hidden [background:linear-gradient(to_top,rgba(9,9,11,0.97)_60%,transparent)]">
       <Link
-        href={buildRemScoreHref("sticky_mobile_cta")}
+        href={appendCtaId(REM_DEMO_HREF, "sticky_mobile_demo")}
         className={`${REM_CTA} pointer-events-auto w-full shadow-[0_-8px_32px_rgba(0,0,0,0.5)]`}
       >
         Step Into the Live Demo

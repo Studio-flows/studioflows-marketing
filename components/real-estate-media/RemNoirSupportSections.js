@@ -11,9 +11,11 @@ import {
   REM_PROOF_ITEMS,
   REM_SCORE_CARDS,
   REM_SCORE_HREF,
+  REM_START_PATHS,
 } from "@/lib/real-estate-media/rem-landing-content";
 import {
   RemPrimaryCta,
+  RemSecondaryCta,
   RemSection,
   RemTerminalChrome,
 } from "@/components/real-estate-media/rem-noir-primitives";
@@ -84,8 +86,8 @@ export function RemNoirToolsSection() {
           </div>
         </div>
         <div className="mt-8 grid gap-3 lg:mt-0">
-          <ToolStack label="Keep in place" items={REM_KEEP_TOOLS} />
-          <ToolStack label="StudioFlows layer" items={REM_CLEAN_UP} variant="clean" />
+          <ToolStack label="Keep what works" items={REM_KEEP_TOOLS} />
+          <ToolStack label="StudioFlows cleans up" items={REM_CLEAN_UP} variant="clean" />
         </div>
       </div>
     </RemSection>
@@ -110,7 +112,9 @@ export function RemNoirScoreSection() {
         ))}
       </div>
       <div className="mt-8 lg:max-w-sm">
-        <RemPrimaryCta ctaId="score_section_start">{REM_COPY.score.cta}</RemPrimaryCta>
+        <RemPrimaryCta href={REM_SCORE_HREF} ctaId="score_section_ops_teardown">
+          {REM_COPY.score.cta}
+        </RemPrimaryCta>
       </div>
     </RemSection>
   );
@@ -133,7 +137,7 @@ export function RemNoirVoiceSection() {
           <div className="mt-4 flex items-center gap-2 rounded border border-zinc-800 bg-black/50 px-3 py-2.5">
             <span className="inline-block h-2 w-2 rounded-full bg-red-500/80" aria-hidden="true" />
             <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-zinc-600">
-              Tap to record or type
+              Type or use voice-to-text
             </span>
           </div>
         </div>
@@ -174,14 +178,32 @@ export function RemNoirFitSection() {
 
 export function RemNoirPricingSection() {
   return (
-    <RemSection id="pricing-preview">
+    <RemSection id="start-paths">
       <p className={REM_EYEBROW}>{REM_COPY.pricing.eyebrow}</p>
-      <p className="mt-3 font-mono text-3xl font-medium tracking-tight text-zinc-100 lg:text-4xl">
-        {REM_COPY.pricing.price}
-      </p>
+      <h2 className={`${REM_H2} mt-3`}>{REM_COPY.pricing.headline}</h2>
       <div className={`mt-4 max-w-2xl space-y-3 ${REM_BODY}`}>
         {REM_COPY.pricing.body.map((line) => (
           <p key={line}>{line}</p>
+        ))}
+      </div>
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
+        {REM_START_PATHS.map((path) => (
+          <div key={path.title} className={`${REM_PANEL} border border-zinc-800 px-4 py-5`}>
+            <p className={REM_EYEBROW}>{path.eyebrow}</p>
+            <h3 className="mt-3 text-lg font-medium tracking-tight text-zinc-100">{path.title}</h3>
+            <p className={`mt-3 ${REM_BODY_SM}`}>{path.body}</p>
+            <div className="mt-5">
+              {path.variant === "primary" ? (
+                <RemPrimaryCta href={path.href} ctaId={`start_path_${path.variant}`}>
+                  {path.cta}
+                </RemPrimaryCta>
+              ) : (
+                <RemSecondaryCta href={path.href} ctaId={`start_path_${path.variant}`}>
+                  {path.cta}
+                </RemSecondaryCta>
+              )}
+            </div>
+          </div>
         ))}
       </div>
     </RemSection>
@@ -214,12 +236,17 @@ export function RemNoirFinalCtaSection() {
             <p key={line}>{line}</p>
           ))}
         </div>
-        <div className="mt-8 lg:flex lg:justify-center">
-          <RemPrimaryCta ctaId="final_cta_start">{REM_COPY.final.cta}</RemPrimaryCta>
+        <div className="mt-8 flex flex-col gap-3 lg:flex-row lg:justify-center">
+          <RemPrimaryCta href={REM_COPY.final.ctaHref} ctaId="final_cta_demo">
+            {REM_COPY.final.cta}
+          </RemPrimaryCta>
+          <RemSecondaryCta href={REM_COPY.final.secondaryHref} ctaId="final_cta_ops_teardown">
+            {REM_COPY.final.secondaryCta}
+          </RemSecondaryCta>
         </div>
         <p className="mt-6 hidden text-center text-xs text-zinc-600 lg:block">
           <Link href={REM_SCORE_HREF} className={REM_CTA_SECONDARY}>
-            Or jump straight to score
+            Or jump straight to the diagnostic path
           </Link>
         </p>
       </div>

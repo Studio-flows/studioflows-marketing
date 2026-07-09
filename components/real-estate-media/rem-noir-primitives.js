@@ -13,6 +13,12 @@ import {
   REM_PANEL,
 } from "@/components/real-estate-media/rem-noir-tokens";
 
+function appendCtaId(href, ctaId) {
+  if (!ctaId) return href;
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}cta_id=${encodeURIComponent(ctaId)}`;
+}
+
 export function RemScanlineOverlay() {
   return (
     <>
@@ -41,18 +47,23 @@ export function RemTerminalChrome({ title, right, children, className = "" }) {
   );
 }
 
-export function RemPrimaryCta({ children, ctaId, className = "" }) {
-  const href = ctaId ? buildRemScoreHref(ctaId) : REM_SCORE_HREF;
+export function RemPrimaryCta({ children, ctaId, href, className = "" }) {
+  const resolvedHref = href
+    ? appendCtaId(href, ctaId)
+    : ctaId
+      ? buildRemScoreHref(ctaId)
+      : REM_SCORE_HREF;
+
   return (
-    <Link href={href} className={`${REM_CTA} ${className}`}>
+    <Link href={resolvedHref} className={`${REM_CTA} ${className}`}>
       {children}
     </Link>
   );
 }
 
-export function RemSecondaryCta({ children, href = REM_SCORE_HREF, className = "" }) {
+export function RemSecondaryCta({ children, href = REM_SCORE_HREF, ctaId, className = "" }) {
   return (
-    <Link href={href} className={`${REM_CTA_SECONDARY} ${className}`}>
+    <Link href={appendCtaId(href, ctaId)} className={`${REM_CTA_SECONDARY} ${className}`}>
       {children}
     </Link>
   );
@@ -96,7 +107,7 @@ export function RemStickyMobileCta() {
         href={buildRemScoreHref("sticky_mobile_cta")}
         className={`${REM_CTA} pointer-events-auto w-full shadow-[0_-8px_32px_rgba(0,0,0,0.5)]`}
       >
-        Get My Media Ops Score
+        Step Into the Live Demo
       </Link>
     </div>
   );

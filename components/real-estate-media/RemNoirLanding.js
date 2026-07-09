@@ -122,13 +122,14 @@ function StatusPill({ children, tone = "default" }) {
     default: "border-white/15 bg-white/10 text-slate-200",
     good: "border-emerald-300/30 bg-emerald-300/15 text-emerald-100",
     warn: "border-orange-300/35 bg-orange-300/18 text-orange-100",
+    pressure: "border-orange-300/35 bg-orange-300/18 text-orange-100",
     neutral: "border-sky-300/30 bg-sky-300/15 text-sky-100",
     light: "border-slate-200 bg-white text-slate-600",
     amber: "border-orange-200 bg-orange-50 text-orange-700",
   };
 
   return (
-    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${styles[tone]}`}>
+    <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${styles[tone] || styles.default}`}>
       {children}
     </span>
   );

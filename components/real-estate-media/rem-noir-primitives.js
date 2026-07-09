@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 
 import { buildRemScoreHref } from "@/lib/real-estate-media/remLeadAttribution";
 import { REM_DEMO_HREF, REM_SCORE_HREF } from "@/lib/real-estate-media/rem-landing-content";
@@ -14,7 +14,7 @@ import {
 } from "@/components/real-estate-media/rem-noir-tokens";
 
 function appendCtaId(href, ctaId) {
-  if (!ctaId) return href;
+  if (!ctaId || href.startsWith("#")) return href;
   const separator = href.includes("?") ? "&" : "?";
   return `${href}${separator}cta_id=${encodeURIComponent(ctaId)}`;
 }

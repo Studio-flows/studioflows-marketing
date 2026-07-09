@@ -278,7 +278,7 @@ export function RemNoirLanding() {
             <a href="#workspace" className="hover:text-zinc-950">Workspace</a>
             <a href="#modules" className="hover:text-zinc-950">Modules</a>
             <a href="#replace-stack" className="hover:text-zinc-950">Stack</a>
-            <a href="#start-paths" className="hover:text-zinc-950">Start</a>
+            <a href="#demo-workspace" className="hover:text-zinc-950">Start</a>
           </div>
           <Link href={REM_DEMO_HREF} className="hidden rounded-xl bg-zinc-950 px-4 py-2 text-sm font-semibold text-white md:inline-flex">
             View demo
@@ -298,7 +298,7 @@ export function RemNoirLanding() {
               <h1 className="mt-6 max-w-4xl text-4xl font-semibold tracking-[-0.045em] text-zinc-950 sm:text-5xl lg:text-6xl">
                 Run every listing-media job from booked to delivered.
               </h1>
-              <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-650">
+              <p className="mt-6 max-w-2xl text-lg leading-8 text-zinc-600">
                 StudioFlows gives real estate media companies one operating system for scheduling,
                 crew coverage, field updates, post-production, delivery, payments, and agent status —
                 so the owner stops being dispatch.

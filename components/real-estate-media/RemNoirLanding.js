@@ -1,488 +1,249 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { motion, useReducedMotion } from "framer-motion";
 
 import { REM_DEMO_HREF, REM_OPS_TEARDOWN_HREF } from "@/lib/real-estate-media/rem-landing-content";
-import {
-  captureRemAttributionForPath,
-  REM_LANDING_PATH,
-} from "@/lib/real-estate-media/remLeadAttribution";
+import { captureRemAttributionForPath, REM_LANDING_PATH } from "@/lib/real-estate-media/remLeadAttribution";
+import { HERO_STUDIO_TEAM } from "@/lib/real-estate-media/media-assets/hero-studio-team";
+import { CLIENT_ONSITE } from "@/lib/real-estate-media/media-assets/client-onsite";
+import { CALENDAR } from "@/lib/real-estate-media/media-assets/calendar";
+import { FIELD_DRONE } from "@/lib/real-estate-media/media-assets/field-drone";
+import { TEAM_JOB_HANDOFF } from "@/lib/real-estate-media/media-assets/team-job-handoff";
+import { EDITING_BAY } from "@/lib/real-estate-media/media-assets/editing-bay";
+import { JOB_COCKPIT } from "@/lib/real-estate-media/media-assets/job-cockpit";
 
-const STUDIOFLOWS_LOGO_SRC = "/StudioFlows logo white (1200 x 675 px).png";
-const PRODUCT_DASHBOARD_SRC = "/product/dashboard.png";
+const LOGO = "/StudioFlows logo white (1200 x 675 px).png";
+const PRODUCT_DASHBOARD = "/product/dashboard.png";
 
-const primaryCta =
-  "inline-flex min-h-11 items-center justify-center rounded-full bg-slate-950 px-5 py-3 text-sm font-semibold text-white shadow-[0_18px_60px_rgba(15,23,42,0.22)] transition hover:-translate-y-0.5 hover:bg-slate-800";
-const lightCta =
-  "inline-flex min-h-11 items-center justify-center rounded-full bg-white px-5 py-3 text-sm font-semibold text-slate-950 shadow-[0_18px_60px_rgba(251,146,60,0.22)] transition hover:-translate-y-0.5 hover:bg-orange-50";
-const glassCard =
-  "rounded-[1.75rem] border border-white/10 bg-white/[0.08] shadow-[0_24px_80px_rgba(2,6,23,0.30)] backdrop-blur-xl";
+const primary = "inline-flex min-h-12 items-center justify-center rounded-full bg-white px-6 py-3 text-sm font-semibold text-slate-950 shadow-[0_18px_60px_rgba(251,146,60,.25)] transition hover:-translate-y-0.5 hover:bg-orange-50";
+const darkPrimary = "inline-flex min-h-12 items-center justify-center rounded-full bg-slate-950 px-6 py-3 text-sm font-semibold text-white shadow-[0_18px_60px_rgba(15,23,42,.22)] transition hover:-translate-y-0.5 hover:bg-slate-800";
+const secondary = "inline-flex min-h-12 items-center justify-center rounded-full border border-white/25 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-xl transition hover:-translate-y-0.5 hover:bg-white/15";
 
-const stages = [
-  {
-    key: "schedule",
-    label: "Schedule",
-    headline: "Split shoots, buffers, drive time, and crew coverage visible before the day breaks.",
-    stat: "11 shoots today",
-    accent: "from-orange-300 to-sky-300",
-    bullets: ["2 split visits", "3 drone-required jobs", "1 weather watch"],
-  },
-  {
-    key: "field",
-    label: "Field",
-    headline: "The crew sees the job, package, access notes, and update buttons from the phone.",
-    stat: "8 field updates",
-    accent: "from-sky-300 to-cyan-200",
-    bullets: ["Gate code confirmed", "Raw upload started", "Exterior revisit flagged"],
-  },
-  {
-    key: "post",
-    label: "Post",
-    headline: "Raw uploads, editor handoff, QC, and delivery readiness stop living in side channels.",
-    stat: "12 post jobs",
-    accent: "from-amber-200 to-orange-300",
-    bullets: ["4 waiting files", "5 in edit", "3 ready for QC"],
-  },
-  {
-    key: "delivery",
-    label: "Delivery",
-    headline: "Agents get a straight answer because the job record already knows where things stand.",
-    stat: "5 due today",
-    accent: "from-emerald-200 to-sky-200",
-    bullets: ["Gallery ready", "Invoice open", "Status sent"],
-  },
-];
-
-const modules = [
-  ["Smart scheduling", "Shoot windows, split visits, buffers, duration, and coverage."],
-  ["Crew assignments", "Photographers, drone ops, video, editors, and QC owners."],
-  ["Job cockpit", "Agent, property, package, notes, files, payment, and timeline."],
-  ["FieldFlow mobile", "Field updates land on the job instead of in texts."],
-  ["Post-production", "Raw uploads, editor handoff, missing files, QC, and delivery."],
-  ["Agent status", "Delivery and invoice clarity without founder follow-up."],
-];
-
-const painTicker = [
+const pain = [
   "Agent texts again: are the photos going out today?",
   "Editor is blocked because drone clips never landed.",
-  "Photographer asks who owns tomorrow’s twilight shoot.",
-  "Floor plan file is missing and nobody caught it before delivery.",
-  "Split interior/exterior visit moved, but crew coverage did not.",
-  "Client changed the package and the editor is working from old notes.",
-  "Owner is the only person who knows if the invoice was handled.",
-  "Raw upload started in one place and status got answered in another.",
+  "Who owns tomorrow's twilight shoot?",
+  "The floor plan is missing and delivery is due.",
+  "The split shoot moved. Crew coverage did not.",
+  "The package changed. Post is working from old notes.",
+  "You are still the only person who knows if payment cleared.",
 ];
 
-const editorialPanels = [
+const journey = [
   {
-    kicker: "On-site crew",
-    title: "Crew shooting the listing",
-    body: "The field team sees the property, package, access notes, and shoot requirements before the first camera comes out.",
-    gradient: "from-slate-950 via-sky-950 to-orange-500",
-    device: "camera",
+    id: "booked",
+    step: "01",
+    label: "Booked",
+    image: CLIENT_ONSITE,
+    eyebrow: "The client moment",
+    title: "The agent books once. The job record carries the truth forward.",
+    body: "Client, property, package, appointment, access notes, special requests, and payment status start on the same record.",
+    facts: ["Dayna Restaino", "350 Barbados Drive", "Photo · Drone · Video · Floor plan"],
   },
   {
-    kicker: "FieldFlow mobile",
-    title: "Crew member updating the job from the driveway",
-    body: "FieldFlow turns field status into a job update instead of another text thread for the owner to interpret.",
-    gradient: "from-slate-950 via-cyan-950 to-sky-500",
-    device: "phone",
+    id: "scheduled",
+    step: "02",
+    label: "Scheduled",
+    image: CALENDAR,
+    eyebrow: "Scheduling and coverage",
+    title: "The calendar knows more than the appointment time.",
+    body: "It shows who is assigned, which roles the package requires, drive time, shoot duration, split visits, and coverage gaps.",
+    facts: ["Crew assigned", "Travel buffer included", "No silent conflicts"],
   },
   {
-    kicker: "Raw uploads",
-    title: "Field team loading files into the job page",
-    body: "Photo, video, drone clips, and floor plan assets move into the job record so post-production knows what is ready.",
-    gradient: "from-slate-950 via-zinc-900 to-amber-500",
-    device: "monitor",
+    id: "field",
+    step: "03",
+    label: "Field",
+    image: FIELD_DRONE,
+    eyebrow: "Field production",
+    title: "The field team sees what it needs. The owner sees what actually happened.",
+    body: "Crew checks the brief, confirms equipment, updates status, starts raw upload, and flags missing work from the property.",
+    facts: ["Drone required", "Field owner confirmed", "Raw upload started"],
   },
   {
-    kicker: "Editing bay",
-    title: "Editor working through the delivery queue",
-    body: "Editors can see missing files, handoff notes, QC status, and delivery readiness without asking the founder for context.",
-    gradient: "from-slate-950 via-indigo-950 to-orange-400",
-    device: "timeline",
+    id: "handoff",
+    step: "04",
+    label: "Handoff",
+    image: TEAM_JOB_HANDOFF,
+    eyebrow: "Team handoff",
+    title: "Every handoff stays attached to the job—not buried in another thread.",
+    body: "Phase ownership, comments, customer notes, files, activity, and the next action remain visible to the whole team.",
+    facts: ["Field complete", "Post owner assigned", "Next action visible"],
+  },
+  {
+    id: "post",
+    step: "05",
+    label: "Post",
+    image: EDITING_BAY,
+    eyebrow: "Post-production",
+    title: "Editors do not start by asking where everything is.",
+    body: "Raw upload, editor handoff, draft review, internal QC, revisions, and delivery readiness move through one visible pipeline.",
+    facts: ["27 raw files", "Editor drafts ready", "QC pending"],
+  },
+  {
+    id: "delivery",
+    step: "06",
+    label: "Delivery",
+    image: JOB_COCKPIT,
+    eyebrow: "Delivery and completion",
+    title: "One job record shows what is done, what is waiting, and who owns the next move.",
+    body: "The team can see lifecycle stage, deliverables, client status, comments, activity, invoice state, and final release without reconstructing the story.",
+    facts: ["QC approved", "Agent updated", "Ready for release"],
   },
 ];
 
-const lifecycle = ["Request", "Package", "Schedule", "Assign", "Shoot", "Upload", "Edit", "QC", "Deliver", "Invoice"];
-
-function useMotionSettings() {
+function useReveal() {
   const reduce = useReducedMotion();
-  return useMemo(
-    () => ({
-      initial: reduce ? false : { opacity: 0, y: 28 },
-      whileInView: reduce ? undefined : { opacity: 1, y: 0 },
-      viewport: { once: true, margin: "-80px" },
-      transition: { duration: 0.7, ease: [0.22, 1, 0.36, 1] },
-    }),
-    [reduce],
-  );
+  return useMemo(() => ({
+    initial: reduce ? false : { opacity: 0, y: 30 },
+    whileInView: reduce ? undefined : { opacity: 1, y: 0 },
+    viewport: { once: true, margin: "-90px" },
+    transition: { duration: .72, ease: [0.22, 1, 0.36, 1] },
+  }), [reduce]);
 }
 
 function Reveal({ children, className = "", delay = 0 }) {
-  const motionProps = useMotionSettings();
-  return (
-    <motion.div {...motionProps} transition={{ ...motionProps.transition, delay }} className={className}>
-      {children}
-    </motion.div>
-  );
-}
-
-function LogoLockup() {
-  return (
-    <Link href="/" className="flex items-center gap-4" aria-label="StudioFlows home">
-      <span className="flex h-16 w-28 items-center justify-center rounded-[1.35rem] bg-slate-950 p-2 shadow-lg sm:h-20 sm:w-36">
-        <Image
-          src={STUDIOFLOWS_LOGO_SRC}
-          alt="StudioFlows"
-          width={1200}
-          height={675}
-          className="h-full w-full object-contain"
-          priority
-        />
-      </span>
-      <span className="hidden sm:block">
-        <span className="block text-sm font-semibold leading-none text-slate-950">StudioFlows</span>
-        <span className="mt-1 block text-xs font-medium text-slate-500">Real Estate Media OS</span>
-      </span>
-    </Link>
-  );
+  const props = useReveal();
+  return <motion.div {...props} transition={{ ...props.transition, delay }} className={className}>{children}</motion.div>;
 }
 
 function Header() {
   return (
-    <header className="sticky top-0 z-50 bg-white/82 shadow-[0_16px_44px_rgba(15,23,42,0.08)] backdrop-blur-2xl supports-[backdrop-filter]:bg-white/72">
+    <header className="sticky top-0 z-50 bg-white/82 shadow-[0_14px_44px_rgba(15,23,42,.08)] backdrop-blur-2xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-2 sm:px-6 lg:px-8">
-        <LogoLockup />
-        <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-700 md:flex">
-          <a href="#workspace" className="transition hover:text-slate-950">Workspace</a>
-          <a href="#fieldflow" className="transition hover:text-slate-950">FieldFlow</a>
-          <a href="#post" className="transition hover:text-slate-950">Post</a>
-          <a href="#demo-workspace" className="transition hover:text-slate-950">Demo</a>
-        </nav>
-        <Link href={REM_DEMO_HREF} className="hidden rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white md:inline-flex">
-          View demo
+        <Link href="/" className="flex items-center gap-3" aria-label="StudioFlows home">
+          <span className="flex h-16 w-28 items-center justify-center rounded-[1.35rem] bg-slate-950 p-2 shadow-lg sm:h-20 sm:w-36">
+            <Image src={LOGO} alt="StudioFlows" width={1200} height={675} className="h-full w-full object-contain" priority />
+          </span>
+          <span className="hidden sm:block">
+            <span className="block text-sm font-semibold text-slate-950">StudioFlows</span>
+            <span className="block text-xs text-slate-500">Real Estate Media OS</span>
+          </span>
         </Link>
+        <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-700 md:flex">
+          <a href="#journey" className="hover:text-slate-950">Workflow</a>
+          <a href="#owner-layer" className="hover:text-slate-950">Why it works</a>
+          <a href="#demo-workspace" className="hover:text-slate-950">Demo</a>
+        </nav>
+        <Link href={REM_DEMO_HREF} className="hidden rounded-full bg-slate-950 px-4 py-2 text-sm font-semibold text-white md:inline-flex">View demo</Link>
       </div>
     </header>
   );
 }
 
-function StatusPill({ children, tone = "default" }) {
-  const styles = {
-    default: "border-white/15 bg-white/10 text-slate-200",
-    good: "border-emerald-300/30 bg-emerald-300/15 text-emerald-100",
-    warn: "border-orange-300/35 bg-orange-300/18 text-orange-100",
-    neutral: "border-sky-300/30 bg-sky-300/15 text-sky-100",
-  };
-  return <span className={`inline-flex rounded-full border px-3 py-1 text-xs font-medium ${styles[tone] || styles.default}`}>{children}</span>;
-}
-
-function SectionHeader({ eyebrow, title, body, light = false }) {
+function Hero() {
   return (
-    <div className="mx-auto max-w-3xl text-center">
-      <p className={`text-xs font-semibold uppercase tracking-[0.22em] ${light ? "text-orange-200" : "text-orange-700"}`}>{eyebrow}</p>
-      <h2 className={`mt-3 text-3xl font-semibold tracking-[-0.04em] sm:text-4xl lg:text-5xl ${light ? "text-white" : "text-slate-950"}`}>{title}</h2>
-      {body ? <p className={`mt-4 text-base leading-7 ${light ? "text-slate-300" : "text-slate-600"}`}>{body}</p> : null}
-    </div>
-  );
-}
-
-function HeroProductShot() {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.96, y: 24 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      transition={{ duration: 0.85, ease: [0.22, 1, 0.36, 1], delay: 0.12 }}
-      className="relative mx-auto w-full max-w-xl lg:max-w-none"
-    >
-      <div className="relative overflow-hidden rounded-[2rem] border border-white/12 bg-slate-950 p-3 shadow-[0_40px_120px_rgba(2,6,23,0.50)] sm:rounded-[2.35rem]">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_8%,rgba(251,146,60,0.26),transparent_30%),radial-gradient(circle_at_84%_18%,rgba(56,189,248,0.22),transparent_31%)]" />
-        <div className="relative overflow-hidden rounded-[1.55rem] border border-white/10 bg-white/[0.04]">
-          <Image
-            src={PRODUCT_DASHBOARD_SRC}
-            alt="StudioFlows real estate media operations dashboard"
-            width={1600}
-            height={1000}
-            className="h-auto w-full object-cover opacity-95"
-            priority
-          />
-          <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-slate-950/90 via-slate-950/50 to-transparent p-5 pt-20">
-            <p className="text-xs font-semibold uppercase tracking-[0.22em] text-orange-200">Product workspace</p>
-            <p className="mt-2 max-w-md text-xl font-semibold tracking-tight text-white">A real command surface, not a decorative mockup.</p>
+    <section className="relative min-h-[760px] overflow-hidden bg-slate-950 lg:min-h-[820px]">
+      <motion.img src={HERO_STUDIO_TEAM} alt="Real estate media team operating inside StudioFlows" className="absolute inset-0 h-full w-full object-cover object-center" initial={{ scale: 1.03 }} animate={{ scale: 1.07 }} transition={{ duration: 14, ease: "easeOut" }} />
+      <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(2,6,23,.96)_0%,rgba(2,6,23,.82)_42%,rgba(2,6,23,.28)_72%,rgba(2,6,23,.20)_100%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-52 bg-gradient-to-t from-slate-950 to-transparent" />
+      <div className="relative mx-auto flex min-h-[760px] max-w-7xl items-center px-4 py-16 sm:px-6 lg:min-h-[820px] lg:px-8">
+        <motion.div initial={{ opacity: 0, y: 28 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: .8, ease: [0.22,1,.36,1] }} className="max-w-3xl">
+          <div className="flex flex-wrap gap-2">
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white backdrop-blur">Built for real estate media studios</span>
+            <span className="rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold text-white backdrop-blur">Photo · Drone · Video · Floor plans · 3D</span>
           </div>
-        </div>
-        <div className="relative mt-3 grid gap-3 sm:grid-cols-3">
-          {["24 active listing jobs", "4 waiting assets", "5 due today"].map((item) => (
-            <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-sm font-semibold text-slate-200">
-              {item}
-            </div>
-          ))}
-        </div>
+          <h1 className="mt-6 text-4xl font-semibold tracking-[-.055em] text-white sm:text-6xl lg:text-7xl">Real estate media studios should not run through the owner’s phone.</h1>
+          <p className="mt-6 max-w-2xl text-lg leading-8 text-slate-200">One operating system for every listing job—from booking and crew scheduling to raw uploads, editing, delivery, and payment.</p>
+          <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <Link href={REM_DEMO_HREF} className={primary}>Step Into the Live Demo</Link>
+            <Link href={REM_OPS_TEARDOWN_HREF} className={secondary}>Get an Ops Teardown</Link>
+          </div>
+          <div className="mt-10 grid max-w-2xl gap-3 sm:grid-cols-3">
+            {["Crew assigned", "Raw files uploaded", "Editor in progress"].map((item, index) => (
+              <motion.div key={item} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .55 + index * .18 }} className="rounded-2xl border border-white/12 bg-slate-950/55 px-4 py-3 text-sm font-semibold text-white backdrop-blur-xl"><span className="mr-2 inline-block h-2 w-2 rounded-full bg-cyan-300" />{item}</motion.div>
+            ))}
+          </div>
+        </motion.div>
       </div>
-    </motion.div>
+    </section>
   );
 }
 
 function PainTicker() {
   const reduce = useReducedMotion();
-  const items = [...painTicker, ...painTicker];
-
+  const items = [...pain, ...pain];
   return (
-    <div className="relative mt-10 overflow-hidden py-4 [mask-image:linear-gradient(to_right,transparent,black_9%,black_91%,transparent)]">
-      <motion.div
-        className="flex w-max gap-4"
-        animate={reduce ? undefined : { x: ["0%", "-50%"] }}
-        transition={reduce ? undefined : { duration: 38, repeat: Infinity, ease: "linear" }}
-      >
-        {items.map((item, index) => (
-          <div
-            key={`${item}-${index}`}
-            className="flex min-h-[140px] w-[82vw] max-w-[720px] shrink-0 items-center rounded-[2rem] border border-slate-200 bg-white/88 p-6 shadow-[0_22px_70px_rgba(15,23,42,0.10)] sm:w-[620px] sm:p-8"
-          >
-            <p className="text-2xl font-semibold leading-tight tracking-[-0.035em] text-slate-950 sm:text-4xl">
-              {item}
-            </p>
-          </div>
-        ))}
-      </motion.div>
-    </div>
-  );
-}
-
-function InteractiveBoard({ compact = false }) {
-  const [active, setActive] = useState("field");
-  const activeStage = stages.find((stage) => stage.key === active) || stages[0];
-
-  return (
-    <div className={`${glassCard} overflow-hidden p-3 text-white`}>
-      <div className="rounded-[1.25rem] border border-white/10 bg-slate-950/50">
-        <div className="border-b border-white/10 p-3 sm:p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div>
-              <p className="text-sm font-semibold text-white">Studio command center</p>
-              <p className="mt-1 text-xs text-slate-400">Wednesday · 24 active listing jobs</p>
-            </div>
-            <StatusPill tone="good">Live</StatusPill>
-          </div>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {stages.map((stage) => (
-              <button
-                key={stage.key}
-                type="button"
-                onClick={() => setActive(stage.key)}
-                className={`rounded-full border px-3 py-2 text-xs font-semibold transition ${
-                  active === stage.key
-                    ? "border-white/70 bg-white text-slate-950"
-                    : "border-white/10 bg-white/[0.06] text-slate-300 hover:bg-white/[0.10]"
-                }`}
-              >
-                {stage.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <motion.div
-          key={activeStage.key}
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.32 }}
-          className="grid gap-3 p-3 sm:p-4 lg:grid-cols-[0.9fr_1.1fr]"
-        >
-          <div className={`rounded-2xl bg-gradient-to-br ${activeStage.accent} p-[1px]`}>
-            <div className="h-full rounded-2xl bg-slate-950/86 p-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-orange-200">{activeStage.label}</p>
-              <p className="mt-3 text-lg font-semibold leading-6 text-white">{activeStage.stat}</p>
-              <p className="mt-2 text-sm leading-6 text-slate-300">{activeStage.headline}</p>
-            </div>
-          </div>
-          <div className="grid gap-2">
-            {activeStage.bullets.slice(0, compact ? 2 : 3).map((item) => (
-              <div key={item} className="rounded-2xl border border-white/10 bg-white/[0.07] px-4 py-3 text-sm font-medium text-slate-200">
-                {item}
-              </div>
-            ))}
-          </div>
+    <section className="overflow-hidden bg-[#f7f1e8] py-16 text-slate-950 lg:py-24">
+      <div className="mx-auto max-w-4xl px-4 text-center sm:px-6">
+        <p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-700">The operating problem</p>
+        <h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] sm:text-5xl">The shoot is booked. Somehow, you’re still involved in everything.</h2>
+      </div>
+      <div className="mt-10 overflow-hidden py-4 [mask-image:linear-gradient(to_right,transparent,black_7%,black_93%,transparent)]">
+        <motion.div className="flex w-max gap-4" animate={reduce ? undefined : { x: ["0%", "-50%"] }} transition={reduce ? undefined : { duration: 42, repeat: Infinity, ease: "linear" }}>
+          {items.map((item, index) => <div key={`${item}-${index}`} className="flex min-h-[150px] w-[84vw] max-w-[700px] shrink-0 items-center rounded-[2rem] border border-slate-200 bg-white/90 p-7 shadow-[0_22px_70px_rgba(15,23,42,.10)] sm:w-[620px] sm:p-9"><p className="text-2xl font-semibold leading-tight tracking-[-.035em] sm:text-4xl">{item}</p></div>)}
         </motion.div>
       </div>
-    </div>
+    </section>
   );
 }
 
-function ProductShotCard() {
+function JourneyStage({ stage, index }) {
   return (
-    <Reveal className="relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 p-3 shadow-[0_34px_100px_rgba(2,6,23,0.35)]">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_12%,rgba(251,146,60,0.20),transparent_30%),radial-gradient(circle_at_82%_18%,rgba(14,165,233,0.18),transparent_32%)]" />
-      <div className="relative overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.04]">
-        <Image src={PRODUCT_DASHBOARD_SRC} alt="StudioFlows product dashboard" width={1600} height={1000} className="h-auto w-full object-cover opacity-95" />
-      </div>
-    </Reveal>
-  );
-}
-
-function WorkflowRail() {
-  return (
-    <Reveal className="rounded-[2rem] border border-slate-200/80 bg-white/85 p-3 shadow-sm backdrop-blur sm:p-4">
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-10">
-        {lifecycle.map((step, index) => (
-          <motion.div key={step} whileHover={{ y: -4 }} className="rounded-2xl border border-slate-200 bg-gradient-to-b from-white to-slate-50 p-3 text-center">
-            <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-orange-600">{String(index + 1).padStart(2, "0")}</p>
-            <p className="mt-1 text-sm font-semibold text-slate-900">{step}</p>
-          </motion.div>
-        ))}
-      </div>
-    </Reveal>
-  );
-}
-
-function EditorialPanel({ panel, index }) {
-  return (
-    <Reveal delay={index * 0.06} className="group relative overflow-hidden rounded-[2rem] border border-white/10 bg-slate-950 shadow-[0_24px_80px_rgba(2,6,23,0.24)]">
-      <div className={`absolute inset-0 bg-gradient-to-br ${panel.gradient}`} />
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_18%,rgba(255,255,255,0.30),transparent_20%),linear-gradient(to_top,rgba(2,6,23,0.88),rgba(2,6,23,0.14),transparent)]" />
-      <motion.div aria-hidden="true" className="absolute -right-16 top-10 h-48 w-48 rounded-full border border-white/20 bg-white/10 backdrop-blur-md" animate={{ y: [0, -12, 0], rotate: [0, 3, 0] }} transition={{ duration: 8 + index, repeat: Infinity, ease: "easeInOut" }} />
-      <div className="relative flex min-h-[360px] flex-col justify-end p-5 sm:p-6">
-        <div className="mb-auto flex items-center justify-between">
-          <StatusPill>{panel.kicker}</StatusPill>
-          <span className="rounded-full border border-white/15 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/80">{panel.device}</span>
+    <Reveal className="scroll-mt-28" delay={index * .03}>
+      <article id={stage.id} className="grid gap-6 rounded-[2rem] border border-white/10 bg-white/[.06] p-4 shadow-[0_30px_100px_rgba(2,6,23,.32)] backdrop-blur-xl sm:p-6 lg:grid-cols-[1.08fr_.92fr] lg:items-center">
+        <div className={`relative min-h-[320px] overflow-hidden rounded-[1.5rem] ${index % 2 ? "lg:order-2" : ""}`}>
+          <img src={stage.image} alt={stage.title} className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-slate-950/18 to-transparent" />
+          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">{stage.facts.map((fact) => <span key={fact} className="rounded-full border border-white/15 bg-slate-950/65 px-3 py-1 text-xs font-semibold text-white backdrop-blur-xl">{fact}</span>)}</div>
         </div>
-        <p className="max-w-sm text-2xl font-semibold tracking-tight text-white">{panel.title}</p>
-        <p className="mt-3 max-w-md text-sm leading-6 text-slate-200">{panel.body}</p>
-      </div>
+        <div className={`p-2 sm:p-4 ${index % 2 ? "lg:order-1" : ""}`}>
+          <p className="text-xs font-semibold uppercase tracking-[.2em] text-orange-200">{stage.step} · {stage.eyebrow}</p>
+          <h3 className="mt-4 text-3xl font-semibold tracking-[-.04em] text-white sm:text-4xl">{stage.title}</h3>
+          <p className="mt-5 text-base leading-7 text-slate-300">{stage.body}</p>
+          <div className="mt-6 flex items-center gap-3 text-sm font-semibold text-cyan-200"><span className="h-px w-10 bg-cyan-300" />Job #10111 · 350 Barbados Drive</div>
+        </div>
+      </article>
     </Reveal>
   );
 }
 
-function ModuleCard({ title, body, index }) {
-  const objectPositions = ["object-[72%_22%]", "object-[60%_30%]", "object-[80%_36%]", "object-[58%_18%]", "object-[74%_44%]", "object-[66%_28%]"];
-
+function Journey() {
   return (
-    <Reveal delay={index * 0.04} className={`${glassCard} group relative min-h-[190px] overflow-hidden p-5`}>
-      <div className="absolute inset-y-0 right-0 w-[58%] opacity-[0.20] transition duration-500 group-hover:opacity-[0.30]">
-        <Image src={PRODUCT_DASHBOARD_SRC} alt="" fill sizes="(min-width: 1024px) 30vw, 80vw" className={`object-cover ${objectPositions[index % objectPositions.length]}`} />
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(15,23,42,1)_0%,rgba(15,23,42,0.82)_32%,rgba(15,23,42,0.35)_72%,rgba(15,23,42,0.16)_100%)]" />
+    <section id="journey" className="relative overflow-hidden bg-slate-950 py-16 lg:py-24">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(14,165,233,.15),transparent_30%),radial-gradient(circle_at_88%_20%,rgba(251,146,60,.18),transparent_26%)]" />
+      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+        <div className="mx-auto max-w-3xl text-center"><p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-200">One listing · one visual journey</p><h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] text-white sm:text-5xl">Meet the agent. Schedule the crew. Capture the property. Deliver the job.</h2><p className="mt-5 text-base leading-7 text-slate-300">All without the owner stitching the operation together.</p></div>
+        <div className="mt-12 grid gap-8 lg:grid-cols-[190px_1fr]">
+          <aside className="hidden lg:block"><div className="sticky top-28 rounded-[1.5rem] border border-white/10 bg-white/[.06] p-4 backdrop-blur-xl"><p className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">Job #10111</p><p className="mt-2 text-sm font-semibold text-white">350 Barbados Drive</p><nav className="mt-6 space-y-2">{journey.map((stage) => <a key={stage.id} href={`#${stage.id}`} className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"><span className="text-xs text-orange-200">{stage.step}</span>{stage.label}</a>)}</nav></div></aside>
+          <div className="space-y-8">{journey.map((stage, index) => <JourneyStage key={stage.id} stage={stage} index={index} />)}</div>
+        </div>
       </div>
-      <div className="absolute right-4 top-4 h-20 w-20 rounded-full bg-orange-300/10 blur-2xl transition group-hover:bg-sky-300/16" />
-      <div className="relative z-10 max-w-[76%]">
-        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-gradient-to-br from-orange-200 to-sky-200 text-sm font-bold text-slate-950">{String(index + 1).padStart(2, "0")}</div>
-        <h3 className="mt-5 text-xl font-semibold tracking-tight text-white">{title}</h3>
-        <p className="mt-3 text-sm leading-6 text-slate-300">{body}</p>
-      </div>
-    </Reveal>
+    </section>
   );
 }
 
-function MobileStickyCta() {
+function OwnerLayer() {
   return (
-    <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 p-3 shadow-[0_-12px_40px_rgba(2,6,23,0.42)] backdrop-blur md:hidden">
-      <Link href={REM_DEMO_HREF} className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950">Step Into the Live Demo</Link>
-    </div>
+    <section id="owner-layer" className="relative overflow-hidden bg-[#f7f1e8] py-20 text-slate-950 lg:py-28">
+      <div className="mx-auto grid max-w-7xl gap-8 px-4 sm:px-6 lg:grid-cols-[.92fr_1.08fr] lg:items-center lg:px-8">
+        <Reveal><p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-700">The identity trap</p><h2 className="mt-3 text-4xl font-semibold tracking-[-.05em] sm:text-6xl">Your business has a team. Your brain is still the operating system.</h2><div className="mt-6 space-y-2 text-lg leading-8 text-slate-600"><p>The photographer knows the shoot.</p><p>The editor knows the files.</p><p>The coordinator knows the calendar.</p><p>The agent knows what they asked for.</p></div><p className="mt-6 text-xl font-semibold text-slate-950">You are still the only person connecting all of it.</p></Reveal>
+        <Reveal className="relative min-h-[480px] overflow-hidden rounded-[2rem] shadow-[0_30px_90px_rgba(15,23,42,.18)]"><img src={TEAM_JOB_HANDOFF} alt="Real estate media team reviewing a StudioFlows job" className="absolute inset-0 h-full w-full object-cover" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950/86 via-transparent to-transparent" /><div className="absolute bottom-5 left-5 right-5 rounded-[1.5rem] border border-white/15 bg-slate-950/65 p-5 text-white backdrop-blur-xl"><p className="text-xs font-semibold uppercase tracking-[.18em] text-cyan-200">StudioFlows changes the role</p><p className="mt-2 text-xl font-semibold">The job connects the team. The owner stops becoming the router.</p></div></Reveal>
+      </div>
+    </section>
   );
+}
+
+function DemoSection() {
+  return (
+    <section id="demo-workspace" className="relative overflow-hidden bg-slate-950 py-20 text-white lg:py-28">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(251,146,60,.20),transparent_30%),radial-gradient(circle_at_15%_80%,rgba(14,165,233,.14),transparent_32%)]" />
+      <div className="relative mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[.85fr_1.15fr] lg:items-center lg:px-8">
+        <Reveal><p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-200">Live demo path</p><h2 className="mt-3 text-4xl font-semibold tracking-[-.05em] sm:text-6xl">Do not watch another software tour. Run the operation yourself.</h2><p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">Open a sample listing job. Assign a crew member. Move the job through Field, Post, and Delivery. Inspect ownership, comments, files, activity, and status.</p><div className="mt-7 grid gap-2 text-sm text-slate-200 sm:grid-cols-2">{["Sample company", "Fictitious listing jobs", "Nothing to configure", "Successful workspace loaded"].map((item) => <div key={item} className="rounded-2xl border border-white/10 bg-white/[.06] px-4 py-3">{item}</div>)}</div><div className="mt-8"><Link href={REM_DEMO_HREF} className={primary}>Enter the Demo Workspace</Link></div></Reveal>
+        <Reveal className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.05] p-3 shadow-[0_35px_110px_rgba(2,6,23,.45)]"><Image src={PRODUCT_DASHBOARD} alt="StudioFlows sample workspace" width={1600} height={1000} className="h-auto w-full rounded-[1.5rem] object-cover" /></Reveal>
+      </div>
+    </section>
+  );
+}
+
+function Teardown() {
+  return <section id="media-ops-score" className="bg-[#f7f1e8] py-16 text-slate-950 lg:py-20"><div className="mx-auto max-w-4xl px-4 text-center sm:px-6"><p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-700">Complex operation?</p><h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] sm:text-5xl">Your workflow more complicated than the sample?</h2><p className="mx-auto mt-5 max-w-2xl text-base leading-7 text-slate-600">Map the handoffs, scheduling rules, crew structure, and owner dependencies that may require a custom StudioFlows OS.</p><div className="mt-8"><Link href={REM_OPS_TEARDOWN_HREF} className={darkPrimary}>Start the Ops Teardown</Link></div></div></section>;
 }
 
 export function RemNoirLanding() {
-  useEffect(() => {
-    captureRemAttributionForPath(REM_LANDING_PATH);
-  }, []);
-
-  return (
-    <main className="min-h-screen overflow-hidden bg-slate-950 pb-20 text-white md:pb-0">
-      <Header />
-
-      <section className="relative overflow-hidden border-b border-white/10">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_16%_8%,rgba(251,146,60,0.40),transparent_28%),radial-gradient(circle_at_80%_12%,rgba(56,189,248,0.28),transparent_30%),linear-gradient(180deg,#020617_0%,#0f172a_52%,#1e293b_100%)]" />
-        <div className="absolute inset-x-0 bottom-0 h-56 bg-[linear-gradient(to_top,rgba(251,146,60,0.16),transparent)]" />
-        <div className="relative mx-auto grid max-w-7xl gap-10 px-4 py-12 sm:px-6 lg:grid-cols-[0.82fr_1.18fr] lg:items-center lg:px-8 lg:py-20">
-          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.7, ease: [0.22, 1, 0.36, 1] }}>
-            <div className="flex flex-wrap gap-2">
-              <StatusPill>Built for real estate media studios</StatusPill>
-              <StatusPill>Photo · Drone · Video · Floor plans · 3D</StatusPill>
-            </div>
-            <h1 className="mt-6 text-4xl font-semibold tracking-[-0.055em] text-white sm:text-5xl lg:text-6xl">The ops software behind every high-end listing shoot.</h1>
-            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-300 sm:text-lg sm:leading-8">One command center for scheduling, crew coverage, field updates, raw uploads, editing, delivery, payments, and agent status.</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link href={REM_DEMO_HREF} className={lightCta}>Step Into the Live Demo</Link>
-              <Link href={REM_OPS_TEARDOWN_HREF} className="inline-flex min-h-11 items-center justify-center rounded-full border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur transition hover:-translate-y-0.5 hover:bg-white/15">Get an Ops Teardown</Link>
-            </div>
-          </motion.div>
-          <HeroProductShot />
-        </div>
-      </section>
-
-      <section id="workspace" className="relative bg-[#f7f1e8] py-14 text-slate-950 sm:py-16 lg:py-20">
-        <SectionHeader eyebrow="The operating problem" title="The listing looks expensive. The back office still runs through your phone." body="The work is visual. The operation is not. StudioFlows turns status noise into one visible job record." />
-        <PainTicker />
-      </section>
-
-      <section className="relative overflow-hidden border-y border-white/10 bg-slate-950 py-14 lg:py-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(251,146,60,0.20),transparent_26%),radial-gradient(circle_at_20%_85%,rgba(14,165,233,0.16),transparent_30%)]" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionHeader eyebrow="One job record" title="From request to invoice, the listing has one place to live." body="A command surface for every handoff after the listing order comes in." light />
-          <div className="mt-9"><WorkflowRail /></div>
-          <div className="mt-9 grid gap-6 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
-            <Reveal className={`${glassCard} p-6`}>
-              <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-200">Owner relief</p>
-              <h3 className="mt-4 text-3xl font-semibold tracking-tight text-white">Your team can answer without asking you first.</h3>
-              <p className="mt-4 leading-7 text-slate-300">Address, package, crew, access notes, raw files, editing, QC, delivery, and payment all sit on the same job.</p>
-            </Reveal>
-            <ProductShotCard />
-          </div>
-        </div>
-      </section>
-
-      <section id="fieldflow" className="bg-[#f7f1e8] text-slate-950">
-        <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-          <SectionHeader eyebrow="Real operations" title="Real estate media work happens around the software." body="Field crews, uploads, editing, QC, and delivery all need one operational thread instead of another round of texts." />
-          <div className="mt-10 grid gap-5 md:grid-cols-2">
-            {editorialPanels.map((panel, index) => <EditorialPanel key={panel.title} panel={panel} index={index} />)}
-          </div>
-        </div>
-      </section>
-
-      <section id="modules" className="relative overflow-hidden bg-slate-950 py-14 text-white lg:py-20">
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_20%,rgba(14,165,233,0.14),transparent_28%),radial-gradient(circle_at_85%_18%,rgba(251,146,60,0.16),transparent_24%)]" />
-        <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <SectionHeader eyebrow="Software surface" title="The modules your studio actually runs on." body="Short, specific, and tied to how real estate media work moves." light />
-          <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {modules.map(([title, body], index) => <ModuleCard key={title} title={title} body={body} index={index} />)}
-          </div>
-        </div>
-      </section>
-
-      <section id="post" className="bg-[#f7f1e8] text-slate-950">
-        <div className="mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:px-8 lg:py-20">
-          <Reveal>
-            <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-700">Interactive demo surface</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl lg:text-5xl">Click through the studio flow before creating your workspace.</h2>
-            <p className="mt-4 leading-7 text-slate-600">Feel the system working across scheduling, field, post, and delivery before your team ever has to start from a blank account.</p>
-            <div className="mt-7 flex flex-col gap-3 sm:flex-row">
-              <Link href={REM_DEMO_HREF} className={primaryCta}>Step Into the Live Demo</Link>
-              <Link href={REM_OPS_TEARDOWN_HREF} className="inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300/70 bg-white/70 px-5 py-3 text-sm font-semibold text-slate-900 backdrop-blur transition hover:-translate-y-0.5 hover:bg-white">Get an Ops Teardown</Link>
-            </div>
-          </Reveal>
-          <InteractiveBoard />
-        </div>
-      </section>
-
-      <section id="demo-workspace" className="border-y border-white/10 bg-slate-950 py-14 text-white lg:py-20">
-        <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-          <SectionHeader eyebrow="Live demo path" title="Step into a successful media studio workspace, not an empty account." body="Sample listing jobs, crew assignments, field updates, post-production queues, deliverables, payment status, and agent-facing clarity already in place." light />
-          <div className="mt-8 flex justify-center"><Link href={REM_DEMO_HREF} className={lightCta}>Step Into the Live Demo</Link></div>
-        </div>
-      </section>
-
-      <section id="media-ops-score" className="bg-[#f7f1e8] py-14 text-slate-950 lg:py-20">
-        <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-          <SectionHeader eyebrow="Ops Teardown path" title="For studios with unusual complexity, diagnose before the call." body="Multi-market scheduling, custom crew rules, split shoots, heavy post-production, and unusual delivery loops deserve a deeper teardown." />
-          <div className="mt-8 flex justify-center"><Link href={REM_OPS_TEARDOWN_HREF} className={primaryCta}>Start Ops Teardown</Link></div>
-        </div>
-      </section>
-
-      <footer className="bg-slate-950 px-4 py-10 text-center text-sm text-slate-500 sm:px-6 lg:px-8">StudioFlows OS for real estate media studios · Built around the job from booked to delivered.</footer>
-      <MobileStickyCta />
-    </main>
-  );
+  useEffect(() => { captureRemAttributionForPath(REM_LANDING_PATH); }, []);
+  return <main className="min-h-screen overflow-hidden bg-slate-950 pb-20 md:pb-0"><Header /><Hero /><PainTicker /><Journey /><OwnerLayer /><DemoSection /><Teardown /><footer className="bg-slate-950 px-4 py-10 text-center text-sm text-slate-500">StudioFlows OS for real estate media studios · Booked to delivered without the owner becoming dispatch.</footer><div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 p-3 shadow-[0_-12px_40px_rgba(2,6,23,.42)] backdrop-blur md:hidden"><Link href={REM_DEMO_HREF} className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950">Step Into the Live Demo</Link></div></main>;
 }

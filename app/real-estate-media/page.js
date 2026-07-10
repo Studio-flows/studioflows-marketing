@@ -1,4 +1,5 @@
 import { RemNoirLanding } from "@/components/real-estate-media/RemNoirLanding";
+import styles from "./real-estate-media.module.css";
 
 export const metadata = {
   title: "Real Estate Media OS | StudioFlows",
@@ -7,5 +8,9 @@ export const metadata = {
 };
 
 export default function RealEstateMediaPage() {
-  return <RemNoirLanding />;
+  return (
+    <div className={styles.landing}>
+      <RemNoirLanding />
+    </div>
+  );
 }

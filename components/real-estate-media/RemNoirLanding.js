@@ -80,28 +80,28 @@ const editorialPanels = [
   {
     kicker: "On-site crew",
     title: "Crew shooting the listing",
-    body: "Future shot: photographer / drone operator on property capturing media.",
+    body: "The field team sees the property, package, access notes, and shoot requirements before the first camera comes out.",
     gradient: "from-slate-950 via-sky-950 to-orange-500",
     device: "camera",
   },
   {
     kicker: "FieldFlow mobile",
     title: "Crew member updating the job from the driveway",
-    body: "Future shot: phone-in-hand FieldFlow view with package, notes, upload status, and next action.",
+    body: "FieldFlow turns field status into a job update instead of another text thread for the owner to interpret.",
     gradient: "from-slate-950 via-cyan-950 to-sky-500",
     device: "phone",
   },
   {
     kicker: "Raw uploads",
     title: "Field team loading files into the job page",
-    body: "Future shot: big-monitor upload moment for photo, video, drone clips, and floor plan assets.",
+    body: "Photo, video, drone clips, and floor plan assets move into the job record so post-production knows what is ready.",
     gradient: "from-slate-950 via-zinc-900 to-amber-500",
     device: "monitor",
   },
   {
     kicker: "Editing bay",
     title: "Editor working through the delivery queue",
-    body: "Future shot: editing on screen with QC and delivery readiness visible beside the work.",
+    body: "Editors can see missing files, handoff notes, QC status, and delivery readiness without asking the founder for context.",
     gradient: "from-slate-950 via-indigo-950 to-orange-400",
     device: "timeline",
   },
@@ -435,7 +435,7 @@ export function RemNoirLanding() {
 
       <section id="fieldflow" className="bg-[#f7f1e8] text-slate-950">
         <div className="mx-auto max-w-7xl px-4 py-14 sm:px-6 lg:px-8 lg:py-20">
-          <SectionHeader eyebrow="Real operations" title="Make the page feel like the work happening around the software." body="These panels are intentional placeholders for future photography: crew on-site, FieldFlow on phone, raw uploads, and editing bay." />
+          <SectionHeader eyebrow="Real operations" title="Real estate media work happens around the software." body="Field crews, uploads, editing, QC, and delivery all need one operational thread instead of another round of texts." />
           <div className="mt-10 grid gap-5 md:grid-cols-2">
             {editorialPanels.map((panel, index) => <EditorialPanel key={panel.title} panel={panel} index={index} />)}
           </div>
@@ -456,8 +456,8 @@ export function RemNoirLanding() {
         <div className="mx-auto grid max-w-7xl gap-8 px-4 py-14 sm:px-6 lg:grid-cols-[0.85fr_1.15fr] lg:items-center lg:px-8 lg:py-20">
           <Reveal>
             <p className="text-sm font-semibold uppercase tracking-[0.18em] text-orange-700">Interactive demo surface</p>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl lg:text-5xl">Click through the studio flow before asking for the account.</h2>
-            <p className="mt-4 leading-7 text-slate-600">The page should let operators feel the system: scheduling, field, post, and delivery all moving without the owner acting as the router.</p>
+            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-slate-950 sm:text-4xl lg:text-5xl">Click through the studio flow before creating your workspace.</h2>
+            <p className="mt-4 leading-7 text-slate-600">Feel the system working across scheduling, field, post, and delivery before your team ever has to start from a blank account.</p>
             <div className="mt-7 flex flex-col gap-3 sm:flex-row">
               <Link href={REM_DEMO_HREF} className={primaryCta}>Step Into the Live Demo</Link>
               <Link href={REM_OPS_TEARDOWN_HREF} className="inline-flex min-h-11 items-center justify-center rounded-full border border-slate-300/70 bg-white/70 px-5 py-3 text-sm font-semibold text-slate-900 backdrop-blur transition hover:-translate-y-0.5 hover:bg-white">Get an Ops Teardown</Link>
@@ -469,7 +469,7 @@ export function RemNoirLanding() {
 
       <section id="demo-workspace" className="border-y border-white/10 bg-slate-950 py-14 text-white lg:py-20">
         <div className="mx-auto max-w-5xl px-4 text-center sm:px-6 lg:px-8">
-          <SectionHeader eyebrow="Live demo path" title="Show them a successful media studio workspace, not an empty account." body="Sample listing jobs, crew assignments, field updates, post-production queues, deliverables, payment status, and agent-facing clarity already in place." light />
+          <SectionHeader eyebrow="Live demo path" title="Step into a successful media studio workspace, not an empty account." body="Sample listing jobs, crew assignments, field updates, post-production queues, deliverables, payment status, and agent-facing clarity already in place." light />
           <div className="mt-8 flex justify-center"><Link href={REM_DEMO_HREF} className={lightCta}>Step Into the Live Demo</Link></div>
         </div>
       </section>

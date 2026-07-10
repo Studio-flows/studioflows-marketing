@@ -61,7 +61,8 @@ export default function HomePage() {
   return (
     <main className="min-h-screen bg-[#030304] pb-[calc(5rem+env(safe-area-inset-bottom))] text-[#E8E6E3] lg:pb-0">
       <ProgressionProvider>
-        <div className="relative">
+        <div className="home-hero-access-cleanup relative">
+          <style>{`.home-hero-access-cleanup section > header > div:last-child { display: none; }`}</style>
           <SubscriberNav />
           <InitiationHeroSection content={HOME_HERO} />
         </div>

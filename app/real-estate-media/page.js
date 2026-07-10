@@ -1,9 +1,9 @@
 import { RemNoirLanding } from "@/components/real-estate-media/RemNoirLanding";
 
 export const metadata = {
-  title: "Real Estate Media | Media Ops Score",
+  title: "Real Estate Media OS | StudioFlows",
   description:
-    "Founder-led real estate media studios. Photo, drone, reels, floor plans, 24–48h turnarounds. See what still routes to you after booking.",
+    "For real estate media companies where listing jobs still route through the owner. See booking, crew, FieldFlow mobile, uploads, editing, delivery, and payments in one workspace.",
 };
 
 export default function RealEstateMediaPage() {

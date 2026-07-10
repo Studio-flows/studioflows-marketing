@@ -2,16 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { useReducedMotion } from "framer-motion";
 
 import { buildRemScoreHref } from "@/lib/real-estate-media/remLeadAttribution";
-import { REM_SCORE_HREF } from "@/lib/real-estate-media/rem-landing-content";
+import { REM_DEMO_HREF, REM_SCORE_HREF } from "@/lib/real-estate-media/rem-landing-content";
 import {
   REM_CTA,
   REM_CTA_SECONDARY,
   REM_NOIR_BG,
   REM_PANEL,
 } from "@/components/real-estate-media/rem-noir-tokens";
+
+function appendCtaId(href, ctaId) {
+  if (!ctaId || href.startsWith("#")) return href;
+  const separator = href.includes("?") ? "&" : "?";
+  return `${href}${separator}cta_id=${encodeURIComponent(ctaId)}`;
+}
 
 export function RemScanlineOverlay() {
   return (
@@ -41,18 +47,23 @@ export function RemTerminalChrome({ title, right, children, className = "" }) {
   );
 }
 
-export function RemPrimaryCta({ children, ctaId, className = "" }) {
-  const href = ctaId ? buildRemScoreHref(ctaId) : REM_SCORE_HREF;
+export function RemPrimaryCta({ children, ctaId, href, className = "" }) {
+  const resolvedHref = href
+    ? appendCtaId(href, ctaId)
+    : ctaId
+      ? buildRemScoreHref(ctaId)
+      : REM_SCORE_HREF;
+
   return (
-    <Link href={href} className={`${REM_CTA} ${className}`}>
+    <Link href={resolvedHref} className={`${REM_CTA} ${className}`}>
       {children}
     </Link>
   );
 }
 
-export function RemSecondaryCta({ children, href = REM_SCORE_HREF, className = "" }) {
+export function RemSecondaryCta({ children, href = REM_SCORE_HREF, ctaId, className = "" }) {
   return (
-    <Link href={href} className={`${REM_CTA_SECONDARY} ${className}`}>
+    <Link href={appendCtaId(href, ctaId)} className={`${REM_CTA_SECONDARY} ${className}`}>
       {children}
     </Link>
   );
@@ -93,10 +104,10 @@ export function RemStickyMobileCta() {
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-0 z-30 px-4 pb-4 pt-8 md:hidden [background:linear-gradient(to_top,rgba(9,9,11,0.97)_60%,transparent)]">
       <Link
-        href={buildRemScoreHref("sticky_mobile_cta")}
+        href={appendCtaId(REM_DEMO_HREF, "sticky_mobile_demo")}
         className={`${REM_CTA} pointer-events-auto w-full shadow-[0_-8px_32px_rgba(0,0,0,0.5)]`}
       >
-        Get My Media Ops Score
+        Step Into the Live Demo
       </Link>
     </div>
   );

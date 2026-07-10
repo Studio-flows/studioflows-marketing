@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
-import { motion, useReducedMotion } from "framer-motion";
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 
 import { REM_DEMO_HREF, REM_OPS_TEARDOWN_HREF } from "@/lib/real-estate-media/rem-landing-content";
 import { captureRemAttributionForPath, REM_LANDING_PATH } from "@/lib/real-estate-media/remLeadAttribution";
@@ -52,6 +52,8 @@ const journey = [
     title: "The calendar knows more than the appointment time.",
     body: "It shows who is assigned, which roles the package requires, drive time, shoot duration, split visits, and coverage gaps.",
     facts: ["Crew assigned", "Travel buffer included", "No silent conflicts"],
+    inspectable: true,
+    fit: "contain",
   },
   {
     id: "field",
@@ -92,7 +94,24 @@ const journey = [
     title: "One job record shows what is done, what is waiting, and who owns the next move.",
     body: "The team can see lifecycle stage, deliverables, client status, comments, activity, invoice state, and final release without reconstructing the story.",
     facts: ["QC approved", "Agent updated", "Ready for release"],
+    inspectable: true,
+    fit: "contain",
   },
+];
+
+const mobileScreens = [
+  "/img_1426_720.png",
+  "/img_1427_720.png",
+  "/img_1428_720.png",
+  "/img_1429_720.png",
+  "/img_1430_720.png",
+  "/img_1431_720.png",
+  "/img_1432_720.png",
+  "/img_1433_720.png",
+  "/img_1434_720.png",
+  "/img_1436_720.png",
+  "/img_1437_720.png",
+  "/img_1438_720.png",
 ];
 
 function useReveal() {
@@ -110,6 +129,93 @@ function Reveal({ children, className = "", delay = 0 }) {
   return <motion.div {...props} transition={{ ...props.transition, delay }} className={className}>{children}</motion.div>;
 }
 
+function MagnifyIcon({ className = "" }) {
+  return (
+    <svg viewBox="0 0 24 24" aria-hidden="true" className={className} fill="none" stroke="currentColor" strokeWidth="2">
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="m16 16 4.5 4.5" />
+      <path d="M11 8v6M8 11h6" />
+    </svg>
+  );
+}
+
+function ProductMedia({ src, alt, fit = "cover", onInspect, className = "" }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onInspect({ src, alt, fit })}
+      className={`group relative block w-full cursor-zoom-in overflow-hidden text-left ${className}`}
+      aria-label={`Enlarge ${alt}`}
+    >
+      <img
+        src={src}
+        alt={alt}
+        className={`absolute inset-0 h-full w-full ${fit === "contain" ? "object-contain bg-slate-950" : "object-cover"}`}
+      />
+      <div className="absolute inset-0 bg-slate-950/0 transition duration-300 group-hover:bg-slate-950/22" />
+      <div className="absolute right-4 top-4 flex h-11 w-11 translate-y-1 items-center justify-center rounded-full border border-white/20 bg-slate-950/70 text-white opacity-0 shadow-xl backdrop-blur-xl transition duration-300 group-hover:translate-y-0 group-hover:opacity-100 group-focus-visible:translate-y-0 group-focus-visible:opacity-100">
+        <MagnifyIcon className="h-5 w-5" />
+      </div>
+      <div className="absolute bottom-4 right-4 rounded-full border border-white/15 bg-slate-950/65 px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[.18em] text-white opacity-0 backdrop-blur-xl transition group-hover:opacity-100 group-focus-visible:opacity-100">
+        Inspect product
+      </div>
+    </button>
+  );
+}
+
+function Lightbox({ image, onClose }) {
+  useEffect(() => {
+    if (!image) return undefined;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKey = (event) => {
+      if (event.key === "Escape") onClose();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [image, onClose]);
+
+  return (
+    <AnimatePresence>
+      {image ? (
+        <motion.div
+          className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/94 p-3 backdrop-blur-xl sm:p-8"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          role="dialog"
+          aria-modal="true"
+          aria-label={image.alt}
+          onMouseDown={(event) => {
+            if (event.currentTarget === event.target) onClose();
+          }}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: .96, y: 20 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: .98, y: 10 }}
+            transition={{ duration: .28 }}
+            className="relative flex max-h-[92vh] w-full max-w-[1500px] items-center justify-center overflow-hidden rounded-[1.5rem] border border-white/12 bg-black shadow-[0_40px_140px_rgba(0,0,0,.65)]"
+          >
+            <img src={image.src} alt={image.alt} className="max-h-[92vh] w-full object-contain" />
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-3 top-3 flex h-11 w-11 items-center justify-center rounded-full border border-white/20 bg-slate-950/75 text-xl text-white backdrop-blur-xl transition hover:bg-slate-900"
+              aria-label="Close enlarged product image"
+            >
+              ×
+            </button>
+          </motion.div>
+        </motion.div>
+      ) : null}
+    </AnimatePresence>
+  );
+}
+
 function Header() {
   return (
     <header className="sticky top-0 z-50 bg-white/82 shadow-[0_14px_44px_rgba(15,23,42,.08)] backdrop-blur-2xl">
@@ -125,6 +231,7 @@ function Header() {
         </Link>
         <nav className="hidden items-center gap-7 text-sm font-semibold text-slate-700 md:flex">
           <a href="#journey" className="hover:text-slate-950">Workflow</a>
+          <a href="#fieldflow-pwa" className="hover:text-slate-950">FieldFlow</a>
           <a href="#owner-layer" className="hover:text-slate-950">Why it works</a>
           <a href="#demo-workspace" className="hover:text-slate-950">Demo</a>
         </nav>
@@ -181,27 +288,33 @@ function PainTicker() {
   );
 }
 
-function JourneyStage({ stage, index }) {
+function JourneyStage({ stage, index, onInspect }) {
+  const imageClass = `relative min-h-[320px] overflow-hidden rounded-[1.5rem] ${index % 2 ? "lg:order-2" : ""}`;
   return (
     <Reveal className="scroll-mt-28" delay={index * .03}>
       <article id={stage.id} className="grid gap-6 rounded-[2rem] border border-white/10 bg-white/[.06] p-4 shadow-[0_30px_100px_rgba(2,6,23,.32)] backdrop-blur-xl sm:p-6 lg:grid-cols-[1.08fr_.92fr] lg:items-center">
-        <div className={`relative min-h-[320px] overflow-hidden rounded-[1.5rem] ${index % 2 ? "lg:order-2" : ""}`}>
-          <img src={stage.image} alt={stage.title} className="absolute inset-0 h-full w-full object-cover" />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-slate-950/18 to-transparent" />
-          <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">{stage.facts.map((fact) => <span key={fact} className="rounded-full border border-white/15 bg-slate-950/65 px-3 py-1 text-xs font-semibold text-white backdrop-blur-xl">{fact}</span>)}</div>
-        </div>
+        {stage.inspectable ? (
+          <ProductMedia src={stage.image} alt={stage.title} fit={stage.fit} onInspect={onInspect} className={imageClass} />
+        ) : (
+          <div className={imageClass}>
+            <img src={stage.image} alt={stage.title} className="absolute inset-0 h-full w-full object-cover" />
+            <div className="absolute inset-0 bg-gradient-to-t from-slate-950/88 via-slate-950/18 to-transparent" />
+            <div className="absolute bottom-4 left-4 right-4 flex flex-wrap gap-2">{stage.facts.map((fact) => <span key={fact} className="rounded-full border border-white/15 bg-slate-950/65 px-3 py-1 text-xs font-semibold text-white backdrop-blur-xl">{fact}</span>)}</div>
+          </div>
+        )}
         <div className={`p-2 sm:p-4 ${index % 2 ? "lg:order-1" : ""}`}>
           <p className="text-xs font-semibold uppercase tracking-[.2em] text-orange-200">{stage.step} · {stage.eyebrow}</p>
           <h3 className="mt-4 text-3xl font-semibold tracking-[-.04em] text-white sm:text-4xl">{stage.title}</h3>
           <p className="mt-5 text-base leading-7 text-slate-300">{stage.body}</p>
           <div className="mt-6 flex items-center gap-3 text-sm font-semibold text-cyan-200"><span className="h-px w-10 bg-cyan-300" />Job #10111 · 350 Barbados Drive</div>
+          {stage.inspectable ? <p className="mt-3 text-xs font-medium uppercase tracking-[.16em] text-slate-500">Hover or tap the screenshot to inspect the product.</p> : null}
         </div>
       </article>
     </Reveal>
   );
 }
 
-function Journey() {
+function Journey({ onInspect }) {
   return (
     <section id="journey" className="relative overflow-hidden bg-slate-950 py-16 lg:py-24">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_12%_8%,rgba(14,165,233,.15),transparent_30%),radial-gradient(circle_at_88%_20%,rgba(251,146,60,.18),transparent_26%)]" />
@@ -209,8 +322,75 @@ function Journey() {
         <div className="mx-auto max-w-3xl text-center"><p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-200">One listing · one visual journey</p><h2 className="mt-3 text-3xl font-semibold tracking-[-.04em] text-white sm:text-5xl">Meet the agent. Schedule the crew. Capture the property. Deliver the job.</h2><p className="mt-5 text-base leading-7 text-slate-300">All without the owner stitching the operation together.</p></div>
         <div className="mt-12 grid gap-8 lg:grid-cols-[190px_1fr]">
           <aside className="hidden lg:block"><div className="sticky top-28 rounded-[1.5rem] border border-white/10 bg-white/[.06] p-4 backdrop-blur-xl"><p className="text-xs font-semibold uppercase tracking-[.18em] text-slate-400">Job #10111</p><p className="mt-2 text-sm font-semibold text-white">350 Barbados Drive</p><nav className="mt-6 space-y-2">{journey.map((stage) => <a key={stage.id} href={`#${stage.id}`} className="flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-slate-300 transition hover:bg-white/10 hover:text-white"><span className="text-xs text-orange-200">{stage.step}</span>{stage.label}</a>)}</nav></div></aside>
-          <div className="space-y-8">{journey.map((stage, index) => <JourneyStage key={stage.id} stage={stage} index={index} />)}</div>
+          <div className="space-y-8">{journey.map((stage, index) => <JourneyStage key={stage.id} stage={stage} index={index} onInspect={onInspect} />)}</div>
         </div>
+      </div>
+    </section>
+  );
+}
+
+function PhoneCarousel() {
+  const trackRef = useRef(null);
+  const [active, setActive] = useState(0);
+
+  const goTo = (index) => {
+    const normalized = (index + mobileScreens.length) % mobileScreens.length;
+    setActive(normalized);
+    const track = trackRef.current;
+    if (track) track.scrollTo({ left: normalized * track.clientWidth, behavior: "smooth" });
+  };
+
+  const handleScroll = () => {
+    const track = trackRef.current;
+    if (!track?.clientWidth) return;
+    const next = Math.round(track.scrollLeft / track.clientWidth);
+    if (next !== active && next >= 0 && next < mobileScreens.length) setActive(next);
+  };
+
+  return (
+    <div className="mx-auto w-full max-w-[390px]">
+      <div className="relative rounded-[3.5rem] border-[10px] border-slate-950 bg-slate-950 p-1.5 shadow-[0_40px_100px_rgba(15,23,42,.28)] ring-1 ring-white/10">
+        <div className="pointer-events-none absolute left-1/2 top-3 z-20 h-7 w-28 -translate-x-1/2 rounded-full bg-black" />
+        <div
+          ref={trackRef}
+          onScroll={handleScroll}
+          className="flex aspect-[9/19.4] snap-x snap-mandatory overflow-x-auto rounded-[2.65rem] bg-black [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          aria-label="Swipe through the StudioFlows mobile PWA"
+        >
+          {mobileScreens.map((src, index) => (
+            <div key={src} className="relative h-full w-full shrink-0 snap-center overflow-hidden bg-black">
+              <img src={src} alt={`StudioFlows mobile PWA screen ${index + 1}`} className="h-full w-full object-cover" loading={index < 2 ? "eager" : "lazy"} />
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 flex items-center justify-between gap-4">
+        <button type="button" onClick={() => goTo(active - 1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-lg text-slate-900 shadow-sm transition hover:-translate-y-0.5" aria-label="Previous mobile screen">←</button>
+        <div className="flex flex-wrap justify-center gap-1.5" aria-label={`Mobile screen ${active + 1} of ${mobileScreens.length}`}>
+          {mobileScreens.map((src, index) => <button key={src} type="button" onClick={() => goTo(index)} aria-label={`Open mobile screen ${index + 1}`} className={`h-2 rounded-full transition-all ${active === index ? "w-6 bg-slate-950" : "w-2 bg-slate-300 hover:bg-slate-400"}`} />)}
+        </div>
+        <button type="button" onClick={() => goTo(active + 1)} className="flex h-11 w-11 items-center justify-center rounded-full border border-slate-300 bg-white text-lg text-slate-900 shadow-sm transition hover:-translate-y-0.5" aria-label="Next mobile screen">→</button>
+      </div>
+    </div>
+  );
+}
+
+function FieldFlowPwa() {
+  return (
+    <section id="fieldflow-pwa" className="relative overflow-hidden bg-[#f7f1e8] py-20 text-slate-950 lg:py-28">
+      <div className="absolute -right-32 top-0 h-96 w-96 rounded-full bg-cyan-200/25 blur-3xl" />
+      <div className="absolute -left-32 bottom-0 h-96 w-96 rounded-full bg-orange-200/25 blur-3xl" />
+      <div className="relative mx-auto grid max-w-7xl gap-12 px-4 sm:px-6 lg:grid-cols-[.92fr_1.08fr] lg:items-center lg:px-8">
+        <Reveal>
+          <p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-700">FieldFlow PWA</p>
+          <h2 className="mt-3 text-4xl font-semibold tracking-[-.05em] !text-slate-950 sm:text-6xl">The field team carries the job—not the whole back office.</h2>
+          <p className="mt-6 max-w-xl text-lg leading-8 !text-slate-700">Open the address, package, access notes, crew assignment, upload status, and next action from a phone. No desktop training. No hunting through texts.</p>
+          <div className="mt-8 grid gap-3 sm:grid-cols-2">
+            {["Job brief in pocket", "Field updates on the job", "Raw upload visibility", "Next action stays clear"].map((item) => <div key={item} className="rounded-2xl border border-slate-200 bg-white/80 px-4 py-4 text-sm font-semibold !text-slate-800 shadow-sm backdrop-blur">{item}</div>)}
+          </div>
+          <p className="mt-6 text-sm font-medium !text-slate-600">Swipe the phone to move through the real PWA screens.</p>
+        </Reveal>
+        <Reveal delay={.08}><PhoneCarousel /></Reveal>
       </div>
     </section>
   );
@@ -227,13 +407,15 @@ function OwnerLayer() {
   );
 }
 
-function DemoSection() {
+function DemoSection({ onInspect }) {
   return (
     <section id="demo-workspace" className="relative overflow-hidden bg-slate-950 py-20 text-white lg:py-28">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_80%_10%,rgba(251,146,60,.20),transparent_30%),radial-gradient(circle_at_15%_80%,rgba(14,165,233,.14),transparent_32%)]" />
       <div className="relative mx-auto grid max-w-7xl gap-10 px-4 sm:px-6 lg:grid-cols-[.85fr_1.15fr] lg:items-center lg:px-8">
         <Reveal><p className="text-xs font-semibold uppercase tracking-[.22em] text-orange-200">Live demo path</p><h2 className="mt-3 text-4xl font-semibold tracking-[-.05em] sm:text-6xl">Do not watch another software tour. Run the operation yourself.</h2><p className="mt-5 max-w-xl text-lg leading-8 text-slate-300">Open a sample listing job. Assign a crew member. Move the job through Field, Post, and Delivery. Inspect ownership, comments, files, activity, and status.</p><div className="mt-7 grid gap-2 text-sm text-slate-200 sm:grid-cols-2">{["Sample company", "Fictitious listing jobs", "Nothing to configure", "Successful workspace loaded"].map((item) => <div key={item} className="rounded-2xl border border-white/10 bg-white/[.06] px-4 py-3">{item}</div>)}</div><div className="mt-8"><Link href={REM_DEMO_HREF} className={primary}>Enter the Demo Workspace</Link></div></Reveal>
-        <Reveal className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.05] p-3 shadow-[0_35px_110px_rgba(2,6,23,.45)]"><Image src={PRODUCT_DASHBOARD} alt="StudioFlows sample workspace" width={1600} height={1000} className="h-auto w-full rounded-[1.5rem] object-cover" /></Reveal>
+        <Reveal className="overflow-hidden rounded-[2rem] border border-white/10 bg-white/[.05] p-3 shadow-[0_35px_110px_rgba(2,6,23,.45)]">
+          <ProductMedia src={PRODUCT_DASHBOARD} alt="StudioFlows sample workspace" fit="contain" onInspect={onInspect} className="min-h-[330px] rounded-[1.5rem] sm:min-h-[460px]" />
+        </Reveal>
       </div>
     </section>
   );
@@ -244,6 +426,21 @@ function Teardown() {
 }
 
 export function RemNoirLanding() {
+  const [lightbox, setLightbox] = useState(null);
   useEffect(() => { captureRemAttributionForPath(REM_LANDING_PATH); }, []);
-  return <main className="min-h-screen overflow-hidden bg-slate-950 pb-20 md:pb-0"><Header /><Hero /><PainTicker /><Journey /><OwnerLayer /><DemoSection /><Teardown /><footer className="bg-slate-950 px-4 py-10 text-center text-sm text-slate-500">StudioFlows OS for real estate media studios · Booked to delivered without the owner becoming dispatch.</footer><div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 p-3 shadow-[0_-12px_40px_rgba(2,6,23,.42)] backdrop-blur md:hidden"><Link href={REM_DEMO_HREF} className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950">Step Into the Live Demo</Link></div></main>;
+  return (
+    <main className="min-h-screen overflow-hidden bg-slate-950 pb-20 md:pb-0">
+      <Header />
+      <Hero />
+      <PainTicker />
+      <Journey onInspect={setLightbox} />
+      <FieldFlowPwa />
+      <OwnerLayer />
+      <DemoSection onInspect={setLightbox} />
+      <Teardown />
+      <footer className="bg-slate-950 px-4 py-10 text-center text-sm text-slate-500">StudioFlows OS for real estate media studios · Booked to delivered without the owner becoming dispatch.</footer>
+      <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 p-3 shadow-[0_-12px_40px_rgba(2,6,23,.42)] backdrop-blur md:hidden"><Link href={REM_DEMO_HREF} className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950">Step Into the Live Demo</Link></div>
+      <Lightbox image={lightbox} onClose={() => setLightbox(null)} />
+    </main>
+  );
 }

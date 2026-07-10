@@ -22,7 +22,7 @@ import {
 } from "@/components/home/InitiationHomeSections";
 
 const C = INITIATION_HOMEPAGE_CONTENT;
-const LIVE_DEMO_URL = "https://os.studioflows.co/demo/real-estate-media";
+const LIVE_DEMO_URL = "https://studioflows-platform-git-main-studio-flows.vercel.app/demo/access";
 const LOGIN_URL = "https://os.studioflows.co/login";
 
 const HOME_HERO = {

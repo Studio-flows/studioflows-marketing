@@ -14,7 +14,12 @@ const SECTIONS = [
   {
     title: "How We Use Information",
     body:
-      "We use information to operate and improve the StudioFlows website, respond to inquiries, evaluate interest in our services, communicate with you about requests or updates, and protect the site against misuse or security issues.",
+      "We use information to operate and improve the StudioFlows website and authorized tools, respond to inquiries, provide requested functionality, evaluate interest in our services, communicate with you about requests or updates, and protect against misuse or security issues.",
+  },
+  {
+    title: "Connected Accounts and Third-Party Platforms",
+    body:
+      "If you choose to connect a third-party account, including LinkedIn, to an authorized StudioFlows tool, we may process the account identifiers, access credentials, and posting records needed to provide that connection. We use this information only to perform the function you authorize, secure and troubleshoot the connection, and comply with applicable law. We do not sell it. You may disconnect an account or request deletion by contacting us.",
   },
   {
     title: "How Information May Be Shared",
@@ -60,7 +65,7 @@ export default function PrivacyPolicyPage() {
             Back to Home
           </Link>
           <p className="text-xs uppercase tracking-[0.24em] text-white/35">
-            Effective Date: March 25, 2026
+            Effective Date: July 19, 2026
           </p>
         </div>
 
@@ -72,7 +77,8 @@ export default function PrivacyPolicyPage() {
           <p className="mt-6 max-w-3xl text-base leading-7 text-white/65">
             This Privacy Policy describes how StudioFlows may collect, use, and share
             information when you visit the StudioFlows marketing website, submit a form,
-            or otherwise interact with our site.
+            connect an authorized third-party account to a StudioFlows tool, or otherwise
+            interact with StudioFlows.
           </p>
 
           <div className="mt-10 space-y-6">

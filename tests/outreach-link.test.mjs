@@ -37,7 +37,9 @@ test("opaque token round-trips without exposing payload identifiers", () => {
 
 test("tampered token is rejected", () => {
   const token = createOutreachToken(payload, secret);
-  const tampered = `${token.slice(0, -1)}${token.endsWith("A") ? "B" : "A"}`;
+  const index = Math.floor(token.length / 2);
+  const replacement = token[index] === "A" ? "B" : "A";
+  const tampered = `${token.slice(0, index)}${replacement}${token.slice(index + 1)}`;
   assert.throws(() => verifyOutreachToken(tampered, secret, 1784827000));
 });
 

@@ -1,0 +1,38 @@
+{
+  "gate": "sf-sales-click-tracking-v1",
+  "state": "DEPLOYED",
+  "what_changed": [
+    "Vercel built and deployed commit cb5b878053645dfd620c072067f55c284c815b2c to a protected preview.",
+    "No merge or production deployment occurred."
+  ],
+  "what_was_proven": [
+    "Next.js 14.2.35 production build compiled successfully.",
+    "Linting and type validity checks passed.",
+    "All 41 static pages generated.",
+    "The /r/[token] dynamic server route was included in the deployment output.",
+    "Serverless functions and build traces completed successfully."
+  ],
+  "what_was_not_proven": [
+    "A valid encrypted token was not exercised in runtime.",
+    "A click event was not proven in consulting.funnel_events.",
+    "A redirect into os.studioflows.co was not correlated to a landing event.",
+    "The preview environment does not yet have a runtime-proven SF_OUTREACH_LINK_SECRET.",
+    "go.studioflows.co DNS and production binding remain unproven."
+  ],
+  "current_blocker": "Runtime proof requires SF_OUTREACH_LINK_SECRET in the marketing preview environment and a build-capable Platform deployment carrying PR #305.",
+  "next_single_action": "Add SF_OUTREACH_LINK_SECRET to the marketing preview environment, redeploy the branch, and exercise one internal token through the preview route.",
+  "do_not_touch": [
+    "production",
+    "DNS",
+    "auth",
+    "billing",
+    "Stripe",
+    "tenant provisioning",
+    "unrelated marketing routes"
+  ],
+  "evidence": {
+    "deployment_id": "dpl_E1LEtwyBhxR89Eyerg43hg9nvran",
+    "deployment_url": "studioflows-marketing-bnh6d3vqw-studio-flows.vercel.app",
+    "draft_pr": "https://github.com/studioflows/studioflows-marketing/pull/8"
+  }
+}

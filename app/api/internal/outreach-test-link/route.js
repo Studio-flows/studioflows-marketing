@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 
+import { GET as handleOutreachRedirect } from "@/app/r/[token]/route";
 import { createOutreachToken } from "@/lib/outreach-link.mjs";
 
 export const runtime = "nodejs";
@@ -30,8 +31,18 @@ export async function GET() {
     secret
   );
 
+  const request = new Request(`https://preview.studioflows.co/r/${token}`, {
+    method: "GET",
+    headers: { "user-agent": "Mozilla/5.0 StudioFlows Runtime Probe" },
+  });
+  const redirectResponse = await handleOutreachRedirect(request, { params: { token } });
+
   return NextResponse.json(
-    { path: `/r/${token}`, correlation_id: correlationId },
+    {
+      correlation_id: correlationId,
+      redirect_status: redirectResponse.status,
+      redirect_location: redirectResponse.headers.get("location"),
+    },
     { headers: { "Cache-Control": "no-store, private, max-age=0" } }
   );
 }

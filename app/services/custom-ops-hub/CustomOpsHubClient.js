@@ -17,6 +17,7 @@ import {
   toIngestPreQual,
 } from "../../../lib/lead-attribution";
 import { evaluateQualification } from "../../../lib/qualify-custom-ops-hub";
+import { trackConversionEvent } from "../../../lib/analytics-events";
 import {
   QualifierAtmosphere,
   QUALIFIER_PAGE,
@@ -370,6 +371,10 @@ function parseAttributionFromWindow() {
   return toIngestAttribution(mergeLeadAttribution(urlAttribution, storedAttribution));
 }
 
+function getInitialAttribution() {
+  return toIngestAttribution(parseLeadAttribution(""));
+}
+
 export default function CustomOpsHubClient() {
   const router = useRouter();
   const QUIZ_QUESTIONS = useMemo(
@@ -392,7 +397,7 @@ export default function CustomOpsHubClient() {
   const [submitMessage, setSubmitMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
-  const [attribution, setAttribution] = useState(parseAttributionFromWindow);
+  const [attribution, setAttribution] = useState(getInitialAttribution);
   const preQualBanner =
     attribution.pq_score != null
       ? `Your Ops Check hit ${attribution.pq_score}/18. This picks up where that left off.`
@@ -403,6 +408,7 @@ export default function CustomOpsHubClient() {
   const [openFaqIndex, setOpenFaqIndex] = useState(null);
   const [hasEditedCompanyWebsite, setHasEditedCompanyWebsite] = useState(false);
   const activeTextInputRef = useRef(null);
+  const hasTrackedApplicationStart = useRef(false);
 
   const currentQuestion = QUIZ_QUESTIONS[questionIndex];
   const totalQuestions = QUIZ_QUESTIONS.length;
@@ -498,7 +504,21 @@ export default function CustomOpsHubClient() {
     [answers]
   );
 
+  const trackApplicationStart = () => {
+    if (hasTrackedApplicationStart.current) {
+      return;
+    }
+
+    hasTrackedApplicationStart.current = true;
+    trackConversionEvent({
+      event: "application_start",
+      application_id: "custom_ops_hub",
+      source: "/services/custom-ops-hub",
+    });
+  };
+
   const updateSingleValue = (name, value) => {
+    trackApplicationStart();
     setStepError("");
     const nextAnswers = { ...answers, [name]: value };
     setAnswers(nextAnswers);
@@ -515,6 +535,7 @@ export default function CustomOpsHubClient() {
   };
 
   const toggleMultiValue = (name, value) => {
+    trackApplicationStart();
     setStepError("");
     setAnswers((prev) => {
       const currentValues = prev[name] || [];
@@ -527,6 +548,7 @@ export default function CustomOpsHubClient() {
   };
 
   const updateInputValue = (name, value) => {
+    trackApplicationStart();
     setStepError("");
     if (name === "companyWebsite") {
       setHasEditedCompanyWebsite(true);
@@ -619,6 +641,11 @@ export default function CustomOpsHubClient() {
       }
 
       if (result.qualified) {
+        trackConversionEvent({
+          event: "qualified_submission",
+          application_id: "custom_ops_hub",
+          source: "/services/custom-ops-hub",
+        });
         const opsAuditBookUrl = resolveQualifiedOpsAuditRedirect(
           result,
           attribution,

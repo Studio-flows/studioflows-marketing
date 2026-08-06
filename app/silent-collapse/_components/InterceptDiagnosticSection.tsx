@@ -1,15 +1,17 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { AnimatePresence, motion } from "framer-motion";
 
 import { buildOpsHubUrl } from "@/lib/lead-attribution";
+import { trackConversionEvent } from "@/lib/analytics-events";
 import { INTERCEPT_QUESTIONS } from "../data";
 
 export default function InterceptDiagnosticSection() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState<number[]>([]);
+  const hasTrackedStart = useRef(false);
 
   const isComplete = questionIndex >= INTERCEPT_QUESTIONS.length;
   const score = answers.reduce((sum, value) => sum + value, 0);
@@ -30,6 +32,28 @@ export default function InterceptDiagnosticSection() {
   const selectAnswer = (optionScore: number) => {
     const next = [...answers];
     next[questionIndex] = optionScore;
+
+    if (!hasTrackedStart.current) {
+      hasTrackedStart.current = true;
+      trackConversionEvent({
+        event: "diagnostic_start",
+        diagnostic_id: "silent_collapse",
+        source: "/silent-collapse",
+      });
+    }
+
+    if (questionIndex === INTERCEPT_QUESTIONS.length - 1) {
+      const nextScore = next.reduce((sum, value) => sum + value, 0);
+      trackConversionEvent({
+        event: "diagnostic_complete",
+        diagnostic_id: "silent_collapse",
+        source: "/silent-collapse",
+        score: nextScore,
+        result_band: nextScore >= 20 ? "high" : nextScore >= 12 ? "moderate" : "low",
+        qualified: nextScore >= 15,
+      });
+    }
+
     setAnswers(next);
     setQuestionIndex((prev) => prev + 1);
   };
@@ -65,6 +89,7 @@ export default function InterceptDiagnosticSection() {
               onClick={() => {
                 setQuestionIndex(0);
                 setAnswers([]);
+                hasTrackedStart.current = false;
               }}
               className="rounded-xl border border-white/30 px-6 py-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-white transition hover:bg-white/[0.08]"
             >

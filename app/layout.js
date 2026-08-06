@@ -1,5 +1,7 @@
 import "./globals.css";
 
+import { SiteEntityScript } from "./SiteEntityScript";
+
 export const metadata = {
   metadataBase: new URL("https://www.studioflows.co"),
   title: {
@@ -8,9 +10,6 @@ export const metadata = {
   },
   description:
     "StudioFlows turns scattered business signals into approved, trackable execution for service businesses.",
-  alternates: {
-    canonical: "/",
-  },
   openGraph: {
     title: "StudioFlows | Execution Infrastructure for Service Businesses",
     description:
@@ -31,6 +30,7 @@ export default function RootLayout({ children }) {
   return (
     <html lang="en">
       <head>
+        <SiteEntityScript />
         <script
           dangerouslySetInnerHTML={{
             __html: `

@@ -21,6 +21,12 @@ import {
   SystemResetTransition,
 } from "@/components/home/InitiationHomeSections";
 
+export const metadata = {
+  alternates: {
+    canonical: "/",
+  },
+};
+
 const C = INITIATION_HOMEPAGE_CONTENT;
 const LIVE_DEMO_URL = "https://os.studioflows.co/demo/access";
 const LOGIN_URL = "https://os.studioflows.co/login";

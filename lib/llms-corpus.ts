@@ -5,7 +5,15 @@ import {
 } from "@/app/silent-collapse/data";
 import { ENGAGEMENT_PATHS, SECTION_INTRO } from "@/lib/offerings";
 import { REC_FIT_BUSINESSES } from "@/lib/rec-case-study";
-import { PUBLIC_SITE_ORIGIN } from "@/lib/seo";
+import { absoluteUrl, PUBLIC_ROUTE_REGISTRY, PUBLIC_SITE_ORIGIN } from "@/lib/seo";
+
+function publicRouteSection(): string {
+  const lines = PUBLIC_ROUTE_REGISTRY.map(
+    ({ path, title, description }) => `- ${absoluteUrl(path)} — ${title}: ${description}`,
+  );
+
+  return ["## Public pages", "", ...lines].join("\n");
+}
 
 function engagementSection(): string {
   const lines = ENGAGEMENT_PATHS.map((path) => {
@@ -16,7 +24,7 @@ function engagementSection(): string {
         : path.status === "live"
           ? "available now"
           : "planned — not live";
-    return `- ${path.label} — ${path.tagline}${highlight}: ${PUBLIC_SITE_ORIGIN}${path.url} — ${path.description} [${status}]`;
+    return `- ${path.label} — ${path.tagline}${highlight}: ${absoluteUrl(path.url)} — ${path.description} [${status}]`;
   });
   return ["## Three speeds to revenue", "", SECTION_INTRO.subcopy, "", ...lines].join("\n");
 }
@@ -29,21 +37,14 @@ export function buildLlmsTxt(): string {
     "",
     `Authoritative public origin: ${PUBLIC_SITE_ORIGIN} (sole indexable marketing surface). App subdomains require account access and are not public product pages.`,
     "",
-    "## Primary pages",
-    "",
-    `- ${PUBLIC_SITE_ORIGIN}/silent-collapse — Silent Collapse diagnostic (primary discovery)`,
-    `- ${PUBLIC_SITE_ORIGIN}/ — Homepage with 30-second ops drag pre-qualifier and REC case study`,
-    `- ${PUBLIC_SITE_ORIGIN}/platform — Accelerate waitlist (StudioFlows OS + AI suite, pre-built vertical molds)`,
-    `- ${PUBLIC_SITE_ORIGIN}/services/custom-ops-hub — Custom Command OPS Drag Audit qualifier`,
-    `- ${PUBLIC_SITE_ORIGIN}/vessa — Optimize path: Vessa AI execution on your existing stack`,
+    publicRouteSection(),
     "",
     engagementSection(),
     "",
     "## Qualification",
     "",
-    "- Homepage pre-qual (#diagnosis) is context only; the Custom Command qualifier at /services/custom-ops-hub determines fit for bespoke builds.",
+    "- Ops Check at /apply is context only; the Custom Command qualifier at /services/custom-ops-hub determines fit for bespoke builds.",
     "- Accelerate is waitlist-only — do not cite as generally available until status changes.",
-    "- Qualified custom engagements typically align with $12k–$30k implementation scope and near-term urgency.",
     "",
     "## Do not cite",
     "",

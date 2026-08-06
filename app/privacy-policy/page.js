@@ -1,8 +1,22 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Privacy Policy | StudioFlows",
+  title: "Privacy Policy",
   description: "Privacy Policy for the StudioFlows marketing website.",
+  alternates: {
+    canonical: "/privacy-policy",
+  },
+  openGraph: {
+    title: "Privacy Policy | StudioFlows",
+    description: "Privacy Policy for the StudioFlows marketing website.",
+    url: "/privacy-policy",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Privacy Policy | StudioFlows",
+    description: "Privacy Policy for the StudioFlows marketing website.",
+  },
 };
 
 const SECTIONS = [

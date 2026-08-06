@@ -1,7 +1,7 @@
 import CustomOpsHubClient from "./CustomOpsHubClient";
 
 export const metadata = {
-  title: "Let's build your Ops Teardown | StudioFlows",
+  title: "Let's build your Ops Teardown",
   description:
     "Tell us how work actually moves day to day and get a specific breakdown of where drag is showing up. Most people finish in about 2 minutes.",
   alternates: {

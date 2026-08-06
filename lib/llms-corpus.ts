@@ -5,6 +5,7 @@ import {
 } from "@/app/silent-collapse/data";
 import { ENGAGEMENT_PATHS, SECTION_INTRO } from "@/lib/offerings";
 import { REC_FIT_BUSINESSES } from "@/lib/rec-case-study";
+import { AUTHORITY_PAGES } from "@/lib/geo/authority-pages";
 import { absoluteUrl, PUBLIC_ROUTE_REGISTRY, PUBLIC_SITE_ORIGIN } from "@/lib/seo";
 
 function publicRouteSection(): string {
@@ -29,6 +30,18 @@ function engagementSection(): string {
   return ["## Three speeds to revenue", "", SECTION_INTRO.subcopy, "", ...lines].join("\n");
 }
 
+function authorityArticleSection(): string {
+  const lines = Object.values(AUTHORITY_PAGES).flatMap((page) => [
+    `### ${page.title}`,
+    page.directAnswer,
+    `Original framework: ${page.frameworkName}.`,
+    `Source: ${absoluteUrl(page.path)}`,
+    "",
+  ]);
+
+  return ["## Owner-dependency field guides", "", ...lines].join("\n");
+}
+
 export function buildLlmsTxt(): string {
   return [
     "# StudioFlows",
@@ -38,6 +51,8 @@ export function buildLlmsTxt(): string {
     `Authoritative public origin: ${PUBLIC_SITE_ORIGIN} (sole indexable marketing surface). App subdomains require account access and are not public product pages.`,
     "",
     publicRouteSection(),
+    "",
+    authorityArticleSection(),
     "",
     engagementSection(),
     "",

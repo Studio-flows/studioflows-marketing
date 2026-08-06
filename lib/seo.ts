@@ -28,6 +28,20 @@ export const PUBLIC_ROUTE_REGISTRY = [
     priority: 0.9,
   },
   {
+    path: "/resources/founder-bottleneck",
+    title: "Founder Bottleneck",
+    description: "A practical method for finding and repairing founder-routed decisions and handoffs.",
+    changeFrequency: "monthly",
+    priority: 0.86,
+  },
+  {
+    path: "/resources/business-that-runs-without-you",
+    title: "Business That Runs Without You",
+    description: "A controlled owner-absence continuity test for service businesses.",
+    changeFrequency: "monthly",
+    priority: 0.85,
+  },
+  {
     path: "/",
     title: "StudioFlows",
     description: "Execution infrastructure for owner-dependent service businesses.",

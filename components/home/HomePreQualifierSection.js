@@ -15,7 +15,7 @@ import {
 } from "@/components/qualifier/qualifier-theme";
 import { SECTION_REVEAL } from "@/components/home/section-reveal";
 import { BookQuickCallButton } from "@/components/home/BookQuickCallButton";
-import { buildOpsHubUrl, getPreQualBand } from "@/lib/lead-attribution";
+import { buildOpsHubUrl, buildPreQualAnswerPayload, getPreQualBand } from "@/lib/lead-attribution";
 import {
   HOMEPAGE_CTA,
   OPS_CHECK_LOW_FIT_COPY,
@@ -75,12 +75,23 @@ function DiagnosisQuiz() {
   };
 
   const opsHubHandoffUrl = assessment.qualified
-    ? buildOpsHubUrl({
-        source: "homepage-diagnosis",
-        pqScore: score,
-        pqQualified: assessment.qualified,
-        pqBand: getPreQualBand(score),
-      })
+    ? (() => {
+        const preQualSession = buildPreQualAnswerPayload(
+          QUIZ_QUESTIONS,
+          answers,
+          score,
+          getPreQualBand(score),
+          assessment.qualified
+        );
+        return buildOpsHubUrl({
+          source: "homepage-diagnosis",
+          pqSessionId: preQualSession.session_id,
+          pqScore: score,
+          pqQualified: assessment.qualified,
+          pqBand: getPreQualBand(score),
+          preQualSession,
+        });
+      })()
     : null;
   const lowFitResult = assessment.qualified ? null : getLowFitResult(score);
 

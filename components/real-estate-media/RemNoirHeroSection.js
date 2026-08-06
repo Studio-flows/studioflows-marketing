@@ -6,6 +6,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { REM_COPY, REM_HERO_JOBS } from "@/lib/real-estate-media/rem-landing-content";
 import {
   RemPrimaryCta,
+  RemSecondaryCta,
   RemTerminalChrome,
   useRemReducedMotion,
 } from "@/components/real-estate-media/rem-noir-primitives";
@@ -55,6 +56,27 @@ function HeroJobCard({ job, pulse }) {
   );
 }
 
+function HeroCtas({ mobile = false }) {
+  return (
+    <div className={mobile ? "space-y-3" : "flex flex-col gap-3 sm:flex-row sm:items-center"}>
+      <RemPrimaryCta
+        href={REM_COPY.hero.ctaHref}
+        ctaId="hero_start_demo"
+        className={mobile ? "w-full" : ""}
+      >
+        {REM_COPY.hero.cta}
+      </RemPrimaryCta>
+      <RemSecondaryCta
+        href={REM_COPY.hero.secondaryHref}
+        ctaId="hero_ops_teardown"
+        className={mobile ? "block text-center" : ""}
+      >
+        {REM_COPY.hero.secondaryCta}
+      </RemSecondaryCta>
+    </div>
+  );
+}
+
 export function RemNoirHeroSection() {
   const reduce = useRemReducedMotion();
   const [jobIndex, setJobIndex] = useState(0);
@@ -85,7 +107,7 @@ export function RemNoirHeroSection() {
             ))}
           </div>
           <div className="mt-6 hidden lg:mt-8 lg:block">
-            <RemPrimaryCta ctaId="hero_start_score">{REM_COPY.hero.cta}</RemPrimaryCta>
+            <HeroCtas />
             <p className="mt-3 text-xs text-zinc-600">{REM_COPY.hero.ctaNote}</p>
           </div>
         </div>
@@ -110,9 +132,7 @@ export function RemNoirHeroSection() {
         </div>
 
         <div className="order-3 mt-6 lg:hidden">
-          <RemPrimaryCta ctaId="hero_start_score" className="w-full">
-            {REM_COPY.hero.cta}
-          </RemPrimaryCta>
+          <HeroCtas mobile />
           <p className="mt-3 text-center text-xs text-zinc-600">{REM_COPY.hero.ctaNote}</p>
         </div>
       </div>

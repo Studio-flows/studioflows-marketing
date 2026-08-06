@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 
-import { REM_COPY, REM_NOTIFICATIONS } from "@/lib/real-estate-media/rem-landing-content";
+import { REM_COPY, REM_DEMO_HREF, REM_NOTIFICATIONS } from "@/lib/real-estate-media/rem-landing-content";
 import { RemOwnerPhone } from "@/components/real-estate-media/rem-owner-phone";
 import {
   RemSecondaryCta,
@@ -51,7 +51,7 @@ export function RemNoirRecognizeSection() {
             ))}
           </div>
           <div className="mt-8 hidden md:block">
-            <RemSecondaryCta>{REM_COPY.recognize.cta}</RemSecondaryCta>
+            <RemSecondaryCta href={REM_DEMO_HREF}>{REM_COPY.recognize.cta}</RemSecondaryCta>
           </div>
         </div>
 

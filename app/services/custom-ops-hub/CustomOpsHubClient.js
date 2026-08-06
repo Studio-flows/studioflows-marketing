@@ -1,13 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  buildOpsTeardownThankYouUrl,
+  isOpsTeardownContinuation,
+} from "../../../lib/ops-audit-handoff";
+import {
   loadLeadAttribution,
+  loadPreQualSession,
   mergeLeadAttribution,
   parseLeadAttribution,
   resolveQualifiedOpsAuditRedirect,
   toIngestAttribution,
+  toIngestPreQual,
 } from "../../../lib/lead-attribution";
 import { evaluateQualification } from "../../../lib/qualify-custom-ops-hub";
 import {
@@ -572,6 +579,7 @@ function parseAttributionFromWindow() {
 }
 
 export default function CustomOpsHubClient() {
+  const router = useRouter();
   const QUIZ_QUESTIONS = useMemo(
     () =>
       QUIZ_SECTIONS.flatMap((section) =>
@@ -629,6 +637,20 @@ export default function CustomOpsHubClient() {
   useEffect(() => {
     setAttribution(parseAttributionFromWindow());
   }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (!isOpsTeardownContinuation(window.location.search)) return;
+
+    const params = new URLSearchParams(window.location.search);
+    const teardownUrl = buildOpsTeardownThankYouUrl({
+      leadId: params.get("lead_id"),
+      email: params.get("email"),
+      from: params.get("from") ?? "homepage-ops-check-qualified",
+      siteOrigin: window.location.origin,
+    });
+    router.replace(teardownUrl);
+  }, [router]);
 
   useEffect(() => {
     const workEmail = answers.workEmail;
@@ -787,13 +809,16 @@ export default function CustomOpsHubClient() {
     setIsSubmitting(true);
 
     try {
+      const preQual = toIngestPreQual(loadPreQualSession());
       const response = await fetch("/api/studioflows/ingest-lead", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           consent: true,
           form_payload: answers,
+          from: "custom-ops-hub",
           ...attribution,
+          ...(preQual ? { pre_qual: preQual } : {}),
         }),
       });
 
@@ -806,7 +831,11 @@ export default function CustomOpsHubClient() {
       }
 
       if (result.qualified) {
-        const opsAuditBookUrl = resolveQualifiedOpsAuditRedirect(result, attribution);
+        const opsAuditBookUrl = resolveQualifiedOpsAuditRedirect(
+          result,
+          attribution,
+          answers.workEmail
+        );
         if (opsAuditBookUrl) {
           window.location.assign(opsAuditBookUrl);
           return;

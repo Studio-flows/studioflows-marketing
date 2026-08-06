@@ -10,6 +10,7 @@ import {
   tierFromBudget,
 } from "@/lib/qualify-custom-ops-hub";
 import { resolveBookCallUrl } from "@/lib/lead-attribution";
+import { buildOpsTeardownThankYouUrl } from "@/lib/ops-audit-handoff";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
 function pickAttribution(body: Record<string, unknown>) {
@@ -20,6 +21,7 @@ function pickAttribution(body: Record<string, unknown>) {
 
   return {
     src: typeof body.src === "string" ? body.src : null,
+    pq_session_id: typeof body.pq_session_id === "string" ? body.pq_session_id : null,
     pq_score: pqScore,
     pq_qualified: typeof body.pq_qualified === "string" ? body.pq_qualified : null,
     pq_band: typeof body.pq_band === "string" ? body.pq_band : null,
@@ -33,6 +35,18 @@ function pickAttribution(body: Record<string, unknown>) {
   };
 }
 
+function pickPreQual(body: Record<string, unknown>) {
+  const preQual = body.pre_qual;
+  if (!preQual || typeof preQual !== "object" || Array.isArray(preQual)) {
+    return null;
+  }
+  const sessionId =
+    typeof (preQual as Record<string, unknown>).session_id === "string"
+      ? ((preQual as Record<string, unknown>).session_id as string).trim()
+      : "";
+  return sessionId ? (preQual as Record<string, unknown>) : null;
+}
+
 export async function POST(req: NextRequest) {
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;
   if (!body?.consent) {
@@ -43,6 +57,9 @@ export async function POST(req: NextRequest) {
   const { score, reasons, qualified } = evaluateQualification(raw);
   const tier = tierFromBudget(raw.budgetRange);
   const attribution = pickAttribution(body);
+  const preQual = pickPreQual(body);
+  const handoffFrom =
+    typeof body.from === "string" && body.from.trim() ? body.from.trim() : "custom-ops-hub";
 
   if (!qualified) {
     const marketingBucket = getMarketingBucket({ score, reasons });
@@ -57,6 +74,7 @@ export async function POST(req: NextRequest) {
     row.metadata = {
       ...row.metadata,
       ...attribution,
+      ...(preQual ? { pre_qual: preQual } : {}),
     };
 
     const { error } = await supabase.from("custom_ops_hub_leads").insert([row]);
@@ -74,8 +92,6 @@ export async function POST(req: NextRequest) {
     });
   }
 
-  // Qualified leads must always land in the marketing Supabase leads table,
-  // regardless of whether the OS ingest forward is configured.
   const supabase = createMarketingSupabaseServerClient();
   if (!supabase) {
     return NextResponse.json({ error: "Lead storage not configured" }, { status: 500 });
@@ -89,11 +105,10 @@ export async function POST(req: NextRequest) {
     metadata: {
       ...qualifiedBase.metadata,
       ...attribution,
+      ...(preQual ? { pre_qual: preQual } : {}),
     },
   };
 
-  // Do not chain .select() here: anon RLS allows INSERT but has no SELECT policy,
-  // so RETURNING id fails with "new row violates row-level security policy".
   const { error: insertError } = await supabase.from("custom_ops_hub_leads").insert([qualifiedRow]);
 
   if (insertError) {
@@ -106,9 +121,6 @@ export async function POST(req: NextRequest) {
   const { first_name, last_name } = splitName(raw.fullName);
   const email = typeof raw.workEmail === "string" ? raw.workEmail.trim().toLowerCase() : null;
 
-  // Best-effort forward into the StudioFlows OS tenant ingest. If env is not
-  // configured or the call fails, the lead is already persisted in Supabase, so
-  // we still complete the funnel instead of erroring out.
   const ingestUrl = process.env.STUDIOFLOWS_INGEST_URL?.replace(/\/$/, "");
   const tenantSlug = process.env.STUDIOFLOWS_TENANT_SLUG ?? "app";
   const token = process.env.STUDIOFLOWS_INGEST_TOKEN;
@@ -142,7 +154,10 @@ export async function POST(req: NextRequest) {
             qualification_version: "v1",
             recommended_tier: tier,
             supabase_lead_id: supabaseLeadId,
+            full_qualifier_complete: true,
+            full_qualifier_payload: raw,
             ...attribution,
+            ...(preQual ? { pre_qual: preQual } : {}),
           },
         }),
       });
@@ -156,32 +171,39 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  if (osLeadId && osLeadId !== supabaseLeadId) {
+    const metadataWithOsLead = {
+      ...(qualifiedRow.metadata as Record<string, unknown>),
+      os_lead_id: osLeadId,
+    };
+    await supabase
+      .from("custom_ops_hub_leads")
+      .update({ metadata: metadataWithOsLead })
+      .eq("id", supabaseLeadId);
+  }
+
   const leadId = osLeadId ?? supabaseLeadId;
-  const consultingBase = (
-    process.env.STUDIOFLOWS_CONSULTING_SELL_URL ?? "https://consulting.studioflows.co/s/app"
-  ).trim();
-
-  const params = new URLSearchParams();
-  if (leadId) params.set("lead_id", leadId);
-  if (email) params.set("email", email);
-  if (tier) params.set("tier", tier);
-  params.set("from", "custom-ops-hub");
-  const redirectUrl = `${consultingBase}?${params.toString()}`;
-
-  const bookFrom = attribution.src === "homepage-diagnosis" ? "homepage-diagnosis" : "custom-ops-hub";
+  const bookFrom = attribution.src === "homepage-diagnosis" ? "homepage-diagnosis" : handoffFrom;
   const bookCallUrl = resolveBookCallUrl({
     ingestBookCallUrl: typeof ingestBody.book_call_url === "string" ? ingestBody.book_call_url : null,
     leadId,
+    email,
     from: bookFrom,
   });
-
+  const opsTeardownUrl = buildOpsTeardownThankYouUrl({
+    leadId,
+    email,
+    from: handoffFrom,
+    siteOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.studioflows.co",
+  });
   return NextResponse.json({
     qualified: true,
     score,
     reasons,
     lead_id: leadId,
     book_call_url: bookCallUrl,
-    redirect_url: bookCallUrl ?? redirectUrl,
+    ops_teardown_url: opsTeardownUrl,
+    redirect_url: bookCallUrl,
     recommended_tier: tier,
   });
 }

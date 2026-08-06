@@ -3,7 +3,7 @@ import { RemNoirLanding } from "@/components/real-estate-media/RemNoirLanding";
 export const metadata = {
   title: "Real Estate Media OS",
   description:
-    "For real estate media companies where listing jobs still route through the owner. See booking, crew, FieldFlow mobile, uploads, editing, delivery, and payments in one workspace.",
+    "See booking, crew, field work, uploads, editing, delivery, and payments in one operating system for owner-led real estate media companies.",
   alternates: {
     canonical: "/real-estate-media",
   },

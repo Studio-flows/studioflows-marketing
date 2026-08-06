@@ -12,6 +12,7 @@ import {
   saveBookCallUrl,
   toIngestAttribution,
 } from "@/lib/lead-attribution";
+import { trackConversionEvent } from "@/lib/analytics-events";
 
 export function BookQuickCallButton({
   className,
@@ -56,6 +57,11 @@ export function BookQuickCallButton({
       const result = await response.json().catch(() => ({}));
 
       if (response.ok && typeof result.book_call_url === "string" && result.book_call_url.trim()) {
+        trackConversionEvent({
+          event: "qualified_submission",
+          application_id: "ops_check_booking",
+          source: "/apply",
+        });
         saveBookCallUrl(result.book_call_url, result.lead_id ?? null);
         window.location.assign(result.book_call_url);
         return;

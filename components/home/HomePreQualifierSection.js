@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
 import {
@@ -16,6 +16,7 @@ import {
 import { SECTION_REVEAL } from "@/components/home/section-reveal";
 import { BookQuickCallButton } from "@/components/home/BookQuickCallButton";
 import { buildOpsHubUrl, buildPreQualAnswerPayload, getPreQualBand } from "@/lib/lead-attribution";
+import { trackConversionEvent } from "@/lib/analytics-events";
 import {
   HOMEPAGE_CTA,
   OPS_CHECK_LOW_FIT_COPY,
@@ -60,6 +61,7 @@ function getLowFitResult(score) {
 function DiagnosisQuiz() {
   const [questionIndex, setQuestionIndex] = useState(0);
   const [answers, setAnswers] = useState([]);
+  const hasTrackedStart = useRef(false);
 
   const isComplete = questionIndex >= QUIZ_QUESTIONS.length;
   const score = answers.reduce((sum, item) => sum + item.score, 0);
@@ -69,6 +71,29 @@ function DiagnosisQuiz() {
   const selectAnswer = (option) => {
     const next = [...answers];
     next[questionIndex] = option;
+
+    if (!hasTrackedStart.current) {
+      hasTrackedStart.current = true;
+      trackConversionEvent({
+        event: "diagnostic_start",
+        diagnostic_id: "ops_check",
+        source: "/apply",
+      });
+    }
+
+    if (questionIndex === QUIZ_QUESTIONS.length - 1) {
+      const nextScore = next.reduce((sum, item) => sum + item.score, 0);
+      const nextAssessment = getAssessment(nextScore);
+      trackConversionEvent({
+        event: "diagnostic_complete",
+        diagnostic_id: "ops_check",
+        source: "/apply",
+        score: nextScore,
+        result_band: getPreQualBand(nextScore),
+        qualified: nextAssessment.qualified,
+      });
+    }
+
     setAnswers(next);
     setQuestionIndex((prev) => prev + 1);
   };
@@ -145,6 +170,7 @@ function DiagnosisQuiz() {
             onClick={() => {
               setQuestionIndex(0);
               setAnswers([]);
+              hasTrackedStart.current = false;
             }}
             className={assessment.qualified ? Q_CTA_SECONDARY : Q_CTA_PRIMARY}
           >

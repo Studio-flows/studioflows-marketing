@@ -3,12 +3,7 @@
 import Link from "next/link";
 import type { ReactNode } from "react";
 
-declare global {
-  interface Window {
-    dataLayer?: Array<Record<string, unknown>>;
-    clarity?: (command: string, eventName: string) => void;
-  }
-}
+import { trackConversionEvent } from "@/lib/analytics-events";
 
 type TrackedResourceLinkProps = {
   href: string;
@@ -26,14 +21,12 @@ export function TrackedResourceLink({
   children,
 }: TrackedResourceLinkProps) {
   function trackResourceClick() {
-    window.dataLayer = window.dataLayer ?? [];
-    window.dataLayer.push({
+    trackConversionEvent({
       event: "resource_cta_click",
       resource_path: href,
       resource_label: eventLabel,
       resource_location: eventLocation,
     });
-    window.clarity?.("event", "resource_cta_click");
   }
 
   return (

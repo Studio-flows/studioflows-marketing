@@ -1,12 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import {
   buildScoreHandoffPayload,
   SFP_SCORE_INTAKE_URL,
 } from "@/lib/real-estate-media/buildScoreHandoffPayload";
+import { trackConversionEvent } from "@/lib/analytics-events";
 import {
   captureRemAttributionForPath,
   getRemAttributionForHandoff,
@@ -122,6 +123,7 @@ export function MediaOpsScoreFlow() {
   );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState("");
+  const hasTrackedStart = useRef(false);
 
   useEffect(() => {
     captureRemAttributionForPath(REM_SCORE_PATH);
@@ -197,6 +199,12 @@ export function MediaOpsScoreFlow() {
         return;
       }
 
+      trackConversionEvent({
+        event: "diagnostic_complete",
+        diagnostic_id: "media_ops_score",
+        source: "/real-estate-media/score",
+      });
+
       if (typeof result.next_url === "string" && result.next_url) {
         window.location.assign(result.next_url);
         return;
@@ -211,6 +219,15 @@ export function MediaOpsScoreFlow() {
   };
 
   const goNext = () => {
+    if (step === 0 && !hasTrackedStart.current) {
+      hasTrackedStart.current = true;
+      trackConversionEvent({
+        event: "diagnostic_start",
+        diagnostic_id: "media_ops_score",
+        source: "/real-estate-media/score",
+      });
+    }
+
     if (step === 7) {
       void submitScore();
       return;

@@ -14,6 +14,13 @@ type PublicRouteDefinition = {
 
 export const PUBLIC_ROUTE_REGISTRY = [
   {
+    path: "/resources",
+    title: "Operational Resources",
+    description: "Diagnostics and operating models for owner-dependent service businesses.",
+    changeFrequency: "weekly",
+    priority: 0.9,
+  },
+  {
     path: "/silent-collapse",
     title: "Silent Collapse Diagnostic",
     description: "Founder bottleneck diagnostic and Ops Drag Audit path.",

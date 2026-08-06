@@ -6473,7 +6473,14 @@ export function InitiationFinalCtaSection({ content }) {
             <p className="mt-6 max-w-2xl text-sm leading-7 text-[#6B6557]">{content.funnelHelperCopy}</p>
           ) : null}
           </motion.div>
-          <footer className="mt-12 border-t border-black/10 pt-8 text-sm text-[#6B6557]">StudioFlows</footer>
+          <footer className="mt-12 flex flex-wrap items-center justify-between gap-4 border-t border-black/10 pt-8 text-sm text-[#6B6557]">
+            <span>StudioFlows</span>
+            <nav aria-label="Footer" className="flex flex-wrap gap-5">
+              <Link href="/resources" className="transition hover:text-black">Resources</Link>
+              <Link href="/privacy-policy" className="transition hover:text-black">Privacy</Link>
+              <Link href="/terms-of-service" className="transition hover:text-black">Terms</Link>
+            </nav>
+          </footer>
         </div>
       </RevealSection>
     </section>

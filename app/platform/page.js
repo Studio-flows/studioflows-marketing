@@ -35,9 +35,10 @@ export default function PlatformPage() {
           <Link href="/">
             <img src="/StudioFlows logo white (1200 x 675 px).png" alt="StudioFlows" className="h-10 w-auto" />
           </Link>
-          <Link href="/" className="text-sm text-white/70 transition hover:text-white">
-            Back to home
-          </Link>
+          <nav aria-label="Platform navigation" className="flex items-center gap-5 text-sm text-white/70">
+            <Link href="/resources" className="transition hover:text-white">Resources</Link>
+            <Link href="/" className="transition hover:text-white">Back to home</Link>
+          </nav>
         </div>
       </header>
 

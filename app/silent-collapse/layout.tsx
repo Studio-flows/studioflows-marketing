@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ThemeProvider } from "next-themes";
 
 export const metadata: Metadata = {
-  title: "Silent Collapse Diagnostic | StudioFlows",
+  title: "Silent Collapse Diagnostic",
   description:
     "Campaign diagnostic for founder-led teams seeing silent operational collapse — founder bottleneck signals, REC proof, and OPS Drag Audit handoff.",
   alternates: {

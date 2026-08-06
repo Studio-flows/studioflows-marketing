@@ -12,11 +12,8 @@ const INDEXABLE_ROUTES: Array<{ path: string; priority: number; changeFrequency:
   ];
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  const lastModified = new Date();
-
   return INDEXABLE_ROUTES.map(({ path, priority, changeFrequency }) => ({
     url: `${PUBLIC_SITE_ORIGIN}${path === "/" ? "" : path}`,
-    lastModified,
     changeFrequency,
     priority,
   }));

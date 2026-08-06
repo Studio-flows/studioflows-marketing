@@ -1,7 +1,7 @@
 import CustomOpsHubClient from "./CustomOpsHubClient";
 
 export const metadata = {
-  title: "Build Your Private Ops Teardown | StudioFlows",
+  title: "Build Your Private Ops Teardown",
   description:
     "A direct private operating diagnosis — founder bottlenecks, handoff breaks, tool fragmentation, and what delays cost. Takes about 5–7 minutes.",
   alternates: {

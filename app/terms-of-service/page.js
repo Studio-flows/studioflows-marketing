@@ -1,8 +1,22 @@
 import Link from "next/link";
 
 export const metadata = {
-  title: "Terms of Service | StudioFlows",
+  title: "Terms of Service",
   description: "Terms of Service for the StudioFlows marketing website and SaaS services.",
+  alternates: {
+    canonical: "/terms-of-service",
+  },
+  openGraph: {
+    title: "Terms of Service | StudioFlows",
+    description: "Terms of Service for the StudioFlows marketing website and SaaS services.",
+    url: "/terms-of-service",
+    type: "website",
+  },
+  twitter: {
+    card: "summary",
+    title: "Terms of Service | StudioFlows",
+    description: "Terms of Service for the StudioFlows marketing website and SaaS services.",
+  },
 };
 
 const SECTIONS = [

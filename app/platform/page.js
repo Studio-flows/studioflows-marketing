@@ -5,7 +5,7 @@ import PlatformWaitlistClient from "./PlatformWaitlistClient";
 import { PLATFORM_VERTICAL_MOLDS } from "@/lib/platform-molds";
 
 export const metadata = {
-  title: "Accelerate Waitlist | StudioFlows",
+  title: "Accelerate Waitlist",
   description:
     "Join the Accelerate waitlist — StudioFlows OS plus the AI suite built in. Pre-built vertical molds for service businesses ready to run system-driven operations.",
   alternates: {

@@ -1,6 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
+import Link from "next/link";
 
 import { LIVE_SIGNALS, VESSA_FEATURES } from "./data";
 import FinalVerdictSection from "./_components/FinalVerdictSection";
@@ -74,6 +75,9 @@ export default function SilentCollapseClient() {
         <InterceptDiagnosticSection />
         <VessaTeaserSection features={VESSA_FEATURES} />
         <FinalVerdictSection />
+        <footer className="mt-16 border-t border-white/10 pt-8 text-sm text-zinc-500">
+          Continue through the <Link href="/resources" className="text-purple-300 transition hover:text-purple-200">StudioFlows resource library</Link>.
+        </footer>
       </div>
     </>
   );

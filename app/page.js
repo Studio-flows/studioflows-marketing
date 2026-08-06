@@ -46,6 +46,12 @@ function SubscriberNav() {
       className="absolute right-4 top-5 z-[70] flex items-center gap-1 rounded-full border border-white/10 bg-[#05070B]/88 p-1.5 shadow-[0_16px_50px_rgba(0,0,0,0.36)] backdrop-blur-xl sm:right-8 lg:right-20"
     >
       <Link
+        href="/resources"
+        className="hidden min-h-10 items-center justify-center rounded-full px-4 text-xs font-semibold text-white/68 transition hover:bg-white/[0.06] hover:text-white md:inline-flex"
+      >
+        Resources
+      </Link>
+      <Link
         href={LIVE_DEMO_URL}
         className="hidden min-h-10 items-center justify-center rounded-full px-4 text-xs font-semibold text-[#D4A853] transition hover:bg-white/[0.06] hover:text-[#F2D79B] sm:inline-flex"
         prefetch={false}

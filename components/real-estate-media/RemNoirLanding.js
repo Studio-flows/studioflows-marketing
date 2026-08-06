@@ -438,7 +438,10 @@ export function RemNoirLanding() {
       <OwnerLayer />
       <DemoSection onInspect={setLightbox} />
       <Teardown />
-      <footer className="bg-slate-950 px-4 py-10 text-center text-sm text-slate-500">StudioFlows OS for real estate media studios · Booked to delivered without the owner becoming dispatch.</footer>
+      <footer className="bg-slate-950 px-4 py-10 text-center text-sm text-slate-500">
+        <p>StudioFlows OS for real estate media studios · Booked to delivered without the owner becoming dispatch.</p>
+        <Link href="/resources" className="mt-3 inline-flex text-slate-300 transition hover:text-white">Explore all operational resources</Link>
+      </footer>
       <div className="fixed inset-x-0 bottom-0 z-50 border-t border-white/10 bg-slate-950/92 p-3 shadow-[0_-12px_40px_rgba(2,6,23,.42)] backdrop-blur md:hidden"><Link href={REM_DEMO_HREF} className="flex w-full items-center justify-center rounded-full bg-white px-4 py-3 text-sm font-semibold text-slate-950">Step Into the Live Demo</Link></div>
       <Lightbox image={lightbox} onClose={() => setLightbox(null)} />
     </main>

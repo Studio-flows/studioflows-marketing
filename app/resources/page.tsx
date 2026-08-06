@@ -23,6 +23,26 @@ export const metadata: Metadata = {
 const RESOURCES = [
   {
     number: "01",
+    type: "Field guide",
+    title: "Founder Bottleneck",
+    description:
+      "Trace the decisions, context, and handoffs that still make normal work wait for the founder.",
+    href: "/resources/founder-bottleneck",
+    cta: "Map the bottleneck",
+    featured: true,
+  },
+  {
+    number: "02",
+    type: "Continuity guide",
+    title: "Business That Runs Without You",
+    description:
+      "Run a bounded owner-absence test without removing the controls, authority, or evidence the work requires.",
+    href: "/resources/business-that-runs-without-you",
+    cta: "Build the continuity test",
+    featured: true,
+  },
+  {
+    number: "03",
     type: "Diagnostic",
     title: "Silent Collapse Diagnostic",
     description:
@@ -32,7 +52,7 @@ const RESOURCES = [
     featured: true,
   },
   {
-    number: "02",
+    number: "04",
     type: "Operating model",
     title: "Real Estate Media OS",
     description:
@@ -42,7 +62,7 @@ const RESOURCES = [
     featured: true,
   },
   {
-    number: "03",
+    number: "05",
     type: "Guided audit",
     title: "Ops Teardown",
     description:
@@ -52,7 +72,7 @@ const RESOURCES = [
     featured: false,
   },
   {
-    number: "04",
+    number: "06",
     type: "Execution system",
     title: "Vessa",
     description:
@@ -62,7 +82,7 @@ const RESOURCES = [
     featured: false,
   },
   {
-    number: "05",
+    number: "07",
     type: "Waitlist",
     title: "StudioFlows OS",
     description:
@@ -146,7 +166,7 @@ export default function ResourcesPage() {
                 Start with a diagnosis. Follow the evidence.
               </h2>
             </div>
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/35">05 public resources</p>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/35">07 public resources</p>
           </div>
 
           <div className="mt-12 grid gap-px overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/10 lg:grid-cols-2">

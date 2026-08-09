@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 
-import { AuthorityArticle } from "@/components/geo/AuthorityArticle";
+import { AuthorityLandingPage } from "@/components/geo/AuthorityLandingPage";
 import { getAuthorityPage } from "@/lib/geo/authority-pages";
 
 const page = getAuthorityPage("scope-change-propagation");
@@ -22,5 +22,5 @@ export const metadata: Metadata = {
 };
 
 export default function ScopeChangePropagationPage() {
-  return <AuthorityArticle page={page} />;
+  return <AuthorityLandingPage page={page} />;
 }

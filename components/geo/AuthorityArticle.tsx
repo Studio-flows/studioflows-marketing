@@ -1,8 +1,8 @@
 import Link from "next/link";
 
 import { TrackedResourceLink } from "@/components/analytics/TrackedResourceLink";
+import { buildAuthorityPageJsonLd } from "@/lib/geo/authority-page-schema";
 import type { AuthorityPageDefinition } from "@/lib/geo/authority-pages";
-import { absoluteUrl } from "@/lib/seo";
 
 type AuthorityArticleProps = {
   page: AuthorityPageDefinition;
@@ -17,54 +17,8 @@ function formatReviewDate(date: string): string {
   }).format(new Date(`${date}T00:00:00Z`));
 }
 
-function buildArticleJsonLd(page: AuthorityPageDefinition) {
-  return {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "Article",
-        headline: page.title,
-        description: page.description,
-        mainEntityOfPage: absoluteUrl(page.path),
-        url: absoluteUrl(page.path),
-        datePublished: page.publishedOn,
-        dateModified: page.modifiedOn,
-        author: {
-          "@type": "Organization",
-          name: "StudioFlows",
-          url: absoluteUrl("/"),
-        },
-        publisher: {
-          "@type": "Organization",
-          name: "StudioFlows",
-          url: absoluteUrl("/"),
-        },
-        about: page.primaryQuery,
-        citation: page.sources.map(({ url }) => url),
-      },
-      {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Resources",
-            item: absoluteUrl("/resources"),
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: page.title,
-            item: absoluteUrl(page.path),
-          },
-        ],
-      },
-    ],
-  };
-}
-
 export function AuthorityArticle({ page }: AuthorityArticleProps) {
-  const jsonLd = buildArticleJsonLd(page);
+  const jsonLd = buildAuthorityPageJsonLd(page);
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#080808] text-[#F2EFE8]">

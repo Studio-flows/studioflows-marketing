@@ -18,12 +18,44 @@ export type AuthorityLink = {
   href: string;
 };
 
-export type AuthorityPageDefinition = {
-  slug:
-    | "founder-bottleneck"
-    | "business-that-runs-without-you"
-    | "approved-quote-handoff"
-    | "scope-change-propagation";
+export type AuthorityPageSlug =
+  | "founder-bottleneck"
+  | "business-that-runs-without-you"
+  | "approved-quote-handoff"
+  | "scope-change-propagation";
+
+export type AuthorityAnswerPoints = readonly [string, string, string];
+
+export type ProcessBlueprintArtifact = {
+  kind: "process-blueprint";
+  entryState: string;
+  exitState: string;
+  releaseRecord: {
+    acceptedBasis: string;
+    blockers: ReadonlyArray<string>;
+    owner: string;
+    releaseProof: string;
+  };
+};
+
+export type ScenarioTraceSurface = {
+  name: string;
+  before: string;
+  after: string;
+  owner: string;
+  verification: string;
+};
+
+export type ScenarioTraceArtifact = {
+  kind: "scenario-trace";
+  trigger: string;
+  baseline: string;
+  outcome: string;
+  surfaces: ReadonlyArray<ScenarioTraceSurface>;
+};
+
+type AuthorityPageCommon = {
+  slug: AuthorityPageSlug;
   path: string;
   title: string;
   eyebrow: string;
@@ -50,11 +82,39 @@ export type AuthorityPageDefinition = {
   primaryQuery: string;
 };
 
+export type LegacyAuthorityPageDefinition = AuthorityPageCommon & {
+  template: "legacy-authority";
+};
+
+export type ProcessBlueprintPageDefinition = AuthorityPageCommon & {
+  template: "process-blueprint";
+  heroAnswer: string;
+  answerPoints: AuthorityAnswerPoints;
+  artifact: ProcessBlueprintArtifact;
+};
+
+export type ScenarioTracePageDefinition = AuthorityPageCommon & {
+  template: "scenario-trace";
+  heroAnswer: string;
+  answerPoints: AuthorityAnswerPoints;
+  artifact: ScenarioTraceArtifact;
+};
+
+export type AuthorityPageDefinition =
+  | LegacyAuthorityPageDefinition
+  | ProcessBlueprintPageDefinition
+  | ScenarioTracePageDefinition;
+
+export type ModernAuthorityPageDefinition =
+  | ProcessBlueprintPageDefinition
+  | ScenarioTracePageDefinition;
+
 const INITIAL_PUBLISHED_ON = "2026-08-06";
 const QUOTE_HANDOFF_BATCH_PUBLISHED_ON = "2026-08-09";
 
 export const AUTHORITY_PAGES = {
   "founder-bottleneck": {
+    template: "legacy-authority",
     slug: "founder-bottleneck",
     path: "/resources/founder-bottleneck",
     title: "Founder Bottleneck: How to Find Where Work Waits on You",
@@ -167,6 +227,7 @@ export const AUTHORITY_PAGES = {
     primaryQuery: "founder bottleneck",
   },
   "business-that-runs-without-you": {
+    template: "legacy-authority",
     slug: "business-that-runs-without-you",
     path: "/resources/business-that-runs-without-you",
     title: "How to Build a Business That Can Run Without You",
@@ -294,6 +355,7 @@ export const AUTHORITY_PAGES = {
     primaryQuery: "business can run without you",
   },
   "approved-quote-handoff": {
+    template: "process-blueprint",
     slug: "approved-quote-handoff",
     path: "/resources/approved-quote-handoff",
     title: "Approved Quote Handoff: Turn Approval Into Ready Work",
@@ -302,6 +364,13 @@ export const AUTHORITY_PAGES = {
       "A quote-to-job handoff for carrying approved scope, assumptions, customer commitments, readiness blockers, and ownership into scheduling.",
     directAnswer:
       "An approved quote is ready for scheduling only when the next owner can identify the accepted quote version, committed scope, exclusions, assumptions, customer inputs, timing constraints, readiness blockers, and decision authority from one job record. Approval confirms what the customer accepted. The handoff must also prove that the operation can release that work without reconstructing the sale from inboxes, calls, or memory.",
+    heroAnswer:
+      "An approved quote becomes ready work when one job record carries the accepted version, execution conditions, named next owner, and release acknowledgement.",
+    answerPoints: [
+      "Use the accepted quote version as the commercial baseline.",
+      "Keep approved work separate from operational readiness until required inputs have owners.",
+      "Release only to a named next owner with acknowledgement and an exception path.",
+    ],
     frameworkName: "The quote-to-job release packet",
     frameworkIntroduction:
       "Build the packet from one accepted quote. Keep the quote as the commercial source, then carry only the facts the next owner needs to prepare, schedule, and control the job.",
@@ -347,6 +416,22 @@ export const AUTHORITY_PAGES = {
           "A timestamped release and acknowledgement. The next owner can state what was sold, what is still open, and where the accepted basis lives.",
       },
     ],
+    artifact: {
+      kind: "process-blueprint",
+      entryState: "Customer acceptance recorded",
+      exitState: "Ready work acknowledged by the next owner",
+      releaseRecord: {
+        acceptedBasis:
+          "The accepted two-day equipment-service quote, including after-hours access and the optional part that was not purchased.",
+        blockers: [
+          "Customer-provided shutdown confirmation",
+          "After-hours access confirmation",
+        ],
+        owner: "The coordinator, acting within documented scheduling authority.",
+        releaseProof:
+          "The linked quote version, resolved access condition, approved-not-ready state history, and scheduler acknowledgement.",
+      },
+    },
     exampleTitle: "Approval arrives, but the access promise is missing",
     exampleLabel: "Illustrative service-business example",
     example: [
@@ -419,6 +504,7 @@ export const AUTHORITY_PAGES = {
     primaryQuery: "approved quote handoff",
   },
   "scope-change-propagation": {
+    template: "scenario-trace",
     slug: "scope-change-propagation",
     path: "/resources/scope-change-propagation",
     title: "Scope Change Process: Keep the Job in One Version",
@@ -427,6 +513,13 @@ export const AUTHORITY_PAGES = {
       "A scope change process for updating authority, price, schedule, readiness, crew instructions, customer communication, and billing from one baseline.",
     directAnswer:
       "A scope change is complete only when an authorized record identifies the current baseline, the requested change, who approved it, its price and timing effects, its execution and safety effects, and every downstream record or owner that must change. The process ends when affected owners acknowledge the new version and superseded instructions can no longer direct the job.",
+    heroAnswer:
+      "A scope change is complete when one authorized record updates every affected execution surface and each downstream owner acknowledges the same effective version.",
+    answerPoints: [
+      "Anchor the change to the last accepted job baseline.",
+      "Evaluate commercial, schedule, resource, customer, billing, and safety effects before propagation.",
+      "Confirm affected owners received the new version and retire superseded instructions.",
+    ],
     frameworkName: "The downstream change trace",
     frameworkIntroduction:
       "Start from the last accepted job version. Treat the change as a controlled transition between two known states, not as a message that each department must interpret on its own.",
@@ -472,6 +565,58 @@ export const AUTHORITY_PAGES = {
           "Acknowledgements from affected owners and a trace showing that superseded instructions are retained for history but no longer operational.",
       },
     ],
+    artifact: {
+      kind: "scenario-trace",
+      trigger: "A customer-approved request changes an active job.",
+      baseline:
+        "The last accepted quote, scope, work order, schedule, and customer commitments.",
+      outcome:
+        "Every affected execution surface points to the same approved version.",
+      surfaces: [
+        {
+          name: "Change record",
+          before: "The original scope is the active instruction.",
+          after: "The approved addition is linked to the active baseline.",
+          owner: "Commercial authority",
+          verification: "Approval and the effective version are recorded.",
+        },
+        {
+          name: "Work order",
+          before: "One location and the original duration.",
+          after: "The second location and updated scope are included.",
+          owner: "Job preparation owner",
+          verification: "The work order references the approved change.",
+        },
+        {
+          name: "Schedule",
+          before: "The original duration, route, and assignment.",
+          after: "Travel, duration, and assignment reflect the change.",
+          owner: "Scheduler",
+          verification: "The current schedule matches the effective version.",
+        },
+        {
+          name: "Resource or crew plan",
+          before: "One address and the original field instructions.",
+          after: "Both locations, access, and resource changes are visible.",
+          owner: "Operations lead",
+          verification: "The crew acknowledges the update before dispatch.",
+        },
+        {
+          name: "Customer communication",
+          before: "The original confirmation remains current.",
+          after: "Timing, scope, and responsibilities reflect the approved change.",
+          owner: "Customer owner",
+          verification: "The customer receives the current confirmation.",
+        },
+        {
+          name: "Billing instruction",
+          before: "The original total and invoice instruction.",
+          after: "The approved price and billing trigger are current.",
+          owner: "Billing owner",
+          verification: "The invoice instruction references the change.",
+        },
+      ],
+    },
     exampleTitle: "One added location splits the job into two realities",
     exampleLabel: "Illustrative service-business example",
     example: [
@@ -550,9 +695,9 @@ export const AUTHORITY_PAGES = {
     modifiedOn: QUOTE_HANDOFF_BATCH_PUBLISHED_ON,
     primaryQuery: "scope change process",
   },
-} as const satisfies Record<AuthorityPageDefinition["slug"], AuthorityPageDefinition>;
+} as const satisfies Record<AuthorityPageSlug, AuthorityPageDefinition>;
 
-export function getAuthorityPage(slug: AuthorityPageDefinition["slug"]): AuthorityPageDefinition {
+export function getAuthorityPage(slug: AuthorityPageSlug): AuthorityPageDefinition {
   const page = AUTHORITY_PAGES[slug];
   if (!page) {
     throw new Error(`Unknown authority page: ${slug}`);

@@ -8,6 +8,15 @@ type AuthorityArticleProps = {
   page: AuthorityPageDefinition;
 };
 
+function formatReviewDate(date: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
+}
+
 function buildArticleJsonLd(page: AuthorityPageDefinition) {
   return {
     "@context": "https://schema.org",
@@ -115,7 +124,7 @@ export function AuthorityArticle({ page }: AuthorityArticleProps) {
               </div>
               <div className="mt-5">
                 <dt className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/35">Last reviewed</dt>
-                <dd className="mt-1 text-white/72">August 6, 2026</dd>
+                <dd className="mt-1 text-white/72">{formatReviewDate(page.modifiedOn)}</dd>
               </div>
             </dl>
           </div>

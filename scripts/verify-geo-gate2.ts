@@ -1,6 +1,7 @@
 import { AUTHORITY_PAGES } from "../lib/geo/authority-pages.ts";
 import type { AuthorityPageDefinition } from "../lib/geo/authority-pages.ts";
 import {
+  GATE_2_IMPLEMENTED_TARGETS,
   GATE_2_IMPLEMENTATION_QUEUE,
   QUERY_TO_PAGE_REGISTRY,
   validateQueryRegistry,
@@ -20,7 +21,11 @@ if (GATE_2_IMPLEMENTATION_QUEUE.length !== 2) {
   errors.push(`Expected 2 implementation targets, received ${GATE_2_IMPLEMENTATION_QUEUE.length}.`);
 }
 
-for (const target of GATE_2_IMPLEMENTATION_QUEUE) {
+if (GATE_2_IMPLEMENTED_TARGETS.length !== 2) {
+  errors.push(`Expected 2 implemented targets, received ${GATE_2_IMPLEMENTED_TARGETS.length}.`);
+}
+
+for (const target of [...GATE_2_IMPLEMENTED_TARGETS, ...GATE_2_IMPLEMENTATION_QUEUE]) {
   if (!publicPaths.has(target.targetPath)) {
     errors.push(`Implementation target is missing from the public route registry: ${target.targetPath}`);
   }
@@ -57,5 +62,5 @@ if (errors.length > 0) {
 }
 
 process.stdout.write(
-  `GEO Gate 2 registry verified: ${QUERY_TO_PAGE_REGISTRY.length} query targets, ${GATE_2_IMPLEMENTATION_QUEUE.length} implementation targets, ${PUBLIC_ROUTE_REGISTRY.length} public routes, ${GATE_2_MEASUREMENT_CRITERIA.length} measurement criteria.\n`,
+  `GEO Gate 2 registry verified: ${QUERY_TO_PAGE_REGISTRY.length} query targets, ${GATE_2_IMPLEMENTED_TARGETS.length} implemented targets, ${GATE_2_IMPLEMENTATION_QUEUE.length} implementation targets, ${PUBLIC_ROUTE_REGISTRY.length} public routes, ${GATE_2_MEASUREMENT_CRITERIA.length} measurement criteria.\n`,
 );

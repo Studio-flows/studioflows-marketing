@@ -113,3 +113,16 @@ test("modern routes use the shared dispatcher with canonical metadata", async ()
     assert.match(route, /return <AuthorityLandingPage page=\{page\} \/>/);
   }
 });
+
+test("editorial surfaces preserve accessible text contrast and description-list structure", async () => {
+  const shared = await source("components/geo/AuthorityLandingShared.tsx");
+  const scenario = await source("components/geo/ScenarioTraceTemplate.tsx");
+
+  assert.match(shared, /isEditorial \? "text-\[#17130B\]" : "text-white"/);
+  assert.match(shared, /id="action-heading"[^>]*text-\[#17130B\]/);
+  assert.match(shared, /text-sm text-white\/50 sm:flex-row/);
+  assert.doesNotMatch(shared, /text-(?:white|black)\/(?:[0-4][0-9])/);
+  assert.match(scenario, /<dl className="mt-5 grid gap-4 text-sm leading-6 sm:grid-cols-2">/);
+  assert.doesNotMatch(scenario, /<dl[\s\S]*?<div className="grid gap-4 border-t/);
+  assert.doesNotMatch(scenario, /text-black\/45/);
+});

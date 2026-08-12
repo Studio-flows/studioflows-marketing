@@ -148,7 +148,7 @@ export function AuthorityLandingShell({
 
               <div>
                 <aside className="border-l border-[#D4A853]/45 pl-5" aria-label="Review evidence">
-                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/40">
+                  <p className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/60">
                     Evidence review
                   </p>
                   <p className="mt-2 text-sm leading-6 text-white/70">
@@ -216,7 +216,9 @@ export function AuthorityLandingShell({
         >
           <div className="mx-auto grid max-w-7xl gap-12 px-5 py-16 sm:px-8 lg:grid-cols-2 lg:px-12 lg:py-20">
             <div>
-              <h2 className="text-3xl sm:text-4xl">Signals the repair is incomplete</h2>
+              <h2 className={`text-3xl sm:text-4xl ${isEditorial ? "text-[#17130B]" : "text-white"}`}>
+                Signals the repair is incomplete
+              </h2>
               <ul className="mt-7 space-y-3">
                 {page.failureSignals.map((signal) => (
                   <li
@@ -232,7 +234,9 @@ export function AuthorityLandingShell({
               </ul>
             </div>
             <div>
-              <h2 className="text-3xl sm:text-4xl">Limitations and controls</h2>
+              <h2 className={`text-3xl sm:text-4xl ${isEditorial ? "text-[#17130B]" : "text-white"}`}>
+                Limitations and controls
+              </h2>
               <ul className="mt-7 space-y-3">
                 {page.limitations.map((limitation) => (
                   <li
@@ -253,7 +257,7 @@ export function AuthorityLandingShell({
 
         <section id="evidence" aria-labelledby="evidence-heading" className="border-t border-white/10 bg-[#080808]">
           <div className="mx-auto max-w-7xl px-5 py-16 sm:px-8 lg:px-12 lg:py-20">
-            <p className="font-mono text-xs uppercase tracking-[0.22em] text-white/45">Source ledger</p>
+            <p className="font-mono text-xs uppercase tracking-[0.22em] text-white/50">Source ledger</p>
             <h2 id="evidence-heading" className="mt-4 max-w-3xl text-3xl text-white sm:text-4xl">
               Evidence behind this framework
             </h2>
@@ -300,8 +304,8 @@ export function AuthorityLandingShell({
         <section id="action" aria-labelledby="action-heading" className="bg-[#D4A853] text-[#17130B]">
           <div className="mx-auto flex max-w-7xl flex-col justify-between gap-7 px-5 py-14 sm:px-8 lg:flex-row lg:items-end lg:px-12 lg:py-16">
             <div className="max-w-3xl">
-              <p className="font-mono text-xs uppercase tracking-[0.2em] text-black/55">Relevant action</p>
-              <h2 id="action-heading" className="mt-3 text-4xl leading-tight tracking-[-0.03em] sm:text-5xl">
+              <p className="font-mono text-xs uppercase tracking-[0.2em] text-[#3B2B13]">Relevant action</p>
+              <h2 id="action-heading" className="mt-3 text-4xl leading-tight tracking-[-0.03em] text-[#17130B] sm:text-5xl">
                 {page.action.title}
               </h2>
               <p className="mt-4 max-w-2xl text-base leading-7 text-black/65">{page.action.description}</p>
@@ -319,7 +323,7 @@ export function AuthorityLandingShell({
       </article>
 
       <footer className="border-t border-white/10 bg-[#080808]">
-        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-5 py-8 text-sm text-white/45 sm:flex-row sm:items-center sm:px-8 lg:px-12">
+        <div className="mx-auto flex max-w-7xl flex-col justify-between gap-4 px-5 py-8 text-sm text-white/50 sm:flex-row sm:items-center sm:px-8 lg:px-12">
           <p>© {new Date().getFullYear()} StudioFlows</p>
           <nav aria-label="Footer" className="flex flex-wrap gap-2">
             {footerLinks.map(([label, href]) => (

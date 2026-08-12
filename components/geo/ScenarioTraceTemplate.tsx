@@ -17,7 +17,7 @@ export function ScenarioTraceTemplate({ page }: ScenarioTraceTemplateProps) {
             <p className="font-mono text-xs uppercase tracking-[0.22em] text-[#8B641E]">
               Execution artifact · Scenario trace
             </p>
-            <h2 id="artifact-heading" className="mt-4 text-4xl tracking-[-0.03em] sm:text-5xl">
+            <h2 id="artifact-heading" className="mt-4 text-4xl tracking-[-0.03em] text-[#17130B] sm:text-5xl">
               {page.frameworkName}
             </h2>
             <p className="mt-5 text-lg leading-8 text-black/65">{page.frameworkIntroduction}</p>
@@ -50,10 +50,10 @@ export function ScenarioTraceTemplate({ page }: ScenarioTraceTemplateProps) {
                     <span className="absolute -left-[1.9rem] top-1 flex h-6 w-6 items-center justify-center rounded-full bg-[#17130B] font-mono text-[8px] text-[#F2EFE8]">
                       {step.number}
                     </span>
-                    <h3 className="text-lg font-semibold">{step.title}</h3>
+                    <h3 className="text-lg font-semibold text-[#17130B]">{step.title}</h3>
                     <p className="mt-2 text-sm leading-6 text-black/65">{step.instruction}</p>
-                    <p className="mt-2 text-xs leading-5 text-black/50">
-                      <span className="font-semibold text-black/65">Proof:</span> {step.evidence}
+                    <p className="mt-2 text-xs leading-5 text-black/65">
+                      <span className="font-semibold text-black/75">Proof:</span> {step.evidence}
                     </p>
                   </li>
                 ))}
@@ -65,25 +65,23 @@ export function ScenarioTraceTemplate({ page }: ScenarioTraceTemplateProps) {
               <div className="mt-5 grid gap-3 sm:grid-cols-2">
                 {page.artifact.surfaces.map((surface) => (
                   <article key={surface.name} className="rounded-xl border border-black/15 bg-white/60 p-5">
-                    <h3 className="text-xl">{surface.name}</h3>
-                    <dl className="mt-5 space-y-4 text-sm leading-6">
-                      <div>
-                        <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-black/45">Before</dt>
+                    <h3 className="text-xl text-[#17130B]">{surface.name}</h3>
+                    <dl className="mt-5 grid gap-4 text-sm leading-6 sm:grid-cols-2">
+                      <div className="sm:col-span-2">
+                        <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-black/65">Before</dt>
                         <dd className="mt-1 text-black/65">{surface.before}</dd>
                       </div>
-                      <div className="border-t border-black/10 pt-4">
+                      <div className="border-t border-black/10 pt-4 sm:col-span-2">
                         <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-[#8B641E]">Updated state</dt>
                         <dd className="mt-1 text-black/72">{surface.after}</dd>
                       </div>
-                      <div className="grid gap-4 border-t border-black/10 pt-4 sm:grid-cols-2">
-                        <div>
-                          <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-black/45">Owner</dt>
-                          <dd className="mt-1 text-black/65">{surface.owner}</dd>
-                        </div>
-                        <div>
-                          <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-black/45">Verification</dt>
-                          <dd className="mt-1 text-black/65">{surface.verification}</dd>
-                        </div>
+                      <div className="border-t border-black/10 pt-4">
+                        <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-black/65">Owner</dt>
+                        <dd className="mt-1 text-black/65">{surface.owner}</dd>
+                      </div>
+                      <div className="border-t border-black/10 pt-4">
+                        <dt className="font-mono text-[9px] uppercase tracking-[0.16em] text-black/65">Verification</dt>
+                        <dd className="mt-1 text-black/65">{surface.verification}</dd>
                       </div>
                     </dl>
                   </article>

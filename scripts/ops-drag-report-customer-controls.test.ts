@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { runInNewContext } from "node:vm";
 
 import {
   OPS_DRAG_ACCEPTED_SOURCE_HASHES,
@@ -8,9 +9,12 @@ import {
   assertAcceptedSourceHashes,
   assertBusinessUseInputCeilingAcknowledgment,
   assertCustomerContractClaimCeiling,
-  type CustomerContractRuntimeGates,
 } from "../lib/ops-drag-report/accepted-contract.ts";
-import { resolveCustomerContractRuntime } from "../lib/ops-drag-report/launch-release.server.ts";
+import {
+  createCustomerLaunchReleaseEnvelope,
+  resolveCustomerContractRuntime,
+  type CustomerLaunchReleaseEnvelope,
+} from "../lib/ops-drag-report/launch-release.server.ts";
 import {
   ACQUISITION_AVERAGE_DAILY_BUDGET_CENTS,
   FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
@@ -83,7 +87,7 @@ assertCustomerContractClaimCeiling(JSON.stringify(OPS_DRAG_CUSTOMER_CONTRACT));
 for (const forbidden of ["Pinpoints the root cause", "Guaranteed savings", "Available now", "Limited slots", "Tax exempt"]) {
   assert.throws(() => assertCustomerContractClaimCeiling(forbidden), /forbidden public claim/);
 }
-const allLaunchGates: CustomerContractRuntimeGates = {
+const canonicalGateObject = {
   sourceHashesAccepted: true,
   managedPaymentsAccepted: true,
   taxConfigurationAccepted: true,
@@ -93,6 +97,7 @@ const allLaunchGates: CustomerContractRuntimeGates = {
   campaignControlsAccepted: true,
   kiroLaunchReleased: true,
 };
+const canonicalTrueInputs = [true, true, true, true, true, true, true, true] as const;
 const expectedHeldRuntime = {
   launchReleased: false,
   cta: null,
@@ -103,17 +108,28 @@ const expectedHeldRuntime = {
   supportRefund: null,
 };
 function assertLaunchHeld(value: unknown): void {
-  const heldRuntime = resolveCustomerContractRuntime(value);
+  const heldRuntime = resolveCustomerContractRuntime(value as CustomerLaunchReleaseEnvelope);
   assert.deepEqual(heldRuntime, {
     ...expectedHeldRuntime,
   });
   assert.equal(JSON.stringify(heldRuntime).includes("Initial launch availability"), false);
   assert.equal(JSON.stringify(heldRuntime).includes("available now"), false);
 }
-for (const gate of Object.keys(allLaunchGates) as Array<keyof CustomerContractRuntimeGates>) {
-  assertLaunchHeld({ ...allLaunchGates, [gate]: false });
+const invokeEnvelopeFactory = createCustomerLaunchReleaseEnvelope as (...inputs: unknown[]) => CustomerLaunchReleaseEnvelope;
+const heldEnvelope = createCustomerLaunchReleaseEnvelope(false, false, false, false, false, false, false, false);
+assertLaunchHeld(heldEnvelope);
+for (let argumentCount = 0; argumentCount < 8; argumentCount += 1) {
+  assertLaunchHeld(invokeEnvelopeFactory(...canonicalTrueInputs.slice(0, argumentCount)));
 }
-const inheritedOnly = Object.create(allLaunchGates) as Record<string, unknown>;
+assertLaunchHeld(invokeEnvelopeFactory(...canonicalTrueInputs, true));
+for (let inputIndex = 0; inputIndex < canonicalTrueInputs.length; inputIndex += 1) {
+  for (const invalidValue of [false, undefined, null, 1, "true", new Boolean(true), {}, Symbol("true")]) {
+    const inputs: unknown[] = [...canonicalTrueInputs];
+    inputs[inputIndex] = invalidValue;
+    assertLaunchHeld(invokeEnvelopeFactory(...inputs));
+  }
+}
+const inheritedOnly = Object.create(canonicalGateObject) as Record<string, unknown>;
 const missingOwnKey = Object.assign(Object.create({ kiroLaunchReleased: true }), {
   sourceHashesAccepted: true,
   managedPaymentsAccepted: true,
@@ -123,14 +139,14 @@ const missingOwnKey = Object.assign(Object.create({ kiroLaunchReleased: true }),
   dependencySecurityAccepted: true,
   campaignControlsAccepted: true,
 });
-const truthyNonBoolean = { ...allLaunchGates, providerRuntimeAccepted: "true" };
-const caseVariant = { ...allLaunchGates } as Record<string, unknown>;
+const truthyNonBoolean = { ...canonicalGateObject, providerRuntimeAccepted: "true" };
+const caseVariant = { ...canonicalGateObject } as Record<string, unknown>;
 delete caseVariant.kiroLaunchReleased;
 caseVariant.KiroLaunchReleased = true;
-const accessorGates = Object.fromEntries(Object.keys(allLaunchGates).map((key) => [key, true]));
+const accessorGates = Object.fromEntries(Object.keys(canonicalGateObject).map((key) => [key, true]));
 Object.defineProperty(accessorGates, "providerRuntimeAccepted", { enumerable: true, get: () => true });
-const symbolExtra = { ...allLaunchGates, [Symbol("extra")]: true };
-const nonEnumerableExtra = { ...allLaunchGates };
+const symbolExtra = { ...canonicalGateObject, [Symbol("extra")]: true };
+const nonEnumerableExtra = { ...canonicalGateObject };
 Object.defineProperty(nonEnumerableExtra, "extra", { value: true, enumerable: false });
 class ReleaseGateInstance {
   sourceHashesAccepted = true;
@@ -143,9 +159,9 @@ class ReleaseGateInstance {
   kiroLaunchReleased = true;
 }
 const customPrototype = { releasePrototype: "custom" };
-const customPrototypeGates = Object.assign(Object.create(customPrototype), allLaunchGates);
-const nullPrototypeGates = Object.assign(Object.create(null), allLaunchGates);
-const transparentProxy = new Proxy({ ...allLaunchGates }, {});
+const customPrototypeGates = Object.assign(Object.create(customPrototype), canonicalGateObject);
+const nullPrototypeGates = Object.assign(Object.create(null), canonicalGateObject);
+const transparentProxy = new Proxy({ ...canonicalGateObject }, {});
 const nestedProxy = new Proxy(transparentProxy, {});
 const proxyTrapCalls = {
   forwardingPrototype: 0,
@@ -158,7 +174,7 @@ const proxyTrapCalls = {
   hidingOwnKeys: 0,
   hidingDescriptor: 0,
 };
-const forwardingProxy = new Proxy({ ...allLaunchGates }, {
+const forwardingProxy = new Proxy({ ...canonicalGateObject }, {
   getPrototypeOf(target) {
     proxyTrapCalls.forwardingPrototype += 1;
     return Reflect.getPrototypeOf(target);
@@ -179,56 +195,99 @@ const syntheticProxy = new Proxy({}, {
   },
   ownKeys() {
     proxyTrapCalls.syntheticOwnKeys += 1;
-    return [...Object.keys(allLaunchGates)];
+    return [...Object.keys(canonicalGateObject)];
   },
   getOwnPropertyDescriptor(_target, property) {
     proxyTrapCalls.syntheticDescriptor += 1;
-    return Object.hasOwn(allLaunchGates, property)
+    return Object.hasOwn(canonicalGateObject, property)
       ? { value: true, writable: true, enumerable: true, configurable: true }
       : undefined;
   },
 });
-const hidingExtraProxy = new Proxy({ ...allLaunchGates, hiddenExtra: true }, {
+const hidingExtraProxy = new Proxy({ ...canonicalGateObject, hiddenExtra: true }, {
   getPrototypeOf(target) {
     proxyTrapCalls.hidingPrototype += 1;
     return Reflect.getPrototypeOf(target);
   },
   ownKeys() {
     proxyTrapCalls.hidingOwnKeys += 1;
-    return [...Object.keys(allLaunchGates)];
+    return [...Object.keys(canonicalGateObject)];
   },
   getOwnPropertyDescriptor(target, property) {
     proxyTrapCalls.hidingDescriptor += 1;
     return Reflect.getOwnPropertyDescriptor(target, property);
   },
 });
-const customPrototypeProxy = new Proxy({ ...allLaunchGates }, {
+const customPrototypeProxy = new Proxy({ ...canonicalGateObject }, {
   getPrototypeOf() {
     return customPrototype;
   },
 });
-const nullPrototypeProxy = new Proxy({ ...allLaunchGates }, {
+const nullPrototypeProxy = new Proxy({ ...canonicalGateObject }, {
   getPrototypeOf() {
     return null;
   },
 });
-const throwingPrototypeProxy = new Proxy({ ...allLaunchGates }, {
+const throwingPrototypeProxy = new Proxy({ ...canonicalGateObject }, {
   getPrototypeOf() {
     throw new Error("malformed prototype trap");
   },
 });
-const throwingOwnKeysProxy = new Proxy({ ...allLaunchGates }, {
+const throwingOwnKeysProxy = new Proxy({ ...canonicalGateObject }, {
   ownKeys() {
     throw new Error("malformed ownKeys trap");
   },
 });
-const throwingDescriptorProxy = new Proxy({ ...allLaunchGates }, {
+const throwingDescriptorProxy = new Proxy({ ...canonicalGateObject }, {
   getOwnPropertyDescriptor() {
     throw new Error("malformed descriptor trap");
   },
 });
-const revokedReleaseProxyControl = Proxy.revocable({ ...allLaunchGates }, {});
+const revokedReleaseProxyControl = Proxy.revocable({ ...canonicalGateObject }, {});
 revokedReleaseProxyControl.revoke();
+function prototypeMutatedExotic<T extends object>(value: T): T {
+  Object.setPrototypeOf(value, Object.prototype);
+  Object.assign(value, canonicalGateObject);
+  return value;
+}
+const prototypeMutatedExotics: object[] = [
+  new Date(0),
+  new Map(),
+  new Set(),
+  new WeakMap(),
+  new WeakSet(),
+  /ops-drag/u,
+  new Error("held"),
+  Promise.resolve(true),
+  new Boolean(true),
+  new Number(1),
+  new String("true"),
+  new Uint8Array(0),
+  new DataView(new ArrayBuffer(0)),
+  new ArrayBuffer(0),
+];
+const unbrandedSharedArrayBuffers: object[] = [];
+if (typeof SharedArrayBuffer !== "undefined") {
+  prototypeMutatedExotics.push(new SharedArrayBuffer(0));
+  unbrandedSharedArrayBuffers.push(new SharedArrayBuffer(0));
+}
+for (const exotic of prototypeMutatedExotics) prototypeMutatedExotic(exotic);
+const moduleNamespace = await import("../lib/ops-drag-report/customer-copy.ts");
+const crossRealmObject = runInNewContext(`({
+  sourceHashesAccepted: true,
+  managedPaymentsAccepted: true,
+  taxConfigurationAccepted: true,
+  providerRuntimeAccepted: true,
+  productionReleaseAccepted: true,
+  dependencySecurityAccepted: true,
+  campaignControlsAccepted: true,
+  kiroLaunchReleased: true
+})`) as object;
+const fakeBrandObject = {
+  ...canonicalGateObject,
+  CustomerLaunchReleaseEnvelope: true,
+  [Symbol.for("CustomerLaunchReleaseEnvelope")]: true,
+};
 for (const malformed of [
   undefined,
   null,
@@ -239,9 +298,10 @@ for (const malformed of [
   true,
   false,
   {},
+  canonicalGateObject,
   { sourceHashesAccepted: true },
-  { ...allLaunchGates, kiroLaunchReleased: undefined },
-  { ...allLaunchGates, extra: true },
+  { ...canonicalGateObject, kiroLaunchReleased: undefined },
+  { ...canonicalGateObject, extra: true },
   inheritedOnly,
   missingOwnKey,
   truthyNonBoolean,
@@ -266,6 +326,28 @@ for (const malformed of [
   throwingOwnKeysProxy,
   throwingDescriptorProxy,
   revokedReleaseProxyControl.proxy,
+  ...prototypeMutatedExotics,
+  new Date(0),
+  new Map(),
+  new Set(),
+  new WeakMap(),
+  new WeakSet(),
+  /ops-drag/u,
+  new Error("held"),
+  Promise.resolve(true),
+  new Boolean(true),
+  new Number(1),
+  new String("true"),
+  new Uint8Array(0),
+  new DataView(new ArrayBuffer(0)),
+  new ArrayBuffer(0),
+  ...unbrandedSharedArrayBuffers,
+  () => true,
+  moduleNamespace,
+  crossRealmObject,
+  fakeBrandObject,
+  structuredClone(canonicalGateObject),
+  JSON.parse(JSON.stringify(canonicalGateObject)),
 ]) assertLaunchHeld(malformed);
 assert.deepEqual(proxyTrapCalls, {
   forwardingPrototype: 0,
@@ -278,7 +360,33 @@ assert.deepEqual(proxyTrapCalls, {
   hidingOwnKeys: 0,
   hidingDescriptor: 0,
 });
-const acceptedRuntime = resolveCustomerContractRuntime(allLaunchGates);
+const acceptedEnvelope = createCustomerLaunchReleaseEnvelope(true, true, true, true, true, true, true, true);
+assert.equal(Object.isFrozen(acceptedEnvelope), true);
+assert.equal(Object.getPrototypeOf(acceptedEnvelope), null);
+assert.deepEqual(Reflect.ownKeys(acceptedEnvelope), []);
+assert.equal(JSON.stringify(acceptedEnvelope), "{}");
+assertLaunchHeld(structuredClone(acceptedEnvelope));
+assertLaunchHeld(JSON.parse(JSON.stringify(acceptedEnvelope)));
+assertLaunchHeld(runInNewContext("({})"));
+const acceptedEnvelopeProxyTrapCalls = { prototype: 0, ownKeys: 0, descriptor: 0 };
+const proxiedAcceptedEnvelope = new Proxy(acceptedEnvelope, {
+  getPrototypeOf(target) {
+    acceptedEnvelopeProxyTrapCalls.prototype += 1;
+    return Reflect.getPrototypeOf(target);
+  },
+  ownKeys(target) {
+    acceptedEnvelopeProxyTrapCalls.ownKeys += 1;
+    return Reflect.ownKeys(target);
+  },
+  getOwnPropertyDescriptor(target, property) {
+    acceptedEnvelopeProxyTrapCalls.descriptor += 1;
+    return Reflect.getOwnPropertyDescriptor(target, property);
+  },
+});
+assertLaunchHeld(proxiedAcceptedEnvelope);
+assertLaunchHeld(new Proxy(proxiedAcceptedEnvelope, {}));
+assert.deepEqual(acceptedEnvelopeProxyTrapCalls, { prototype: 0, ownKeys: 0, descriptor: 0 });
+const acceptedRuntime = resolveCustomerContractRuntime(acceptedEnvelope);
 assert.equal(acceptedRuntime.launchReleased, true);
 assert.equal(acceptedRuntime.cta, OPS_DRAG_CUSTOMER_CONTRACT.cta);
 assert.equal(acceptedRuntime.purchaseAction, "/ops-drag-report/intake");
@@ -292,6 +400,7 @@ const intakeSource = readFileSync("app/services/custom-ops-hub/CustomOpsHubClien
 const legacyIngestSource = readFileSync("app/api/studioflows/ingest-lead/route.ts", "utf8");
 const heldPageSource = readFileSync("app/ops-drag-report/page.tsx", "utf8");
 const launchReleaseSource = readFileSync("lib/ops-drag-report/launch-release.server.ts", "utf8");
+const acceptedContractSource = readFileSync("lib/ops-drag-report/accepted-contract.ts", "utf8");
 assert.equal(intakeSource.includes("OPS_DRAG_PRIVACY_DISCLOSURE"), false);
 assert.equal(intakeSource.includes("businessUseAccepted"), false);
 assert.equal(legacyIngestSource.includes("ops_drag_input_contract"), false);
@@ -304,12 +413,26 @@ assert.ok(heldPageSource.includes("runtime.geography"));
 assert.ok(heldPageSource.includes("Purchase and submission actions remain unavailable"));
 assert.ok(heldPageSource.includes('export const runtime = "nodejs"'));
 assert.ok(heldPageSource.includes("launch-release.server"));
-assert.ok(launchReleaseSource.includes('from "node:util"'));
-assert.ok(launchReleaseSource.indexOf("types.isProxy(gates)") < launchReleaseSource.indexOf("Object.getPrototypeOf(gates)"));
-assert.ok(launchReleaseSource.indexOf("types.isProxy(gates)") < launchReleaseSource.indexOf("Reflect.ownKeys(gates)"));
-assert.ok(
-  launchReleaseSource.indexOf("types.isProxy(gates)") < launchReleaseSource.indexOf("Object.getOwnPropertyDescriptors(gates)"),
-);
+assert.ok(heldPageSource.includes("createCustomerLaunchReleaseEnvelope("));
+const deployedEnvelopeArguments = heldPageSource.match(/createCustomerLaunchReleaseEnvelope\(([\s\S]*?)\);/)?.[1] ?? "";
+assert.equal(deployedEnvelopeArguments.match(/\bfalse\b/g)?.length, 8);
+assert.equal(deployedEnvelopeArguments.includes("true"), false);
+assert.ok(launchReleaseSource.includes('from "node:process"'));
+assert.ok(launchReleaseSource.includes("new WeakMap<CustomerLaunchReleaseEnvelope, boolean>()"));
+assert.ok(launchReleaseSource.includes("arguments.length === 8"));
+assert.ok(launchReleaseSource.includes("Object.freeze(Object.create(null))"));
+assert.ok(launchReleaseSource.includes("releaseDispositionByEnvelope.get(envelope) === true"));
+for (const forbiddenReflection of [
+  "types.isProxy",
+  "Object.getPrototypeOf",
+  "Reflect.ownKeys",
+  "Object.getOwnPropertyDescriptors",
+  "JSON.stringify",
+  "structuredClone",
+]) assert.equal(launchReleaseSource.includes(forbiddenReflection), false);
+assert.equal(launchReleaseSource.includes("export const releaseDispositionByEnvelope"), false);
+assert.equal(acceptedContractSource.includes("CustomerContractRuntimeGates"), false);
+assert.equal(acceptedContractSource.includes("CUSTOMER_LAUNCH_GATE_KEYS"), false);
 
 const legacyInvocations = {
   leadStorage: 0,

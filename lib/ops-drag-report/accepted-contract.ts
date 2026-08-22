@@ -60,19 +60,6 @@ export const OPS_DRAG_CUSTOMER_CONTRACT = {
   ],
 } as const;
 
-export const CUSTOMER_LAUNCH_GATE_KEYS = [
-  "sourceHashesAccepted",
-  "managedPaymentsAccepted",
-  "taxConfigurationAccepted",
-  "providerRuntimeAccepted",
-  "productionReleaseAccepted",
-  "dependencySecurityAccepted",
-  "campaignControlsAccepted",
-  "kiroLaunchReleased",
-] as const;
-
-export type CustomerContractRuntimeGates = Record<(typeof CUSTOMER_LAUNCH_GATE_KEYS)[number], true>;
-
 export function assertAcceptedSourceHashes(actual: Record<keyof typeof OPS_DRAG_ACCEPTED_SOURCE_HASHES, string>): void {
   for (const key of Object.keys(OPS_DRAG_ACCEPTED_SOURCE_HASHES) as Array<keyof typeof OPS_DRAG_ACCEPTED_SOURCE_HASHES>) {
     if (actual[key].toUpperCase() !== OPS_DRAG_ACCEPTED_SOURCE_HASHES[key]) {

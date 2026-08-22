@@ -1,33 +1,46 @@
-import { types } from "node:util";
+import { release as nodeRelease } from "node:process";
 
-import {
-  CUSTOMER_LAUNCH_GATE_KEYS,
-  OPS_DRAG_CUSTOMER_CONTRACT,
-  type CustomerContractRuntimeGates,
-} from "./accepted-contract.ts";
+import { OPS_DRAG_CUSTOMER_CONTRACT } from "./accepted-contract.ts";
 
-export function isCompleteCustomerLaunchRelease(gates: unknown): gates is CustomerContractRuntimeGates {
-  try {
-    if (types.isProxy(gates)) return false;
-    if (gates === null || typeof gates !== "object" || Array.isArray(gates)) return false;
-    if (Object.getPrototypeOf(gates) !== Object.prototype) return false;
-    const ownKeys = Reflect.ownKeys(gates);
-    if (
-      ownKeys.length !== CUSTOMER_LAUNCH_GATE_KEYS.length ||
-      ownKeys.some((key) => typeof key !== "string" || !CUSTOMER_LAUNCH_GATE_KEYS.includes(key as never))
-    ) return false;
-    const descriptors = Object.getOwnPropertyDescriptors(gates);
-    return CUSTOMER_LAUNCH_GATE_KEYS.every((key) => {
-      const descriptor = descriptors[key];
-      return descriptor !== undefined && "value" in descriptor && descriptor.value === true;
-    });
-  } catch {
-    return false;
-  }
+if (nodeRelease.name !== "node") {
+  throw new Error("Customer launch release envelopes require the Node.js server runtime");
 }
 
-export function resolveCustomerContractRuntime(gates: unknown) {
-  const launchReleased = isCompleteCustomerLaunchRelease(gates);
+declare const customerLaunchReleaseEnvelopeBrand: unique symbol;
+
+export type CustomerLaunchReleaseEnvelope = Readonly<{
+  [customerLaunchReleaseEnvelopeBrand]: "CustomerLaunchReleaseEnvelope";
+}>;
+
+const releaseDispositionByEnvelope = new WeakMap<CustomerLaunchReleaseEnvelope, boolean>();
+
+export function createCustomerLaunchReleaseEnvelope(
+  sourceHashesAccepted: unknown,
+  managedPaymentsAccepted: unknown,
+  taxConfigurationAccepted: unknown,
+  providerRuntimeAccepted: unknown,
+  productionReleaseAccepted: unknown,
+  dependencySecurityAccepted: unknown,
+  campaignControlsAccepted: unknown,
+  kiroLaunchReleased: unknown,
+): CustomerLaunchReleaseEnvelope {
+  const launchReleased =
+    arguments.length === 8 &&
+    sourceHashesAccepted === true &&
+    managedPaymentsAccepted === true &&
+    taxConfigurationAccepted === true &&
+    providerRuntimeAccepted === true &&
+    productionReleaseAccepted === true &&
+    dependencySecurityAccepted === true &&
+    campaignControlsAccepted === true &&
+    kiroLaunchReleased === true;
+  const envelope = Object.freeze(Object.create(null)) as CustomerLaunchReleaseEnvelope;
+  releaseDispositionByEnvelope.set(envelope, launchReleased);
+  return envelope;
+}
+
+export function resolveCustomerContractRuntime(envelope: CustomerLaunchReleaseEnvelope) {
+  const launchReleased = releaseDispositionByEnvelope.get(envelope) === true;
   return {
     launchReleased,
     cta: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.cta : null,

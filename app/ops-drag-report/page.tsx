@@ -2,7 +2,10 @@ import {
   OPS_DRAG_CUSTOMER_CONTRACT,
   OPS_DRAG_PRIVACY_DISCLOSURE,
 } from "@/lib/ops-drag-report/accepted-contract";
-import { resolveCustomerContractRuntime } from "@/lib/ops-drag-report/launch-release.server";
+import {
+  createCustomerLaunchReleaseEnvelope,
+  resolveCustomerContractRuntime,
+} from "@/lib/ops-drag-report/launch-release.server";
 
 export const runtime = "nodejs";
 
@@ -12,16 +15,17 @@ export const metadata = {
 };
 
 export default function OpsDragReportPage() {
-  const runtime = resolveCustomerContractRuntime({
-    sourceHashesAccepted: false,
-    managedPaymentsAccepted: false,
-    taxConfigurationAccepted: false,
-    providerRuntimeAccepted: false,
-    productionReleaseAccepted: false,
-    dependencySecurityAccepted: false,
-    campaignControlsAccepted: false,
-    kiroLaunchReleased: false,
-  });
+  const releaseEnvelope = createCustomerLaunchReleaseEnvelope(
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+    false,
+  );
+  const runtime = resolveCustomerContractRuntime(releaseEnvelope);
 
   return (
     <main className="min-h-screen bg-stone-100 px-5 py-16">

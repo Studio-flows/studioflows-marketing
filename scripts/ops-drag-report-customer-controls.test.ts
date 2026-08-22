@@ -618,6 +618,11 @@ class InMemoryRetentionStore implements RetentionWorkerStore {
     return structuredClone(record);
   }
   async complete(recordId: string, receipt: RetentionReceipt) { this.completed.set(recordId, receipt); }
+  async defer(recordId: string, _dueAt: string) {
+    const record = this.records.get(recordId);
+    if (!record) return;
+    record.lease = null;
+  }
   async release(recordId: string, blockerCode: string) { this.blocked.push(`${recordId}:${blockerCode}`); }
 }
 const dueRecords = Array.from({ length: 12 }, (_, index) => ({

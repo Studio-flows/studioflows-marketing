@@ -45,7 +45,7 @@ export type RetentionRecord = {
 };
 
 export type RetentionAction =
-  | { kind: "NONE"; due_at: string | null; reason: string }
+  | { kind: "NONE"; due_at: string; reason: "RETENTION_WINDOW_ACTIVE" }
   | { kind: "HOLD"; due_at: string | null; reason: "SCOPED_LEGAL_HOLD" }
   | { kind: "DELETE"; due_at: string; reason: string }
   | { kind: "REDUCE"; due_at: string; reason: string; reduced: Record<string, JsonValue> };
@@ -155,17 +155,17 @@ export type RetentionMutationAdapter = {
     record: RetentionRecord,
     action: Extract<RetentionAction, { kind: "DELETE" | "REDUCE" }>,
     receipt: RetentionReceipt
-  ): Promise<"APPLIED" | "HELD">;
+  ): Promise<"APPLIED" | "HELD" | "DEFERRED">;
 };
 
 export function createRetentionMutationAdapter(input: {
   enabled: boolean;
-  deleteRecord(record: RetentionRecord, receipt: RetentionReceipt): Promise<"APPLIED" | "HELD" | void>;
+  deleteRecord(record: RetentionRecord, receipt: RetentionReceipt): Promise<"APPLIED" | "HELD" | "DEFERRED" | void>;
   reduceRecord(
     record: RetentionRecord,
     reduced: Record<string, JsonValue>,
     receipt: RetentionReceipt
-  ): Promise<"APPLIED" | "HELD" | void>;
+  ): Promise<"APPLIED" | "HELD" | "DEFERRED" | void>;
 }): RetentionMutationAdapter {
   if (!input.enabled) throw new Error("Retention mutation adapter is disabled");
   return {
@@ -173,7 +173,7 @@ export function createRetentionMutationAdapter(input: {
       const disposition = action.kind === "DELETE"
         ? await input.deleteRecord(record, receipt)
         : await input.reduceRecord(record, action.reduced, receipt);
-      return disposition === "HELD" ? "HELD" : "APPLIED";
+      return disposition === "HELD" || disposition === "DEFERRED" ? disposition : "APPLIED";
     },
   };
 }
@@ -182,6 +182,7 @@ export type RetentionWorkerStore = {
   loadBatch(limit: number): Promise<RetentionRecord[]>;
   claim(recordId: string, owner: string, acquiredAt: string, staleBefore: string): Promise<RetentionRecord | null>;
   complete(recordId: string, receipt: RetentionReceipt): Promise<void>;
+  defer(recordId: string, dueAt: string, reason: "RETENTION_WINDOW_ACTIVE" | "SCOPED_LEGAL_HOLD"): Promise<void>;
   release(recordId: string, blockerCode: string): Promise<void>;
 };
 
@@ -221,6 +222,9 @@ export async function runRetentionCleanupWorker(input: {
   const records = (await input.store.loadBatch(limit)).slice(0, limit);
   const result = { scanned: records.length, applied: 0, held: 0, skipped: 0, blocked: 0 };
   for (const observed of records) {
+    const preclaimed = observed.lease?.owner === input.owner && observed.lease.acquired_at === input.now
+      ? observed
+      : null;
     let action: RetentionAction;
     try {
       action = planRetentionAction(observed, input.now);
@@ -230,16 +234,15 @@ export async function runRetentionCleanupWorker(input: {
       continue;
     }
     if (action.kind === "NONE") {
+      if (preclaimed) await input.store.defer(observed.record_id, action.due_at, action.reason);
       result.skipped += 1;
       continue;
     }
     if (action.kind === "HOLD") {
+      if (preclaimed) await input.store.defer(observed.record_id, action.due_at, action.reason);
       result.held += 1;
       continue;
     }
-    const preclaimed = observed.lease?.owner === input.owner && observed.lease.acquired_at === input.now
-      ? observed
-      : null;
     const claimed = preclaimed ?? await input.store.claim(observed.record_id, input.owner, input.now, input.staleBefore);
     if (!claimed) {
       result.skipped += 1;
@@ -253,14 +256,19 @@ export async function runRetentionCleanupWorker(input: {
     try {
       const claimedAction = planRetentionAction(claimed, input.now);
       if (claimedAction.kind !== "DELETE" && claimedAction.kind !== "REDUCE") {
-        await input.store.release(observed.record_id, `RETENTION_ACTION_CHANGED:${claimedAction.kind}`);
-        result.skipped += 1;
+        await input.store.defer(observed.record_id, claimedAction.due_at, claimedAction.reason);
+        if (claimedAction.kind === "HOLD") result.held += 1;
+        else result.skipped += 1;
         continue;
       }
       const receipt = retentionReceipt(claimed, claimedAction, input.now);
       const disposition = await input.adapter.apply(claimed, claimedAction, receipt);
       if (disposition === "HELD") {
         result.held += 1;
+        continue;
+      }
+      if (disposition === "DEFERRED") {
+        result.skipped += 1;
         continue;
       }
       await input.store.complete(claimed.record_id, receipt);

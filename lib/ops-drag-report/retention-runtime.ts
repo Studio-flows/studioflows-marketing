@@ -389,7 +389,7 @@ export function createSupabaseRetentionRuntime(input: {
     receipt: RetentionReceipt,
     action: "DELETE" | "REDUCE",
     reduced: Record<string, JsonValue> = {}
-  ): Promise<"APPLIED" | "HELD"> => {
+  ): Promise<"APPLIED" | "HELD" | "DEFERRED"> => {
     const patch = createRetentionRuntimePatch(record, action, reduced);
     const { data, error } = await input.supabase.rpc("apply_ops_drag_retention_action", {
       p_record_id: record.record_id,
@@ -398,7 +398,7 @@ export function createSupabaseRetentionRuntime(input: {
       p_receipt: receipt,
     });
     if (error) throw new Error(error.message || "Unable to apply Ops Drag Report retention action");
-    if (data !== "APPLIED" && data !== "HELD") {
+    if (data !== "APPLIED" && data !== "HELD" && data !== "DEFERRED") {
       throw new Error("Ops Drag Report retention action returned an invalid disposition");
     }
     return data;
@@ -420,6 +420,16 @@ export function createSupabaseRetentionRuntime(input: {
     },
     async complete() {
       return;
+    },
+    async defer(recordId, dueAt, reason) {
+      const { data, error } = await input.supabase.rpc("defer_ops_drag_retention_claim", {
+        p_record_id: recordId,
+        p_owner: input.owner,
+        p_due_at: dueAt,
+        p_reason: reason,
+      });
+      if (error) throw new Error(error.message || "Unable to defer Ops Drag Report retention claim");
+      if (data !== "DEFERRED") throw new Error("Ops Drag Report retention defer returned an invalid disposition");
     },
     async release(recordId, blockerCode) {
       const { error } = await input.supabase.rpc("release_ops_drag_retention_claim", {

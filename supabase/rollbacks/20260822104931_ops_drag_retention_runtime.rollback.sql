@@ -1,7 +1,10 @@
 -- REVIEWED ROLLBACK ARTIFACT ONLY: do not apply without the separate live-schema gate.
 drop function if exists public.release_ops_drag_retention_claim(uuid, text, text, timestamptz);
+drop function if exists public.defer_ops_drag_retention_claim(uuid, text, timestamptz, text);
 drop function if exists public.apply_ops_drag_retention_action(uuid, text, jsonb, jsonb);
 drop function if exists public.claim_ops_drag_retention_batch(timestamptz, text, timestamptz, integer);
+drop function if exists public.ops_drag_retention_detailed_due_at(jsonb);
+drop function if exists public.ops_drag_retention_dispute_state(jsonb);
 drop function if exists public.ops_drag_retention_hold_covers(jsonb, text);
 drop function if exists public.ops_drag_retention_terminal_at(jsonb);
 drop function if exists public.ops_drag_try_integer(text);

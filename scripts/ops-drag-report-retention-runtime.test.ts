@@ -352,11 +352,16 @@ assert.notEqual(claimHoldApplyRace.stage, "BLOCKED");
 class SingleRecordStore implements RetentionWorkerStore {
   current: RetentionRecord;
   receipts: RetentionReceipt[] = [];
+  deferrals: Array<{ dueAt: string; reason: string }> = [];
   releases: string[] = [];
   constructor(initial: RetentionRecord) { this.current = structuredClone(initial); }
   async loadBatch() { return [structuredClone(this.current)]; }
   async claim() { return structuredClone(this.current); }
   async complete(_recordId: string, receipt: RetentionReceipt) { this.receipts.push(receipt); }
+  async defer(_recordId: string, dueAt: string, reason: "RETENTION_WINDOW_ACTIVE" | "SCOPED_LEGAL_HOLD") {
+    this.deferrals.push({ dueAt, reason });
+    this.current.lease = null;
+  }
   async release(_recordId: string, blocker: string) { this.releases.push(blocker); }
 }
 
@@ -401,6 +406,47 @@ assert.equal(heldStatusRow.lease_attempts, 0);
 assert.deepEqual(heldStatusRow.destructive_receipts, []);
 assert.deepEqual(heldStatusStore.receipts, [], "HELD must not complete the destructive receipt");
 assert.deepEqual(heldStatusStore.releases, [], "atomic HELD disposition must not enter failure release");
+
+const rebasedDueStore = new SingleRecordStore(record("DETAILED_RECEIPT_LEDGER", runtimeRow(), {
+  dispute_resolved_at: "2031-01-31T00:00:00.000Z",
+  lease: { owner: OWNER, acquired_at: "2032-01-01T00:00:00.000Z", attempts: 1 },
+}));
+const rebasedDueResult = await runRetentionCleanupWorker({
+  store: rebasedDueStore,
+  adapter: captureAdapter,
+  owner: OWNER,
+  now: "2032-01-01T00:00:00.000Z",
+  staleBefore: "2031-12-31T23:45:00.000Z",
+});
+assert.deepEqual(rebasedDueResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0 });
+assert.deepEqual(rebasedDueStore.deferrals, [{
+  dueAt: "2033-01-31T00:00:00.000Z",
+  reason: "RETENTION_WINDOW_ACTIVE",
+}]);
+assert.equal(rebasedDueStore.current.lease, null, "preclaimed NONE must release its lease without consuming retry budget");
+assert.deepEqual(rebasedDueStore.receipts, [], "preclaimed NONE must not complete a destructive receipt");
+assert.deepEqual(rebasedDueStore.releases, [], "preclaimed NONE must not enter failure release");
+
+const atomicDeferredStore = new SingleRecordStore(record("DETAILED_RECEIPT_LEDGER"));
+const atomicDeferredAdapter = createRetentionMutationAdapter({
+  enabled: true,
+  async deleteRecord() {
+    throw new Error("detailed ledger fixture must not delete");
+  },
+  async reduceRecord() {
+    return "DEFERRED";
+  },
+});
+const atomicDeferredResult = await runRetentionCleanupWorker({
+  store: atomicDeferredStore,
+  adapter: atomicDeferredAdapter,
+  owner: OWNER,
+  now: "2032-01-01T00:00:00.000Z",
+  staleBefore: "2031-12-31T23:45:00.000Z",
+});
+assert.deepEqual(atomicDeferredResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0 });
+assert.deepEqual(atomicDeferredStore.receipts, [], "DEFERRED must never complete a destructive receipt");
+assert.deepEqual(atomicDeferredStore.releases, [], "DEFERRED must never enter the blocker retry path");
 await runRetentionCleanupWorker({
   store: firstStore,
   adapter: captureAdapter,
@@ -477,6 +523,11 @@ for (const contract of [
   /when jsonb_array_length\(p_hold -> 'data_classes'\) = 0 then true/,
   /revoke all on function public\.claim_ops_drag_retention_batch[\s\S]+from public, anon, authenticated/i,
   /grant execute on function public\.claim_ops_drag_retention_batch[\s\S]+to service_role/i,
+  /v_stage = 'DETAILED_RECEIPT_LEDGER'[\s\S]+ops_drag_retention_detailed_due_at\(v_lead\.metadata\)/,
+  /create or replace function public\.defer_ops_drag_retention_claim/,
+  /create or replace function public\.ops_drag_retention_dispute_state/,
+  /RETENTION_DISPUTE_UNRESOLVED/,
+  /RETENTION_DISPUTE_TIMESTAMP_INVALID/,
 ]) assert.match(migration, contract);
 const applyFunction = migration.slice(
   migration.indexOf("create or replace function public.apply_ops_drag_retention_action"),
@@ -491,12 +542,17 @@ assert.ok(applyHoldIndex < applyReceiptIndex, "hold must be revalidated before t
 assert.ok(applyHoldIndex < applyDeleteIndex, "hold must be revalidated before deletion");
 assert.match(applyFunction, /returns text/);
 assert.match(applyFunction, /return 'HELD'/);
+assert.match(applyFunction, /return 'DEFERRED'/);
+assert.match(applyFunction, /ops_drag_retention_detailed_due_at\(v_lead\.metadata\)/);
 assert.equal((applyFunction.match(/return 'APPLIED'/g) ?? []).length, 2);
 assert.match(applyFunction, /ops_drag_retention_attempts = greatest\(ops_drag_retention_attempts - 1, 0\)/);
 assert.match(applyFunction, /ops_drag_retention_last_blocker_code = 'RETENTION_LEGAL_HOLD'/);
 assert.match(applyFunction, /ops_drag_retention_lease_owner = null[\s\S]+ops_drag_retention_lease_acquired_at = null/);
 assert.match(rollback, /drop function if exists public\.claim_ops_drag_retention_batch/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_hold_covers\(jsonb, text\)/);
+assert.match(rollback, /drop function if exists public\.ops_drag_retention_detailed_due_at\(jsonb\)/);
+assert.match(rollback, /drop function if exists public\.ops_drag_retention_dispute_state\(jsonb\)/);
+assert.match(rollback, /drop function if exists public\.defer_ops_drag_retention_claim/);
 assert.match(rollback, /drop table if exists public\.ops_drag_retention_receipts/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_SECRET/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_ENABLED/);
@@ -510,5 +566,5 @@ for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION).filter((key) => key !=
 assert.match(ingestLeadRoute, /preQual \? \{ pre_qual: preQual \}/);
 
 console.log(
-  "OPS_DRAG_REPORT_RETENTION_RUNTIME_PASS boundaries=PASS redaction=PASS production_attribution=PASS legal_hold=PASS atomic_hold_race=PASS receipt_chain=PASS malformed=PASS scheduler_isolation=PASS row11=PASS migration_contract=PASS"
+  "OPS_DRAG_REPORT_RETENTION_RUNTIME_PASS boundaries=PASS redaction=PASS production_attribution=PASS legal_hold=PASS atomic_hold_race=PASS dispute_rebase=PASS preclaimed_none=DEFERRED receipt_chain=PASS malformed=PASS scheduler_isolation=PASS row11=PASS migration_contract=PASS"
 );

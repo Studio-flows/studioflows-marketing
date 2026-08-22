@@ -157,14 +157,74 @@ as $$
   );
 $$;
 
+create or replace function public.ops_drag_retention_dispute_state(p_metadata jsonb)
+returns text
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  v_dispute jsonb;
+  v_resolved_at_raw text;
+  v_status text;
+begin
+  if not coalesce(p_metadata ? 'ops_drag_report_dispute', false) then
+    return 'ABSENT';
+  end if;
+  v_dispute := p_metadata -> 'ops_drag_report_dispute';
+  if jsonb_typeof(v_dispute) is distinct from 'object' then
+    return 'MALFORMED';
+  end if;
+  v_resolved_at_raw := v_dispute ->> 'resolved_at';
+  if v_resolved_at_raw is null or btrim(v_resolved_at_raw) = '' then
+    return 'UNRESOLVED';
+  end if;
+  if public.ops_drag_try_timestamptz(v_resolved_at_raw) is null then
+    return 'MALFORMED';
+  end if;
+  v_status := upper(btrim(coalesce(v_dispute ->> 'status', '')));
+  if v_status not in ('RESOLVED', 'WON', 'LOST', 'CLOSED', 'WARNING_CLOSED') then
+    return 'UNRESOLVED';
+  end if;
+  return 'RESOLVED';
+end;
+$$;
+
+create or replace function public.ops_drag_retention_detailed_due_at(p_metadata jsonb)
+returns timestamptz
+language sql
+immutable
+set search_path = ''
+as $$
+  with basis as (
+    select
+      public.ops_drag_retention_terminal_at(p_metadata) as terminal_at,
+      public.ops_drag_retention_dispute_state(p_metadata) as dispute_state,
+      public.ops_drag_try_timestamptz(
+        p_metadata #>> '{ops_drag_report_dispute,resolved_at}'
+      ) as dispute_resolved_at
+  )
+  select case
+    when dispute_state in ('UNRESOLVED', 'MALFORMED') then null
+    when terminal_at is null then null
+    when dispute_state = 'ABSENT' then terminal_at + interval '24 months'
+    else greatest(terminal_at, dispute_resolved_at) + interval '24 months'
+  end
+  from basis;
+$$;
+
 revoke all on function public.ops_drag_try_timestamptz(text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_terminal_at(jsonb) from public, anon, authenticated;
 revoke all on function public.ops_drag_try_integer(text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_hold_covers(jsonb, text) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_dispute_state(jsonb) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_detailed_due_at(jsonb) from public, anon, authenticated;
 grant execute on function public.ops_drag_try_timestamptz(text) to service_role;
 grant execute on function public.ops_drag_retention_terminal_at(jsonb) to service_role;
 grant execute on function public.ops_drag_try_integer(text) to service_role;
 grant execute on function public.ops_drag_retention_hold_covers(jsonb, text) to service_role;
+grant execute on function public.ops_drag_retention_dispute_state(jsonb) to service_role;
+grant execute on function public.ops_drag_retention_detailed_due_at(jsonb) to service_role;
 
 create or replace function public.claim_ops_drag_retention_batch(
   p_recorded_at timestamptz,
@@ -201,6 +261,7 @@ declare
   v_terminal_at timestamptz;
   v_support_closed_at timestamptz;
   v_dispute_resolved_at timestamptz;
+  v_dispute_state text;
   v_transaction_at timestamptz;
   v_hold jsonb;
   v_record_hash text;
@@ -264,6 +325,7 @@ begin
     v_dispute_resolved_at := public.ops_drag_try_timestamptz(
       v_lead.metadata #>> '{ops_drag_report_dispute,resolved_at}'
     );
+    v_dispute_state := public.ops_drag_retention_dispute_state(v_lead.metadata);
     v_transaction_at := public.ops_drag_try_timestamptz(
       v_lead.metadata #>> '{ops_drag_report_order,payment,paidAt}'
     );
@@ -294,6 +356,17 @@ begin
       update public.custom_ops_hub_leads
          set ops_drag_retention_stage = v_stage,
              ops_drag_retention_due_at = v_due_at
+       where id = v_lead.id;
+    elsif v_stage = 'DETAILED_RECEIPT_LEDGER' then
+      v_due_at := public.ops_drag_retention_detailed_due_at(v_lead.metadata);
+      update public.custom_ops_hub_leads
+         set ops_drag_retention_due_at = v_due_at,
+             ops_drag_retention_last_blocker_code = case
+               when v_dispute_state = 'UNRESOLVED' then 'RETENTION_DISPUTE_UNRESOLVED'
+               when v_dispute_state = 'MALFORMED' then 'RETENTION_DISPUTE_TIMESTAMP_INVALID'
+               when v_due_at is null then 'RETENTION_DETAILED_DUE_BASIS_INVALID'
+               else null
+             end
        where id = v_lead.id;
     elsif v_stage = 'SUPPORT_TRANSCRIPT' and v_due_at is null and v_support_closed_at is not null then
       v_due_at := v_support_closed_at + interval '90 days';
@@ -417,6 +490,9 @@ declare
   v_expected_stage text;
   v_next_stage text;
   v_next_due_at timestamptz;
+  v_current_due_at timestamptz;
+  v_applied_at timestamptz;
+  v_dispute_state text;
   v_delete boolean;
 begin
   select * into v_lead
@@ -445,6 +521,30 @@ begin
            ops_drag_retention_last_blocker_code = 'RETENTION_LEGAL_HOLD'
      where id = p_record_id;
     return 'HELD';
+  end if;
+
+  if v_expected_stage = 'DETAILED_RECEIPT_LEDGER' then
+    v_dispute_state := public.ops_drag_retention_dispute_state(v_lead.metadata);
+    v_current_due_at := public.ops_drag_retention_detailed_due_at(v_lead.metadata);
+    v_applied_at := public.ops_drag_try_timestamptz(p_receipt ->> 'applied_at');
+    if v_current_due_at is null or v_applied_at is null or v_applied_at < v_current_due_at then
+      update public.custom_ops_hub_leads
+         set ops_drag_retention_due_at = v_current_due_at,
+             ops_drag_retention_lease_owner = null,
+             ops_drag_retention_lease_acquired_at = null,
+             ops_drag_retention_attempts = greatest(ops_drag_retention_attempts - 1, 0),
+             ops_drag_retention_last_blocker_code = case
+               when v_dispute_state = 'UNRESOLVED' then 'RETENTION_DISPUTE_UNRESOLVED'
+               when v_dispute_state = 'MALFORMED' then 'RETENTION_DISPUTE_TIMESTAMP_INVALID'
+               when v_current_due_at is null then 'RETENTION_DETAILED_DUE_BASIS_INVALID'
+               else 'RETENTION_DUE_REBASED'
+             end
+       where id = p_record_id;
+      return 'DEFERRED';
+    end if;
+    update public.custom_ops_hub_leads
+       set ops_drag_retention_due_at = v_current_due_at
+     where id = p_record_id;
   end if;
 
   v_next_stage := p_patch ->> 'next_stage';
@@ -493,6 +593,7 @@ begin
      end)
      or (p_receipt ->> 'attempt')::integer is distinct from v_lead.ops_drag_retention_attempts
      or p_receipt ->> 'policy_version' is distinct from 'ops_drag_retention_v1'
+     or (v_expected_stage = 'DETAILED_RECEIPT_LEDGER' and public.ops_drag_try_timestamptz(p_receipt ->> 'due_at') is distinct from v_current_due_at)
      or p_receipt ->> 'receipt_hash' !~ '^[0-9a-f]{64}$'
      or p_receipt ->> 'evidence_hash' !~ '^[0-9a-f]{64}$' then
     raise exception 'retention receipt binding is invalid';
@@ -553,6 +654,41 @@ begin
          ops_drag_retention_last_blocker_code = null
    where id = p_record_id;
   return 'APPLIED';
+end;
+$$;
+
+create or replace function public.defer_ops_drag_retention_claim(
+  p_record_id uuid,
+  p_owner text,
+  p_due_at timestamptz,
+  p_reason text
+)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_lead public.custom_ops_hub_leads%rowtype;
+begin
+  if p_reason not in ('RETENTION_WINDOW_ACTIVE', 'SCOPED_LEGAL_HOLD') then
+    raise exception 'retention defer reason is invalid';
+  end if;
+  select * into v_lead
+    from public.custom_ops_hub_leads
+   where id = p_record_id
+   for update;
+  if v_lead.id is null or v_lead.ops_drag_retention_lease_owner is distinct from p_owner then
+    raise exception 'retention defer binding is invalid';
+  end if;
+  update public.custom_ops_hub_leads
+     set ops_drag_retention_due_at = p_due_at,
+         ops_drag_retention_lease_owner = null,
+         ops_drag_retention_lease_acquired_at = null,
+         ops_drag_retention_attempts = greatest(ops_drag_retention_attempts - 1, 0),
+         ops_drag_retention_last_blocker_code = p_reason
+   where id = p_record_id;
+  return 'DEFERRED';
 end;
 $$;
 
@@ -629,11 +765,15 @@ revoke all on function public.claim_ops_drag_retention_batch(timestamptz, text, 
   from public, anon, authenticated;
 revoke all on function public.apply_ops_drag_retention_action(uuid, text, jsonb, jsonb)
   from public, anon, authenticated;
+revoke all on function public.defer_ops_drag_retention_claim(uuid, text, timestamptz, text)
+  from public, anon, authenticated;
 revoke all on function public.release_ops_drag_retention_claim(uuid, text, text, timestamptz)
   from public, anon, authenticated;
 grant execute on function public.claim_ops_drag_retention_batch(timestamptz, text, timestamptz, integer)
   to service_role;
 grant execute on function public.apply_ops_drag_retention_action(uuid, text, jsonb, jsonb)
+  to service_role;
+grant execute on function public.defer_ops_drag_retention_claim(uuid, text, timestamptz, text)
   to service_role;
 grant execute on function public.release_ops_drag_retention_claim(uuid, text, text, timestamptz)
   to service_role;

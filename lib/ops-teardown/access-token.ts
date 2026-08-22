@@ -58,13 +58,25 @@ function signPayload(payload: string, secret: string): string {
   return createHmac("sha256", requireSigningSecret(secret)).update(payload).digest("base64url");
 }
 
+function calculateSnapshotDigest(order: OpsDragOrder): string {
+  return sha256(canonicalJson({
+    version: order.snapshot.version,
+    submission_id: order.snapshot.submission_id,
+    delivery_email: order.snapshot.delivery_email,
+    report_input: order.snapshot.report_input,
+  }));
+}
+
 function assertPaidBinding(order: OpsDragOrder): void {
   const payment = order.payment;
   if (!payment || payment.refundReason || payment.amountTotal !== 2_900 || payment.currency !== "usd") {
     throw new Error("Ops teardown access unavailable");
   }
   if (
+    order.snapshot.version !== "v1" ||
     order.submission_id !== order.snapshot.submission_id ||
+    order.snapshot.report_input.leadId !== order.submission_id ||
+    calculateSnapshotDigest(order) !== order.snapshot.digest ||
     order.snapshot.digest !== payment.snapshotDigest ||
     sha256(order.snapshot.delivery_email.trim().toLowerCase()) !== payment.customerEmailSha256
   ) {
@@ -162,7 +174,11 @@ export function verifyOpsTeardownAccessToken(input: {
 }
 
 export function assertOpsTeardownOrderBinding(order: OpsDragOrder, claims: OpsTeardownAccessClaims): string {
-  assertPaidBinding(order);
+  try {
+    assertPaidBinding(order);
+  } catch {
+    throw new Error("Ops teardown access denied");
+  }
   const payment = order.payment!;
   const recipient = order.snapshot.delivery_email.trim().toLowerCase();
   if (

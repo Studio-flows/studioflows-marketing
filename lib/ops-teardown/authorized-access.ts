@@ -9,15 +9,14 @@ import {
 } from "./access-token.ts";
 import {
   buildOpsTeardownSheet,
-  mapLeadRowToTeardownInput,
   type OpsTeardownSheet,
 } from "./build-teardown-sheet.js";
-import { fetchLeadRow } from "./load-teardown-sheet.js";
+import { fetchOpsTeardownOrderRow } from "./load-teardown-sheet.js";
 import { sendTeardownEmail } from "./send-teardown-email.js";
 
-type LeadRow = Record<string, unknown> & {
+type OpsTeardownOrderRow = Record<string, unknown> & {
   id?: string;
-  metadata?: Record<string, unknown>;
+  ops_drag_report_order?: OpsDragOrder;
 };
 
 export type AuthorizedTeardown = {
@@ -28,7 +27,7 @@ export type AuthorizedTeardown = {
 
 export type OpsTeardownAccessDependencies = {
   createClient: () => SupabaseClient | null;
-  fetchRow: (client: SupabaseClient, leadId: string) => Promise<LeadRow | null>;
+  fetchRow: (client: SupabaseClient, leadId: string) => Promise<OpsTeardownOrderRow | null>;
   signingSecret: () => string;
   now: () => string;
 };
@@ -39,18 +38,28 @@ export type OpsTeardownEmailDependencies = OpsTeardownAccessDependencies & {
 
 const defaultAccessDependencies: OpsTeardownAccessDependencies = {
   createClient: createMarketingSupabaseServerClient,
-  fetchRow: fetchLeadRow,
+  fetchRow: fetchOpsTeardownOrderRow,
   signingSecret: () => process.env.OPS_DRAG_REPORT_ORDER_TOKEN_SECRET?.trim() ?? "",
   now: () => new Date().toISOString(),
 };
 
-function readOrder(row: LeadRow): OpsDragOrder {
-  const metadata = row.metadata;
-  const value = metadata?.ops_drag_report_order;
+function readOrder(row: OpsTeardownOrderRow): OpsDragOrder {
+  const value = row.ops_drag_report_order;
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error("Ops teardown access denied");
   }
   return value as OpsDragOrder;
+}
+
+function buildSheetFromPaidOrderSnapshot(order: OpsDragOrder): OpsTeardownSheet {
+  const { report_input: reportInput } = order.snapshot;
+  return buildOpsTeardownSheet({
+    leadId: reportInput.leadId,
+    quizPayload: reportInput.quizPayload,
+    preQual: reportInput.preQual,
+    qualificationScore: reportInput.qualificationScore,
+    generatedAt: order.snapshot.admitted_at,
+  });
 }
 
 export function rejectClientSuppliedTeardownIdentity(body: unknown): void {
@@ -86,7 +95,7 @@ export async function loadAuthorizedOpsTeardown(
     const order = readOrder(row);
     const recipientEmail = assertOpsTeardownOrderBinding(order, claims);
     return {
-      sheet: buildOpsTeardownSheet(mapLeadRowToTeardownInput(row, claims.lead_id)),
+      sheet: buildSheetFromPaidOrderSnapshot(order),
       recipientEmail,
       order,
     };

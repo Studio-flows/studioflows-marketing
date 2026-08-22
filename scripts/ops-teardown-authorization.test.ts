@@ -50,11 +50,7 @@ function createPaidOrder(): OpsDragOrder {
 const order = createPaidOrder();
 const row = {
   id: leadId,
-  work_email: email,
-  company_name: "Example Operations",
-  primary_pain_area: "Handoffs",
-  raw_answers: {},
-  metadata: { ops_drag_report_order: order },
+  ops_drag_report_order: order,
 };
 
 function token(purpose: "view" | "pdf" | "email", overrides: { expiresAt?: string } = {}): string {
@@ -214,7 +210,9 @@ for (const routePath of [
   assert.doesNotMatch(source, /searchParams|get\(["'](?:lead_id|email)["']\)|to_email/);
   assert.doesNotMatch(source, /createMarketingSupabaseServerClient|fetchLeadRow/);
 }
-assert.doesNotMatch(readFileSync("lib/ops-teardown/load-teardown-sheet.js", "utf8"), /select\(["']\*["']\)/);
+const teardownLoaderSource = readFileSync("lib/ops-teardown/load-teardown-sheet.js", "utf8");
+assert.doesNotMatch(teardownLoaderSource, /select\(["']\*["']\)/);
+assert.match(teardownLoaderSource, /ops_drag_report_order:metadata->ops_drag_report_order/);
 assert.doesNotMatch(readFileSync("lib/ops-teardown/send-teardown-email.js", "utf8"), /share_url|View your teardown online/);
 
 console.log(

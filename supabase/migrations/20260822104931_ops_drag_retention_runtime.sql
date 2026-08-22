@@ -442,7 +442,9 @@ declare
   v_normalized_hold jsonb;
   v_evidence_hash text;
   v_receipt_hash text;
+  v_existing_receipt_hash text;
   v_quarantined boolean;
+  v_existing_hold public.ops_drag_retention_holds%rowtype;
 begin
   for v_lead in
     select lead.id, lead.metadata, lead.ops_drag_retention_due_at
@@ -466,7 +468,8 @@ begin
       'record_id_hash', encode(extensions.digest(v_lead.id::text, 'sha256'), 'hex'),
       'source_evidence_hash', v_evidence_hash,
       'normalized_hold', v_normalized_hold,
-      'quarantined', v_quarantined
+      'quarantined', v_quarantined,
+      'original_due_at', v_lead.ops_drag_retention_due_at
     )::text, 'sha256'), 'hex');
 
     insert into public.ops_drag_retention_holds (
@@ -477,14 +480,34 @@ begin
       'LEGACY_METADATA', v_quarantined, v_lead.ops_drag_retention_due_at
     ) on conflict (record_id) do nothing;
 
-    if not found and not exists (
-      select 1
+    if not found then
+      select existing_hold.*
+        into v_existing_hold
         from public.ops_drag_retention_holds as existing_hold
        where existing_hold.record_id = v_lead.id
-         and existing_hold.source_evidence_hash = v_evidence_hash
-         and existing_hold.source_receipt_hash = v_receipt_hash
-    ) then
-      raise exception 'retention legal hold backfill conflicts with existing evidence';
+       for update;
+      if not found then
+        raise exception 'retention legal hold backfill conflict row disappeared';
+      end if;
+
+      v_existing_receipt_hash := encode(extensions.digest(jsonb_build_object(
+        'source_kind', v_existing_hold.source_kind,
+        'record_id_hash', encode(extensions.digest(v_existing_hold.record_id::text, 'sha256'), 'hex'),
+        'source_evidence_hash', v_existing_hold.source_evidence_hash,
+        'normalized_hold', v_existing_hold.hold,
+        'quarantined', v_existing_hold.quarantined,
+        'original_due_at', v_existing_hold.original_due_at
+      )::text, 'sha256'), 'hex');
+
+      if v_existing_hold.hold is distinct from v_normalized_hold
+         or v_existing_hold.source_evidence_hash is distinct from v_evidence_hash
+         or v_existing_hold.source_receipt_hash is distinct from v_receipt_hash
+         or v_existing_hold.source_receipt_hash is distinct from v_existing_receipt_hash
+         or v_existing_hold.source_kind is distinct from 'LEGACY_METADATA'
+         or v_existing_hold.quarantined is distinct from v_quarantined
+         or v_existing_hold.original_due_at is distinct from v_lead.ops_drag_retention_due_at then
+        raise exception 'retention legal hold backfill conflicts with existing authoritative tuple';
+      end if;
     end if;
 
     update public.custom_ops_hub_leads

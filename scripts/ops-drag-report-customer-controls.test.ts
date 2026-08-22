@@ -8,15 +8,19 @@ import {
   assertAcceptedSourceHashes,
   assertBusinessUseInputCeilingAcknowledgment,
   assertCustomerContractClaimCeiling,
+  type CustomerContractRuntimeGates,
   resolveCustomerContractRuntime,
 } from "../lib/ops-drag-report/accepted-contract.ts";
 import {
   ACQUISITION_AVERAGE_DAILY_BUDGET_CENTS,
+  FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
   OPS_DRAG_OFFER_VERSION,
   acceptCampaignPauseReadback,
   assessFirstSaleCandidate,
   claimFirstSaleEligibleAtomically,
+  createAcceptedAcquisitionConfigHash,
   createAcquisitionPauseAdapter,
+  createFirstSaleOrderDigest,
   createFirstSaleControlState,
   evaluateAcquisitionStops,
   requestAcquisitionPause,
@@ -25,6 +29,11 @@ import {
   type FirstSaleControlState,
   type FirstSaleControlStore,
 } from "../lib/ops-drag-report/first-sale-controller.ts";
+import {
+  OPS_DRAG_INTAKE_VERSION,
+  admitOpsDragIntake,
+  type OpsDragIntakeStore,
+} from "../lib/ops-drag-report/intake-contract.ts";
 import {
   REDUCED_TRANSACTION_ALLOWLIST,
   calculateRetentionDueAt,
@@ -74,17 +83,103 @@ assertCustomerContractClaimCeiling(JSON.stringify(OPS_DRAG_CUSTOMER_CONTRACT));
 for (const forbidden of ["Pinpoints the root cause", "Guaranteed savings", "Available now", "Limited slots", "Tax exempt"]) {
   assert.throws(() => assertCustomerContractClaimCeiling(forbidden), /forbidden public claim/);
 }
-const heldRuntime = resolveCustomerContractRuntime({ checkoutAccepted: false, deliveryAccepted: false, supportRefundAccepted: false });
-assert.deepEqual(heldRuntime, { checkout: null, delivery: null, supportRefund: null });
-const acceptedRuntime = resolveCustomerContractRuntime({ checkoutAccepted: true, deliveryAccepted: true, supportRefundAccepted: true });
+const allLaunchGates: CustomerContractRuntimeGates = {
+  sourceHashesAccepted: true,
+  taxPathCleared: true,
+  stripeConfigurationAccepted: true,
+  checkoutAccepted: true,
+  deliveryAccepted: true,
+  supportRefundAccepted: true,
+  usOnlyAccepted: true,
+  kiroLaunchReleased: true,
+};
+for (const gate of Object.keys(allLaunchGates) as Array<keyof CustomerContractRuntimeGates>) {
+  const heldRuntime = resolveCustomerContractRuntime({ ...allLaunchGates, [gate]: false });
+  assert.deepEqual(heldRuntime, {
+    launchReleased: false,
+    cta: null,
+    purchaseAction: null,
+    checkout: null,
+    delivery: null,
+    supportRefund: null,
+  });
+}
+const acceptedRuntime = resolveCustomerContractRuntime(allLaunchGates);
+assert.equal(acceptedRuntime.launchReleased, true);
+assert.equal(acceptedRuntime.cta, OPS_DRAG_CUSTOMER_CONTRACT.cta);
+assert.equal(acceptedRuntime.purchaseAction, "/ops-drag-report/intake");
 assert.equal(acceptedRuntime.checkout, OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[1]);
 assert.equal(acceptedRuntime.delivery?.receives, OPS_DRAG_CUSTOMER_CONTRACT.runtimeReceives);
 assert.equal(acceptedRuntime.supportRefund, OPS_DRAG_CUSTOMER_CONTRACT.supportRefund);
 assert.throws(() => assertBusinessUseInputCeilingAcknowledgment(false), /acknowledgment is required/);
 assertBusinessUseInputCeilingAcknowledgment(true);
 const intakeSource = readFileSync("app/services/custom-ops-hub/CustomOpsHubClient.js", "utf8");
-assert.ok(intakeSource.lastIndexOf("{OPS_DRAG_PRIVACY_DISCLOSURE}") < intakeSource.lastIndexOf("checked={businessUseAccepted}"));
-assert.ok(intakeSource.includes("business_use_input_ceiling_ack: true"));
+const legacyIngestSource = readFileSync("app/api/studioflows/ingest-lead/route.ts", "utf8");
+const heldPageSource = readFileSync("app/ops-drag-report/page.tsx", "utf8");
+assert.equal(intakeSource.includes("OPS_DRAG_PRIVACY_DISCLOSURE"), false);
+assert.equal(intakeSource.includes("businessUseAccepted"), false);
+assert.equal(legacyIngestSource.includes("ops_drag_input_contract"), false);
+assert.equal(legacyIngestSource.includes("business_use_input_ceiling_ack"), false);
+assert.equal(heldPageSource.includes("OPS_DRAG_CUSTOMER_CONTRACT.cta"), false);
+assert.equal(heldPageSource.includes("OpsDragReportCheckout"), false);
+assert.equal(heldPageSource.includes("<Link"), false);
+assert.ok(heldPageSource.includes("Purchase and submission actions remain unavailable"));
+
+const legacyInvocations = {
+  leadStorage: 0,
+  outreachClassification: 0,
+  bookingRouting: 0,
+  teardownRouting: 0,
+  crmMarketing: 0,
+  fullPayloadForwarding: 0,
+};
+const admittedSnapshots: unknown[] = [];
+const dedicatedIntakeStore: OpsDragIntakeStore = {
+  async admit(snapshot) { admittedSnapshots.push(structuredClone(snapshot)); },
+};
+const validIntake = await admitOpsDragIntake({
+  businessEmail: "ops-owner@example.com",
+  businessUseInputCeilingAcknowledgment: true,
+  answers: {
+    businessModel: "Service business",
+    primaryPainArea: "Handoffs",
+    frequentBreakdownDetail: "Approvals wait for one owner.",
+  },
+}, {
+  store: dedicatedIntakeStore,
+  createSubmissionId: () => "sub_fixture_0001",
+  now: () => "2026-08-22T20:00:00.000Z",
+});
+assert.equal(validIntake.version, OPS_DRAG_INTAKE_VERSION);
+assert.equal(admittedSnapshots.length, 1);
+assert.deepEqual(legacyInvocations, {
+  leadStorage: 0,
+  outreachClassification: 0,
+  bookingRouting: 0,
+  teardownRouting: 0,
+  crmMarketing: 0,
+  fullPayloadForwarding: 0,
+});
+await assert.rejects(() => admitOpsDragIntake({
+  businessEmail: "ops-owner@example.com",
+  businessUseInputCeilingAcknowledgment: true,
+  marketingConsent: true,
+  answers: { primaryPainArea: "Handoffs" },
+}, {
+  store: dedicatedIntakeStore,
+  createSubmissionId: () => "sub_fixture_0002",
+  now: () => "2026-08-22T20:00:00.000Z",
+}), /unsupported fields/);
+await assert.rejects(() => admitOpsDragIntake({
+  businessEmail: "ops-owner@example.com",
+  businessUseInputCeilingAcknowledgment: true,
+  answers: { bookingUrl: "https://example.com/book" },
+}, {
+  store: dedicatedIntakeStore,
+  createSubmissionId: () => "sub_fixture_0003",
+  now: () => "2026-08-22T20:00:00.000Z",
+}), /unsupported fields/);
+assert.equal(admittedSnapshots.length, 1);
 
 const sourceNames: EligibilitySourceName[] = [
   "DIRECTORY_TEAM_TEST",
@@ -272,6 +367,9 @@ function createDeliveredOrder(): OpsDragOrder {
   return applyEmailProviderEvent(order, { eventId: "evt_delivered", providerMessageId: "msg_first_sale", type: "delivered" }, "2026-08-22T20:02:00.000Z");
 }
 const deliveredOrder = createDeliveredOrder();
+const orderDigestSecret = "fixture-first-sale-order-digest-secret-more-than-32-bytes";
+const campaignId = "campaign-fixture";
+const campaignConfigHash = createAcceptedAcquisitionConfigHash(campaignId);
 const validCandidate: FirstSaleCandidate = {
   order: deliveredOrder,
   offerVersion: OPS_DRAG_OFFER_VERSION,
@@ -289,13 +387,16 @@ const validCandidate: FirstSaleCandidate = {
   internalPackageMarker: false,
   acquisitionSource: "OPS_DRAG_SEARCH_V1",
 };
-assert.equal(assessFirstSaleCandidate(validCandidate).result, "PASS");
+const passingAssessment = assessFirstSaleCandidate(validCandidate, orderDigestSecret);
+assert.equal(passingAssessment.result, "PASS");
+assert.equal(passingAssessment.order_digest, createFirstSaleOrderDigest(deliveredOrder.order_id, orderDigestSecret));
+assert.equal(passingAssessment.order_digest_method_version, FIRST_SALE_ORDER_DIGEST_METHOD_VERSION);
 for (const refundStatus of ["REQUIRED", "OWNED", "CREATED", "SUCCEEDED"] as const) {
   const order = structuredClone(deliveredOrder);
   order.workflow_status = refundStatus === "SUCCEEDED" ? "DONE" : "IN_PROGRESS";
   order.automation!.terminal_disposition = refundStatus === "SUCCEEDED" ? "REFUNDED" : null;
   order.automation!.refund.status = refundStatus;
-  assert.ok(assessFirstSaleCandidate({ ...validCandidate, order }).blocker_codes.includes("DELIVERY_NOT_PROVIDER_CONFIRMED"));
+  assert.ok(assessFirstSaleCandidate({ ...validCandidate, order }, orderDigestSecret).blocker_codes.includes("DELIVERY_NOT_PROVIDER_CONFIRMED"));
 }
 for (const deliveryStatus of ["ACCEPTED", "QUEUED", "SENT"] as const) {
   const order = structuredClone(deliveredOrder);
@@ -303,7 +404,7 @@ for (const deliveryStatus of ["ACCEPTED", "QUEUED", "SENT"] as const) {
   order.automation!.terminal_disposition = null;
   order.automation!.delivery.status = deliveryStatus;
   order.automation!.delivery.delivered_at = null;
-  assert.ok(assessFirstSaleCandidate({ ...validCandidate, order }).blocker_codes.includes("DELIVERY_NOT_PROVIDER_CONFIRMED"));
+  assert.ok(assessFirstSaleCandidate({ ...validCandidate, order }, orderDigestSecret).blocker_codes.includes("DELIVERY_NOT_PROVIDER_CONFIRMED"));
 }
 for (const [delta, blocker] of [
   [{ paymentMode: "test" }, "PAYMENT_NOT_LIVE"],
@@ -316,8 +417,9 @@ for (const [delta, blocker] of [
   [{ renewalMarker: true }, "RENEWAL_MARKER_PRESENT"],
   [{ internalPackageMarker: true }, "INTERNAL_PACKAGE_MARKER_PRESENT"],
 ] as const) {
-  assert.ok(assessFirstSaleCandidate({ ...validCandidate, ...delta }).blocker_codes.includes(blocker));
+  assert.ok(assessFirstSaleCandidate({ ...validCandidate, ...delta }, orderDigestSecret).blocker_codes.includes(blocker));
 }
+assert.ok(assessFirstSaleCandidate(validCandidate, "").blocker_codes.includes("ORDER_DIGEST_SECRET_UNAVAILABLE"));
 
 class InMemoryFirstSaleStore implements FirstSaleControlStore {
   state: FirstSaleControlState = createFirstSaleControlState();
@@ -333,14 +435,15 @@ class InMemoryFirstSaleStore implements FirstSaleControlStore {
 }
 const firstSaleStore = new InMemoryFirstSaleStore();
 const concurrentClaims = await Promise.all(Array.from({ length: 20 }, () =>
-  claimFirstSaleEligibleAtomically(firstSaleStore, validCandidate, "campaign-fixture")
+  claimFirstSaleEligibleAtomically(firstSaleStore, validCandidate, campaignId, campaignConfigHash, orderDigestSecret)
 ));
 assert.equal(concurrentClaims.filter((result) => result.disposition === "acquired").length, 1);
 assert.equal(firstSaleStore.state.status, "FIRST_SALE_ELIGIBLE");
 
 const baseAcquisitionSnapshot: AcquisitionSnapshot = {
   channel: "GOOGLE_SEARCH",
-  campaignId: "campaign-fixture",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
   campaignState: "PAUSED",
   averageDailyBudgetCents: 500,
   currentDayBilledSpendCents: 0,
@@ -360,58 +463,190 @@ let acquisitionCalls = 0;
 assert.throws(() => createAcquisitionPauseAdapter({
   enabled: false,
   channel: "GOOGLE_SEARCH",
-  campaignId: "campaign-fixture",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
   averageDailyBudgetCents: ACQUISITION_AVERAGE_DAILY_BUDGET_CENTS,
   acceptedResidualExposureCents: 1_000,
   residualExposureReceiptCurrent: true,
-  transport: { async pause() { acquisitionCalls += 1; return { providerState: "PAUSED", readbackHash: "never" }; } },
+  transport: { async pause(input) { acquisitionCalls += 1; return { providerState: "PAUSED", campaignId: input.campaignId, orderDigest: input.orderDigest, idempotencyKey: input.idempotencyKey, readbackHash: "never" }; } },
 }), /disabled/);
 assert.throws(() => createAcquisitionPauseAdapter({
   enabled: true,
   channel: "GOOGLE_SEARCH",
-  campaignId: "campaign-fixture",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
   averageDailyBudgetCents: 501,
   acceptedResidualExposureCents: 1_000,
   residualExposureReceiptCurrent: true,
-  transport: { async pause() { acquisitionCalls += 1; return { providerState: "PAUSED", readbackHash: "never" }; } },
+  transport: { async pause(input) { acquisitionCalls += 1; return { providerState: "PAUSED", campaignId: input.campaignId, orderDigest: input.orderDigest, idempotencyKey: input.idempotencyKey, readbackHash: "never" }; } },
 }), /\$5\.00/);
 assert.throws(() => createAcquisitionPauseAdapter({
   enabled: true,
   channel: "GOOGLE_SEARCH",
-  campaignId: "campaign-fixture",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
   averageDailyBudgetCents: 500,
   acceptedResidualExposureCents: 1_001,
   residualExposureReceiptCurrent: true,
-  transport: { async pause() { acquisitionCalls += 1; return { providerState: "PAUSED", readbackHash: "never" }; } },
+  transport: { async pause(input) { acquisitionCalls += 1; return { providerState: "PAUSED", campaignId: input.campaignId, orderDigest: input.orderDigest, idempotencyKey: input.idempotencyKey, readbackHash: "never" }; } },
 }), /\$10\.00/);
 assert.equal(acquisitionCalls, 0);
 const stopAdapter = createAcquisitionPauseAdapter({
   enabled: true,
   channel: "GOOGLE_SEARCH",
-  campaignId: "campaign-fixture",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
   averageDailyBudgetCents: 500,
   acceptedResidualExposureCents: 1_000,
   residualExposureReceiptCurrent: true,
-  transport: { async pause() { acquisitionCalls += 1; return { providerState: "PAUSED", readbackHash: "pause-readback-hash" }; } },
+  transport: { async pause(input) { acquisitionCalls += 1; return { providerState: "PAUSED", campaignId: input.campaignId, orderDigest: input.orderDigest, idempotencyKey: input.idempotencyKey, readbackHash: "pause-readback-hash" }; } },
 });
 const stopCodes = evaluateAcquisitionStops(baseAcquisitionSnapshot, true);
 assert.deepEqual(stopCodes, ["FIRST_SALE_ELIGIBLE"]);
-const pause = await requestAcquisitionPause({ adapter: stopAdapter, snapshot: baseAcquisitionSnapshot, stopCodes });
+const orderDigest = firstSaleStore.state.eligible_order_digest!;
+const pause = await requestAcquisitionPause({ adapter: stopAdapter, snapshot: baseAcquisitionSnapshot, orderDigest, stopCodes });
 assert.equal(acquisitionCalls, 1);
+const eligibleState = structuredClone(firstSaleStore.state);
 firstSaleStore.state = acceptCampaignPauseReadback(firstSaleStore.state, {
-  orderId: deliveredOrder.order_id,
+  orderDigest,
+  orderDigestMethodVersion: FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
+  campaignId,
+  campaignConfigHash,
   idempotencyKey: pause.idempotencyKey,
   providerState: pause.providerState,
+  readbackCampaignId: pause.campaignId,
+  readbackIdempotencyKey: pause.idempotencyKey,
   readbackHash: pause.readbackHash,
 });
 const readbackAgain = acceptCampaignPauseReadback(firstSaleStore.state, {
-  orderId: deliveredOrder.order_id,
+  orderDigest,
+  orderDigestMethodVersion: FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
+  campaignId,
+  campaignConfigHash,
   idempotencyKey: pause.idempotencyKey,
   providerState: pause.providerState,
+  readbackCampaignId: pause.campaignId,
+  readbackIdempotencyKey: pause.idempotencyKey,
   readbackHash: pause.readbackHash,
 });
 assert.deepEqual(readbackAgain, firstSaleStore.state);
 assert.equal(firstSaleStore.state.status, "FIRST_SALE_VERIFIED");
+
+for (const providerState of [undefined, null, "", "ENABLED", "ACTIVE", "PENDING", "FAILED", "paused", "Paused", 1, {}]) {
+  assert.throws(() => acceptCampaignPauseReadback(eligibleState, {
+    orderDigest,
+    orderDigestMethodVersion: FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
+    campaignId,
+    campaignConfigHash,
+    idempotencyKey: pause.idempotencyKey,
+    providerState,
+    readbackCampaignId: campaignId,
+    readbackIdempotencyKey: pause.idempotencyKey,
+    readbackHash: "invalid-provider-state-readback",
+  }), /provider state is not accepted/);
+  assert.equal(eligibleState.status, "FIRST_SALE_ELIGIBLE");
+  assert.equal(eligibleState.pause_readback_hash, null);
+}
+
+for (const readbackCampaignId of [undefined, "", "Campaign-Fixture", "other-campaign"]) {
+  assert.throws(() => acceptCampaignPauseReadback(eligibleState, {
+    orderDigest,
+    orderDigestMethodVersion: FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
+    campaignId,
+    campaignConfigHash,
+    idempotencyKey: pause.idempotencyKey,
+    providerState: "PAUSED",
+    readbackCampaignId,
+    readbackIdempotencyKey: pause.idempotencyKey,
+    readbackHash: "wrong-campaign-readback",
+  }), /binding failed/);
+  assert.equal(eligibleState.status, "FIRST_SALE_ELIGIBLE");
+}
+
+let invalidStateProviderCalls = 0;
+const invalidStateAdapter = createAcquisitionPauseAdapter({
+  enabled: true,
+  channel: "GOOGLE_SEARCH",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
+  averageDailyBudgetCents: 500,
+  acceptedResidualExposureCents: 1_000,
+  residualExposureReceiptCurrent: true,
+  transport: {
+    async pause(input) {
+      invalidStateProviderCalls += 1;
+      return { providerState: "ENABLED", campaignId: input.campaignId, orderDigest: input.orderDigest, idempotencyKey: input.idempotencyKey, readbackHash: "enabled-readback" };
+    },
+  },
+});
+await assert.rejects(
+  () => requestAcquisitionPause({ adapter: invalidStateAdapter, snapshot: baseAcquisitionSnapshot, orderDigest, stopCodes }),
+  /provider state is not accepted/
+);
+assert.equal(invalidStateProviderCalls, 1, "invalid provider state must not trigger a second provider call");
+assert.deepEqual(eligibleState, structuredClone(eligibleState), "invalid provider response must not mutate eligibility state");
+
+for (const invalidCampaignId of ["other-campaign", "Campaign-Fixture", "", "campaign fixture"]) {
+  const callsBeforeMismatch = acquisitionCalls;
+  const snapshot = {
+    ...baseAcquisitionSnapshot,
+    campaignId: invalidCampaignId,
+    acceptedCampaignConfigHash: campaignConfigHash,
+  } as AcquisitionSnapshot;
+  await assert.rejects(
+    () => requestAcquisitionPause({ adapter: stopAdapter, snapshot, orderDigest, stopCodes }),
+    /binding failed/
+  );
+  assert.equal(acquisitionCalls, callsBeforeMismatch);
+  assert.equal(eligibleState.status, "FIRST_SALE_ELIGIBLE");
+}
+
+let wrongReadbackCalls = 0;
+const wrongReadbackAdapter = createAcquisitionPauseAdapter({
+  enabled: true,
+  channel: "GOOGLE_SEARCH",
+  campaignId,
+  acceptedCampaignConfigHash: campaignConfigHash,
+  averageDailyBudgetCents: 500,
+  acceptedResidualExposureCents: 1_000,
+  residualExposureReceiptCurrent: true,
+  transport: {
+    async pause(input) {
+      wrongReadbackCalls += 1;
+      return { providerState: "PAUSED", campaignId: "other-campaign", orderDigest: input.orderDigest, idempotencyKey: input.idempotencyKey, readbackHash: "wrong-campaign" };
+    },
+  },
+});
+await assert.rejects(
+  () => requestAcquisitionPause({ adapter: wrongReadbackAdapter, snapshot: baseAcquisitionSnapshot, orderDigest, stopCodes }),
+  /readback binding failed/
+);
+assert.equal(wrongReadbackCalls, 1);
+
+const missingSecretState = new InMemoryFirstSaleStore();
+const missingSecretClaim = await claimFirstSaleEligibleAtomically(
+  missingSecretState,
+  validCandidate,
+  campaignId,
+  campaignConfigHash,
+  ""
+);
+assert.equal(missingSecretClaim.disposition, "rejected");
+assert.equal(missingSecretState.state.status, "OPEN");
+assert.equal(missingSecretState.revision, 0);
+
+const rawOrderIdentifier = deliveredOrder.order_id;
+const redactedArtifacts = [
+  passingAssessment,
+  eligibleState,
+  firstSaleStore.state,
+  pause,
+  pause.idempotencyKey,
+  missingSecretClaim.assessment,
+];
+for (const artifact of redactedArtifacts) assert.equal(JSON.stringify(artifact).includes(rawOrderIdentifier), false);
+assert.equal(readFileSync("lib/ops-drag-report/first-sale-controller.ts", "utf8").includes("eligible_order_id"), false);
+assert.equal(pause.idempotencyKey.includes(rawOrderIdentifier), false);
 const allStops = evaluateAcquisitionStops({
   ...baseAcquisitionSnapshot,
   currentDayBilledSpendCents: 1_000,

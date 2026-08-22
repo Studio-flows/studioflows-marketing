@@ -61,21 +61,34 @@ export const OPS_DRAG_CUSTOMER_CONTRACT = {
 } as const;
 
 export type CustomerContractRuntimeGates = {
+  sourceHashesAccepted: boolean;
+  taxPathCleared: boolean;
+  stripeConfigurationAccepted: boolean;
   checkoutAccepted: boolean;
   deliveryAccepted: boolean;
   supportRefundAccepted: boolean;
+  usOnlyAccepted: boolean;
+  kiroLaunchReleased: boolean;
 };
 
+export function isCompleteCustomerLaunchRelease(gates: CustomerContractRuntimeGates): boolean {
+  return Object.values(gates).every((value) => value === true);
+}
+
 export function resolveCustomerContractRuntime(gates: CustomerContractRuntimeGates) {
+  const launchReleased = isCompleteCustomerLaunchRelease(gates);
   return {
-    checkout: gates.checkoutAccepted ? OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[1] : null,
-    delivery: gates.deliveryAccepted
+    launchReleased,
+    cta: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.cta : null,
+    purchaseAction: launchReleased ? "/ops-drag-report/intake" : null,
+    checkout: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[1] : null,
+    delivery: launchReleased
       ? {
           receives: OPS_DRAG_CUSTOMER_CONTRACT.runtimeReceives,
           step: OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[2],
         }
       : null,
-    supportRefund: gates.supportRefundAccepted ? OPS_DRAG_CUSTOMER_CONTRACT.supportRefund : null,
+    supportRefund: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.supportRefund : null,
   };
 }
 

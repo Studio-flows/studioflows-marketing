@@ -11,10 +11,6 @@ import {
 } from "@/lib/qualify-custom-ops-hub";
 import { resolveBookCallUrl } from "@/lib/lead-attribution";
 import { buildOpsTeardownThankYouUrl } from "@/lib/ops-audit-handoff";
-import {
-  OPS_DRAG_ACCEPTED_SOURCE_HASHES,
-  assertBusinessUseInputCeilingAcknowledgment,
-} from "@/lib/ops-drag-report/accepted-contract";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
 function pickAttribution(body: Record<string, unknown>) {
@@ -56,14 +52,6 @@ export async function POST(req: NextRequest) {
   if (!body?.consent) {
     return NextResponse.json({ error: "Consent required" }, { status: 400 });
   }
-  try {
-    assertBusinessUseInputCeilingAcknowledgment(body.business_use_input_ceiling_ack);
-  } catch (error) {
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : "Business-use acknowledgment required" },
-      { status: 400 }
-    );
-  }
 
   const raw = (body.form_payload ?? body) as Record<string, unknown>;
   const { score, reasons, qualified } = evaluateQualification(raw);
@@ -86,11 +74,6 @@ export async function POST(req: NextRequest) {
     row.metadata = {
       ...row.metadata,
       ...attribution,
-      ops_drag_input_contract: {
-        version: "ops_drag_business_use_input_ceiling_v1",
-        acknowledged: true,
-        source_hash: OPS_DRAG_ACCEPTED_SOURCE_HASHES.operations,
-      },
       ...(preQual ? { pre_qual: preQual } : {}),
     };
 
@@ -122,11 +105,6 @@ export async function POST(req: NextRequest) {
     metadata: {
       ...qualifiedBase.metadata,
       ...attribution,
-      ops_drag_input_contract: {
-        version: "ops_drag_business_use_input_ceiling_v1",
-        acknowledged: true,
-        source_hash: OPS_DRAG_ACCEPTED_SOURCE_HASHES.operations,
-      },
       ...(preQual ? { pre_qual: preQual } : {}),
     },
   };

@@ -1,28 +1,24 @@
-import Link from "next/link";
-
 import {
   OPS_DRAG_CUSTOMER_CONTRACT,
   OPS_DRAG_PRIVACY_DISCLOSURE,
   resolveCustomerContractRuntime,
 } from "@/lib/ops-drag-report/accepted-contract";
 
-import OpsDragReportCheckout from "./OpsDragReportCheckout";
-
 export const metadata = {
   title: "Ops Drag Report | StudioFlows",
   robots: { index: false, follow: false },
 };
 
-export default function OpsDragReportPage({
-  searchParams,
-}: {
-  searchParams?: { lead_id?: string };
-}) {
-  const leadId = searchParams?.lead_id?.trim() ?? "";
+export default function OpsDragReportPage() {
   const runtime = resolveCustomerContractRuntime({
+    sourceHashesAccepted: false,
+    taxPathCleared: false,
+    stripeConfigurationAccepted: false,
     checkoutAccepted: false,
     deliveryAccepted: false,
     supportRefundAccepted: false,
+    usOnlyAccepted: false,
+    kiroLaunchReleased: false,
   });
 
   return (
@@ -39,19 +35,12 @@ export default function OpsDragReportPage({
         <p className="mt-2 text-sm font-medium text-amber-900">{OPS_DRAG_CUSTOMER_CONTRACT.geography}</p>
         <p className="mt-4 max-w-2xl text-sm leading-7 text-stone-700">{OPS_DRAG_CUSTOMER_CONTRACT.supportLine}</p>
 
-        {leadId ? (
-          <OpsDragReportCheckout leadId={leadId} enabled={false} />
-        ) : (
-          <div className="mt-8 rounded-2xl border border-stone-300 bg-white p-6">
-            <p className="font-semibold text-stone-900">{OPS_DRAG_CUSTOMER_CONTRACT.cta}</p>
-            <p className="mt-2 text-sm leading-7 text-stone-700">
-              Complete the Ops Check first. Checkout remains held until every accepted runtime gate is proven.
-            </p>
-            <Link href="/services/custom-ops-hub" className="mt-4 inline-flex font-semibold text-amber-900 underline underline-offset-4">
-              Start the Ops Check
-            </Link>
-          </div>
-        )}
+        <div className="mt-8 rounded-2xl border border-stone-300 bg-white p-6">
+          <p className="font-semibold text-stone-900">Launch held</p>
+          <p className="mt-2 text-sm leading-7 text-stone-700">
+            Purchase and submission actions remain unavailable until every accepted launch-release gate is proven.
+          </p>
+        </div>
 
         <section className="mt-12 rounded-2xl border border-stone-300 bg-white p-6 sm:p-8">
           <h2 className="text-2xl font-semibold text-stone-950">What you receive</h2>

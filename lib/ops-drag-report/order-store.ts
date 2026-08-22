@@ -108,3 +108,23 @@ export async function claimOpsDragFulfillment(
   }
   throw new Error("Ops Drag Report fulfillment lease lost its atomic update budget");
 }
+
+export async function transitionOpsDragOrder(
+  supabase: SupabaseClient,
+  submissionId: string,
+  transition: (order: OpsDragOrder) => OpsDragOrder
+): Promise<OpsDragOrder> {
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
+    const row = await loadMetadataRow(supabase, submissionId);
+    const current = readOrder(row.metadata);
+    if (!current) throw new Error("Ops Drag Report order has not been admitted");
+
+    const next = transition(structuredClone(current));
+    if (next.order_id !== current.order_id || next.submission_id !== current.submission_id) {
+      throw new Error("Ops Drag Report transition changed immutable order identity");
+    }
+    if (JSON.stringify(next) === JSON.stringify(current)) return current;
+    if (await compareAndSwapOrder(supabase, row, next)) return next;
+  }
+  throw new Error("Ops Drag Report state transition lost its atomic update budget");
+}

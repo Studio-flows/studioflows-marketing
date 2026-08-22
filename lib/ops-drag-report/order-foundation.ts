@@ -22,7 +22,77 @@ export type OpsDragAdmittedSnapshot = {
 export type OpsDragReceiptKind =
   | "SUBMISSION_ADMITTED"
   | "PAYMENT_ADMITTED_FULFILLMENT_OWNED"
-  | "DUPLICATE_PAYMENT_EVENT_NOOP";
+  | "DUPLICATE_PAYMENT_EVENT_NOOP"
+  | "GENERATION_ATTEMPT_RECORDED"
+  | "REPORT_VALIDATED"
+  | "DELIVERY_ATTEMPT_RECORDED"
+  | "DELIVERY_PROVIDER_EVENT_RECORDED"
+  | "REFUND_REQUIRED"
+  | "REFUND_ATTEMPT_OWNED"
+  | "REFUND_PROVIDER_EVENT_RECORDED"
+  | "ORDER_TERMINAL"
+  | "ORDER_TOKEN_CONSUMED";
+
+export type OpsDragTerminalDisposition = "DELIVERED" | "REFUNDED";
+
+export type OpsDragAutomationAttempt = {
+  attempt_id: string;
+  kind: "GENERATION" | "DELIVERY" | "REFUND";
+  attempt_number: number;
+  state: "STARTED" | "FAILED" | "VALIDATED" | "SUBMITTED" | "SUCCEEDED";
+  recorded_at: string;
+  failure_code: string | null;
+};
+
+export type OpsDragAutomationState = {
+  version: "v1";
+  template_version: "ops_drag_report_template_v1";
+  terminal_disposition: OpsDragTerminalDisposition | null;
+  generation: {
+    status: "PENDING" | "IN_PROGRESS" | "VALIDATED" | "RETRYABLE" | "FAILED";
+    attempts: number;
+    max_attempts: 3;
+    report_schema_version: "ops_drag_report_v1";
+    report_sha256: string | null;
+    pdf_sha256: string | null;
+    validated_at: string | null;
+  };
+  delivery: {
+    status:
+      | "PENDING"
+      | "SUBMITTED"
+      | "ACCEPTED"
+      | "QUEUED"
+      | "SENT"
+      | "DELIVERED"
+      | "HARD_BOUNCE"
+      | "RETRYABLE"
+      | "FAILED";
+    attempts: number;
+    max_attempts: 3;
+    provider_message_id: string | null;
+    delivered_at: string | null;
+  };
+  refund: {
+    status: "NOT_REQUIRED" | "REQUIRED" | "OWNED" | "CREATED" | "RETRYABLE" | "SUCCEEDED" | "FAILED";
+    attempts: number;
+    max_attempts: 3;
+    lease_owner: string | null;
+    idempotency_key: string | null;
+    provider_refund_id: string | null;
+  };
+  sla: {
+    generation_due_at: string;
+    delivery_submit_due_at: string;
+    delivery_confirmation_due_at: string;
+    refund_eligible_at: string;
+    refund_initiation_due_at: string;
+  };
+  attempts: OpsDragAutomationAttempt[];
+  processed_provider_event_ids: string[];
+  consumed_token_ids: string[];
+  blocker_code: string | null;
+};
 
 export type OpsDragChainedReceipt = {
   version: "v1";
@@ -51,7 +121,7 @@ export type OpsDragOrder = {
   version: "v1";
   order_id: string;
   submission_id: string;
-  workflow_status: "READY" | "IN_PROGRESS";
+  workflow_status: "READY" | "IN_PROGRESS" | "BLOCKED" | "DONE";
   snapshot: OpsDragAdmittedSnapshot;
   payment: OpsDragPaymentAdmission | null;
   fulfillment: {
@@ -59,6 +129,7 @@ export type OpsDragOrder = {
     lease_acquired_at: string | null;
   };
   processed_event_ids: string[];
+  automation: OpsDragAutomationState | null;
   receipts: OpsDragChainedReceipt[];
 };
 
@@ -177,7 +248,7 @@ function createOrderId(snapshot: OpsDragAdmittedSnapshot): string {
   return `odr_${sha256(`${snapshot.submission_id}|${snapshot.digest}|v1`).slice(0, 32)}`;
 }
 
-function appendReceipt(
+export function appendReceipt(
   order: Omit<OpsDragOrder, "receipts"> & { receipts: OpsDragChainedReceipt[] },
   kind: OpsDragReceiptKind,
   recordedAt: string,
@@ -211,6 +282,7 @@ export function createAdmittedOrder(snapshot: OpsDragAdmittedSnapshot): OpsDragO
     payment: null,
     fulfillment: { lease_owner: null, lease_acquired_at: null },
     processed_event_ids: [],
+    automation: null,
     receipts: [],
   };
   return {
@@ -226,6 +298,9 @@ export function createAdmittedOrder(snapshot: OpsDragAdmittedSnapshot): OpsDragO
 function assertTransition(from: OpsDragOrder["workflow_status"], to: OpsDragOrder["workflow_status"]): void {
   if (from === "READY" && to === "IN_PROGRESS") return;
   if (from === "IN_PROGRESS" && to === "IN_PROGRESS") return;
+  if (from === "IN_PROGRESS" && (to === "BLOCKED" || to === "DONE")) return;
+  if (from === "BLOCKED" && to === "BLOCKED") return;
+  if (from === "DONE" && to === "DONE") return;
   throw new Error(`Order transition ${from}->${to} is not allowed in the foundation gate`);
 }
 

@@ -33,16 +33,22 @@ The Stripe restricted key should grant only the minimum permissions required to 
 5. Payment admission validates session mode, offer/version, one-time cadence and quantity, submission/client/order references, snapshot digest, paid state, payment reference, amount, currency, email, and US country.
 6. The existing lead metadata stores the durable order. JSON compare-and-swap makes payment-event deduplication and one-order fulfillment ownership one atomic transition without a schema change.
 7. The transition appends a hash-chained, allowlisted receipt containing email SHA-256 only. It never stores the raw webhook payload or raw email in the receipt chain.
-8. This foundation gate stops at fulfillment ownership. Report generation, provider delivery, delivery confirmation, retries, and refunds remain later held gates.
+8. The provider-agnostic delivery/refund state machine validates a strict versioned report contract, scans report content for secret-shaped strings and unsupported claims, and records report/PDF SHA-256 digests.
+9. Generation, delivery, and refund use durable bounded attempt ledgers and fixed SLA clocks. Email `accepted`, `queued`, and `sent` events remain nonterminal; only provider-confirmed `delivered` terminates as `DELIVERED`.
+10. A hard bounce or expired delivery-confirmation SLA requires a full refund. Refund ownership uses exactly `ops-drag:{checkout_session_id}:refund:v1`; `refund.created` is nonterminal and only provider-confirmed success terminates as `REFUNDED`.
+11. Signed, expiring, single-use tokens bind results, redelivery, or refund requests to one order and one action. Token IDs are stored only for replay prevention and are hashed in receipts.
+12. Attempt, delivery, refund, token, and terminal evidence extends the existing redacted hash chain. Exactly one terminal outcome is allowed, and only `DELIVERED` qualifies as a verified first sale.
+
+This preview contains provider adapter contracts only. It does not call an email or refund provider, send a message, issue a refund, or expose a report URL.
 
 ## Rollback
 
 1. Set `OPS_DRAG_REPORT_CHECKOUT_ENABLED=false` (or remove it) to stop new Sessions.
 2. Remove any public link to `/ops-drag-report`.
 3. Preserve the webhook until already-paid Sessions are fulfilled or refunded under the approved refund policy.
-4. Revert the feature branch or PR. No schema rollback is required because this build adds no table or migration.
+4. Revert the feature branch or PR. The delivery/refund state is stored inside the existing durable order metadata, so no schema rollback is required.
 
-Rollback receipt: the pre-foundation branch commit is `d0c6fc443205543f3326cfd8e6ff4b65ba8f2acb`. Repointing the feature branch to that commit removes the durable foundation preview without touching production or changing any schema.
+Rollback receipt: the pre-delivery/refund base commit is `ddb37bcbe33b2470ccb08786461a31f4516bc92f`. Repointing the feature branch to that commit removes this state-machine preview without touching production, providers, or any schema.
 
 ## Proof ladder
 

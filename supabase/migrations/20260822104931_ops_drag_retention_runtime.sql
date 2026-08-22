@@ -48,6 +48,10 @@ alter table public.custom_ops_hub_leads
 create table if not exists public.ops_drag_retention_holds (
   record_id uuid primary key references public.custom_ops_hub_leads(id) on delete cascade,
   hold jsonb not null,
+  source_evidence_hash text not null check (source_evidence_hash ~ '^[0-9a-f]{64}$'),
+  source_receipt_hash text not null check (source_receipt_hash ~ '^[0-9a-f]{64}$'),
+  source_kind text not null check (source_kind in ('LEGACY_METADATA', 'CANONICAL_RUNTIME')),
+  quarantined boolean not null default false,
   original_due_at timestamptz check (original_due_at is null or isfinite(original_due_at)),
   created_at timestamptz not null default now() check (isfinite(created_at)),
   updated_at timestamptz not null default now() check (isfinite(updated_at))
@@ -56,16 +60,6 @@ create table if not exists public.ops_drag_retention_holds (
 alter table public.ops_drag_retention_holds enable row level security;
 revoke all on table public.ops_drag_retention_holds from public, anon, authenticated;
 grant select, insert, update on table public.ops_drag_retention_holds to service_role;
-
-insert into public.ops_drag_retention_holds (record_id, hold, original_due_at)
-select lead.id, lead.metadata -> 'ops_drag_retention_legal_hold', lead.ops_drag_retention_due_at
-  from public.custom_ops_hub_leads as lead
- where lead.metadata ? 'ops_drag_retention_legal_hold'
-on conflict (record_id) do nothing;
-
-update public.custom_ops_hub_leads
-   set metadata = metadata - 'ops_drag_retention_legal_hold'
- where metadata ? 'ops_drag_retention_legal_hold';
 
 do $$
 begin
@@ -213,31 +207,75 @@ exception when others then
 end;
 $$;
 
+create or replace function public.ops_drag_retention_hold_valid(p_hold jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = ''
+as $$
+begin
+  if jsonb_typeof(p_hold) is distinct from 'object'
+     or not (p_hold ? 'id')
+     or not (p_hold ? 'data_classes')
+     or exists (
+       select 1
+         from jsonb_object_keys(p_hold) as hold_key(value)
+        where hold_key.value not in ('id', 'released_at', 'data_classes')
+     )
+     or jsonb_typeof(p_hold -> 'id') is distinct from 'string'
+     or (p_hold ->> 'id') !~ '^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$'
+     or jsonb_typeof(p_hold -> 'data_classes') is distinct from 'array'
+     or jsonb_array_length(p_hold -> 'data_classes') = 0 then
+    return false;
+  end if;
+  if exists (
+    select 1
+      from jsonb_array_elements(p_hold -> 'data_classes') as scope(value)
+     where jsonb_typeof(scope.value) is distinct from 'string'
+        or scope.value #>> '{}' not in (
+          'ALL',
+          'UNPAID_SUBMISSION',
+          'RAW_PAID_SUBMISSION',
+          'GENERATED_REPORT',
+          'EMAIL_ORDER_MAPPING',
+          'SUPPORT_TRANSCRIPT',
+          'RAW_ATTRIBUTION',
+          'ATTRIBUTION_AGGREGATE',
+          'DETAILED_RECEIPT_LEDGER',
+          'REDUCED_TRANSACTION_RECORD'
+        )
+  ) then
+    return false;
+  end if;
+  if (p_hold ? 'released_at')
+     and jsonb_typeof(p_hold -> 'released_at') is distinct from 'null'
+     and (
+       jsonb_typeof(p_hold -> 'released_at') is distinct from 'string'
+       or public.ops_drag_try_timestamptz(p_hold ->> 'released_at') is null
+     ) then
+    return false;
+  end if;
+  return true;
+exception when others then
+  return false;
+end;
+$$;
+
 create or replace function public.ops_drag_retention_hold_covers(p_hold jsonb, p_stage text)
 returns boolean
 language plpgsql
 immutable
 set search_path = ''
 as $$
-declare
-  v_released_at text;
 begin
   if p_hold is null then
     return false;
   end if;
-  if jsonb_typeof(p_hold) is distinct from 'object' then
+  if not public.ops_drag_retention_hold_valid(p_hold) then
     return true;
   end if;
-  v_released_at := p_hold ->> 'released_at';
-  if v_released_at is not null and btrim(v_released_at) <> '' then
-    if public.ops_drag_try_timestamptz(v_released_at) is null then
-      return true;
-    end if;
+  if (p_hold ? 'released_at') and jsonb_typeof(p_hold -> 'released_at') <> 'null' then
     return false;
-  end if;
-  if jsonb_typeof(p_hold -> 'data_classes') is distinct from 'array'
-     or jsonb_array_length(p_hold -> 'data_classes') = 0 then
-    return true;
   end if;
   return (p_hold -> 'data_classes') ? 'ALL'
     or (p_hold -> 'data_classes') ? p_stage;
@@ -381,6 +419,7 @@ revoke all on function public.ops_drag_retention_terminal_at(jsonb) from public,
 revoke all on function public.ops_drag_retention_order_lifecycle(jsonb) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_order_due_at(jsonb, timestamptz) from public, anon, authenticated;
 revoke all on function public.ops_drag_try_integer(text) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_hold_valid(jsonb) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_hold_covers(jsonb, text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_dispute_state(jsonb) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_detailed_due_at(jsonb) from public, anon, authenticated;
@@ -390,10 +429,83 @@ grant execute on function public.ops_drag_retention_terminal_at(jsonb) to servic
 grant execute on function public.ops_drag_retention_order_lifecycle(jsonb) to service_role;
 grant execute on function public.ops_drag_retention_order_due_at(jsonb, timestamptz) to service_role;
 grant execute on function public.ops_drag_try_integer(text) to service_role;
+grant execute on function public.ops_drag_retention_hold_valid(jsonb) to service_role;
 grant execute on function public.ops_drag_retention_hold_covers(jsonb, text) to service_role;
 grant execute on function public.ops_drag_retention_dispute_state(jsonb) to service_role;
 grant execute on function public.ops_drag_retention_detailed_due_at(jsonb) to service_role;
 grant execute on function public.ops_drag_retention_reduced_metadata_valid(jsonb) to service_role;
+
+do $$
+declare
+  v_lead record;
+  v_source_hold jsonb;
+  v_normalized_hold jsonb;
+  v_evidence_hash text;
+  v_receipt_hash text;
+  v_quarantined boolean;
+begin
+  for v_lead in
+    select lead.id, lead.metadata, lead.ops_drag_retention_due_at
+      from public.custom_ops_hub_leads as lead
+     where lead.metadata ? 'ops_drag_retention_legal_hold'
+     for update
+  loop
+    v_source_hold := v_lead.metadata -> 'ops_drag_retention_legal_hold';
+    v_evidence_hash := encode(extensions.digest(v_source_hold::text, 'sha256'), 'hex');
+    v_quarantined := not public.ops_drag_retention_hold_valid(v_source_hold);
+    v_normalized_hold := case
+      when v_quarantined then jsonb_build_object(
+        'id', 'quarantine:' || substring(v_evidence_hash from 1 for 32),
+        'released_at', null,
+        'data_classes', jsonb_build_array('ALL')
+      )
+      else v_source_hold
+    end;
+    v_receipt_hash := encode(extensions.digest(jsonb_build_object(
+      'source_kind', 'LEGACY_METADATA',
+      'record_id_hash', encode(extensions.digest(v_lead.id::text, 'sha256'), 'hex'),
+      'source_evidence_hash', v_evidence_hash,
+      'normalized_hold', v_normalized_hold,
+      'quarantined', v_quarantined
+    )::text, 'sha256'), 'hex');
+
+    insert into public.ops_drag_retention_holds (
+      record_id, hold, source_evidence_hash, source_receipt_hash,
+      source_kind, quarantined, original_due_at
+    ) values (
+      v_lead.id, v_normalized_hold, v_evidence_hash, v_receipt_hash,
+      'LEGACY_METADATA', v_quarantined, v_lead.ops_drag_retention_due_at
+    ) on conflict (record_id) do nothing;
+
+    if not found and not exists (
+      select 1
+        from public.ops_drag_retention_holds as existing_hold
+       where existing_hold.record_id = v_lead.id
+         and existing_hold.source_evidence_hash = v_evidence_hash
+         and existing_hold.source_receipt_hash = v_receipt_hash
+    ) then
+      raise exception 'retention legal hold backfill conflicts with existing evidence';
+    end if;
+
+    update public.custom_ops_hub_leads
+       set metadata = metadata - 'ops_drag_retention_legal_hold'
+     where id = v_lead.id;
+  end loop;
+end $$;
+
+do $$
+begin
+  if not exists (
+    select 1
+      from pg_constraint
+     where conname = 'ops_drag_retention_holds_canonical_check'
+       and conrelid = 'public.ops_drag_retention_holds'::regclass
+  ) then
+    alter table public.ops_drag_retention_holds
+      add constraint ops_drag_retention_holds_canonical_check
+      check (public.ops_drag_retention_hold_valid(hold));
+  end if;
+end $$;
 
 create or replace function public.claim_ops_drag_retention_batch(
   p_recorded_at timestamptz,

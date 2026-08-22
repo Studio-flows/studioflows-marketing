@@ -375,35 +375,51 @@ assert.equal(planRetentionAction({
 }, "2032-01-01T00:00:00.000Z").kind, "DELETE");
 
 type AtomicHoldFixture = {
+  id?: unknown;
   released_at?: unknown;
   data_classes?: unknown;
+  [key: string]: unknown;
 } | null;
 
 function migrationHoldCovers(hold: AtomicHoldFixture, stage: RetentionDataClass): boolean {
   if (hold === null) return false;
   if (typeof hold !== "object" || Array.isArray(hold)) return true;
+  const allowedKeys = new Set(["id", "released_at", "data_classes"]);
+  if (Object.keys(hold).some((key) => !allowedKeys.has(key))) return true;
+  if (typeof hold.id !== "string" || !/^[A-Za-z0-9][A-Za-z0-9:_-]{0,127}$/.test(hold.id)) return true;
+  if (!Array.isArray(hold.data_classes) || hold.data_classes.length === 0) return true;
+  const allowedScopes = new Set([
+    "ALL", "UNPAID_SUBMISSION", "RAW_PAID_SUBMISSION", "GENERATED_REPORT",
+    "EMAIL_ORDER_MAPPING", "SUPPORT_TRANSCRIPT", "RAW_ATTRIBUTION",
+    "ATTRIBUTION_AGGREGATE", "DETAILED_RECEIPT_LEDGER", "REDUCED_TRANSACTION_RECORD",
+  ]);
+  if (hold.data_classes.some((scope) => typeof scope !== "string" || !allowedScopes.has(scope))) return true;
   const releasedAt = hold.released_at === null || hold.released_at === undefined
     ? ""
     : String(hold.released_at);
-  if (releasedAt !== "") return Number.isNaN(Date.parse(releasedAt));
-  if (!Array.isArray(hold.data_classes) || hold.data_classes.length === 0) return true;
+  if (releasedAt !== "") {
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(releasedAt)) return true;
+    return Number.isNaN(Date.parse(releasedAt));
+  }
   return hold.data_classes.includes("ALL") || hold.data_classes.includes(stage);
 }
 
 for (const coveredHold of [
-  { released_at: null },
-  { released_at: null, data_classes: [] },
-  { released_at: null, data_classes: ["ALL"] },
-  { released_at: null, data_classes: ["RAW_PAID_SUBMISSION"] },
+  { id: "malformed-missing-scope", released_at: null },
+  { id: "malformed-empty-scope", released_at: null, data_classes: [] },
+  { id: "valid-all", released_at: null, data_classes: ["ALL"] },
+  { id: "valid-raw", released_at: null, data_classes: ["RAW_PAID_SUBMISSION"] },
+  { id: "malformed-numeric", released_at: null, data_classes: [123] },
+  { id: "malformed-unknown", released_at: null, data_classes: ["TYPO"] },
 ] satisfies AtomicHoldFixture[]) {
   assert.equal(migrationHoldCovers(coveredHold, "RAW_PAID_SUBMISSION"), true);
 }
 assert.equal(
-  migrationHoldCovers({ released_at: null, data_classes: ["EMAIL_ORDER_MAPPING"] }, "RAW_PAID_SUBMISSION"),
+  migrationHoldCovers({ id: "valid-other", released_at: null, data_classes: ["EMAIL_ORDER_MAPPING"] }, "RAW_PAID_SUBMISSION"),
   false,
 );
 assert.equal(
-  migrationHoldCovers({ released_at: "2031-12-31T00:00:00.000Z", data_classes: ["ALL"] }, "RAW_PAID_SUBMISSION"),
+  migrationHoldCovers({ id: "valid-release", released_at: "2031-12-31T00:00:00.000Z", data_classes: ["ALL"] }, "RAW_PAID_SUBMISSION"),
   false,
 );
 
@@ -444,7 +460,7 @@ const claimHoldApplyRace: AtomicRetentionFixture = {
 };
 const dueBeforeRace = claimHoldApplyRace.due_at;
 const originBeforeRace = claimHoldApplyRace.origin_at;
-claimHoldApplyRace.legal_hold = { released_at: null, data_classes: ["RAW_PAID_SUBMISSION"] };
+claimHoldApplyRace.legal_hold = { id: "race-hold", released_at: null, data_classes: ["RAW_PAID_SUBMISSION"] };
 assert.equal(applyAtomicRetentionFixture(claimHoldApplyRace), "HELD");
 assert.equal(claimHoldApplyRace.private_content, "must-survive-claim-hold-apply-race");
 assert.deepEqual(claimHoldApplyRace.destructive_receipts, []);
@@ -497,7 +513,7 @@ const heldStatusRow: AtomicRetentionFixture = {
   lease_owner: OWNER,
   lease_attempts: 1,
   blocker_code: null,
-  legal_hold: { released_at: null, data_classes: [] },
+  legal_hold: { id: "runtime-all", released_at: null, data_classes: ["ALL"] },
   private_content: "must-remain-private-after-held-disposition",
   destructive_receipts: [],
 };
@@ -746,10 +762,16 @@ for (const contract of [
   /create table if not exists public\.ops_drag_retention_holds/,
   /alter table public\.ops_drag_retention_holds enable row level security/,
   /revoke all on table public\.ops_drag_retention_holds from public, anon, authenticated/,
-  /insert into public\.ops_drag_retention_holds[\s\S]+metadata -> 'ops_drag_retention_legal_hold'/,
+  /create or replace function public\.ops_drag_retention_hold_valid/,
+  /ops_drag_retention_holds_canonical_check/,
+  /source_evidence_hash/,
+  /source_receipt_hash/,
+  /'quarantine:' \|\| substring\(v_evidence_hash/,
+  /insert into public\.ops_drag_retention_holds[\s\S]+LEGACY_METADATA/,
+  /metadata -> 'ops_drag_retention_legal_hold'/,
   /ops_drag_retention_hold_covers\(v_hold, v_stage\)/,
-  /jsonb_typeof\(p_hold -> 'data_classes'\) is distinct from 'array'[\s\S]+return true/,
-  /jsonb_array_length\(p_hold -> 'data_classes'\) = 0[\s\S]+return true/,
+  /not public\.ops_drag_retention_hold_valid\(p_hold\)[\s\S]+return true/,
+  /scope\.value #>> '\{\}' not in/,
   /not isfinite\(v_parsed\)/,
   /retention receipt timestamps are invalid/,
   /retention defer timestamp is invalid/,
@@ -790,12 +812,14 @@ assert.match(applyFunction, /ops_drag_retention_last_blocker_code = 'RETENTION_L
 assert.match(applyFunction, /ops_drag_retention_lease_owner = null[\s\S]+ops_drag_retention_lease_acquired_at = null/);
 assert.match(rollback, /drop function if exists public\.claim_ops_drag_retention_batch/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_hold_covers\(jsonb, text\)/);
+assert.match(rollback, /drop function if exists public\.ops_drag_retention_hold_valid\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_detailed_due_at\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_dispute_state\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_order_lifecycle\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_reduced_metadata_valid\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.defer_ops_drag_retention_claim/);
 assert.match(rollback, /set metadata = jsonb_set[\s\S]+ops_drag_retention_legal_hold/);
+assert.match(rollback, /quarantine_evidence_hash/);
 assert.match(rollback, /drop table if exists public\.ops_drag_retention_holds/);
 assert.match(rollback, /drop constraint if exists custom_ops_hub_leads_retention_timestamps_finite_check/);
 assert.match(rollback, /drop table if exists public\.ops_drag_retention_receipts/);

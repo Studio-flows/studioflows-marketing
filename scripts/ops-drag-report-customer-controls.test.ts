@@ -132,7 +132,46 @@ Object.defineProperty(accessorGates, "providerRuntimeAccepted", { enumerable: tr
 const symbolExtra = { ...allLaunchGates, [Symbol("extra")]: true };
 const nonEnumerableExtra = { ...allLaunchGates };
 Object.defineProperty(nonEnumerableExtra, "extra", { value: true, enumerable: false });
-const throwingProxy = new Proxy({}, { ownKeys() { throw new Error("malformed gate proxy"); } });
+class ReleaseGateInstance {
+  sourceHashesAccepted = true;
+  managedPaymentsAccepted = true;
+  taxConfigurationAccepted = true;
+  providerRuntimeAccepted = true;
+  productionReleaseAccepted = true;
+  dependencySecurityAccepted = true;
+  campaignControlsAccepted = true;
+  kiroLaunchReleased = true;
+}
+const customPrototype = { releasePrototype: "custom" };
+const customPrototypeGates = Object.assign(Object.create(customPrototype), allLaunchGates);
+const nullPrototypeGates = Object.assign(Object.create(null), allLaunchGates);
+const customPrototypeProxy = new Proxy({ ...allLaunchGates }, {
+  getPrototypeOf() {
+    return customPrototype;
+  },
+});
+const nullPrototypeProxy = new Proxy({ ...allLaunchGates }, {
+  getPrototypeOf() {
+    return null;
+  },
+});
+const throwingPrototypeProxy = new Proxy({ ...allLaunchGates }, {
+  getPrototypeOf() {
+    throw new Error("malformed prototype trap");
+  },
+});
+const throwingOwnKeysProxy = new Proxy({ ...allLaunchGates }, {
+  ownKeys() {
+    throw new Error("malformed ownKeys trap");
+  },
+});
+const throwingDescriptorProxy = new Proxy({ ...allLaunchGates }, {
+  getOwnPropertyDescriptor() {
+    throw new Error("malformed descriptor trap");
+  },
+});
+const revokedReleaseProxyControl = Proxy.revocable({ ...allLaunchGates }, {});
+revokedReleaseProxyControl.revoke();
 for (const malformed of [
   undefined,
   null,
@@ -153,7 +192,15 @@ for (const malformed of [
   accessorGates,
   symbolExtra,
   nonEnumerableExtra,
-  throwingProxy,
+  new ReleaseGateInstance(),
+  customPrototypeGates,
+  nullPrototypeGates,
+  customPrototypeProxy,
+  nullPrototypeProxy,
+  throwingPrototypeProxy,
+  throwingOwnKeysProxy,
+  throwingDescriptorProxy,
+  revokedReleaseProxyControl.proxy,
 ]) assertLaunchHeld(malformed);
 const acceptedRuntime = resolveCustomerContractRuntime(allLaunchGates);
 assert.equal(acceptedRuntime.launchReleased, true);

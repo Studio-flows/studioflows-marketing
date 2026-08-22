@@ -74,8 +74,9 @@ export const CUSTOMER_LAUNCH_GATE_KEYS = [
 export type CustomerContractRuntimeGates = Record<(typeof CUSTOMER_LAUNCH_GATE_KEYS)[number], true>;
 
 export function isCompleteCustomerLaunchRelease(gates: unknown): gates is CustomerContractRuntimeGates {
-  if (gates === null || typeof gates !== "object" || Array.isArray(gates)) return false;
   try {
+    if (gates === null || typeof gates !== "object" || Array.isArray(gates)) return false;
+    if (Object.getPrototypeOf(gates) !== Object.prototype) return false;
     const ownKeys = Reflect.ownKeys(gates);
     if (
       ownKeys.length !== CUSTOMER_LAUNCH_GATE_KEYS.length ||

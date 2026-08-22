@@ -9,8 +9,8 @@ import {
   assertBusinessUseInputCeilingAcknowledgment,
   assertCustomerContractClaimCeiling,
   type CustomerContractRuntimeGates,
-  resolveCustomerContractRuntime,
 } from "../lib/ops-drag-report/accepted-contract.ts";
+import { resolveCustomerContractRuntime } from "../lib/ops-drag-report/launch-release.server.ts";
 import {
   ACQUISITION_AVERAGE_DAILY_BUDGET_CENTS,
   FIRST_SALE_ORDER_DIGEST_METHOD_VERSION,
@@ -145,6 +145,63 @@ class ReleaseGateInstance {
 const customPrototype = { releasePrototype: "custom" };
 const customPrototypeGates = Object.assign(Object.create(customPrototype), allLaunchGates);
 const nullPrototypeGates = Object.assign(Object.create(null), allLaunchGates);
+const transparentProxy = new Proxy({ ...allLaunchGates }, {});
+const nestedProxy = new Proxy(transparentProxy, {});
+const proxyTrapCalls = {
+  forwardingPrototype: 0,
+  forwardingOwnKeys: 0,
+  forwardingDescriptor: 0,
+  syntheticPrototype: 0,
+  syntheticOwnKeys: 0,
+  syntheticDescriptor: 0,
+  hidingPrototype: 0,
+  hidingOwnKeys: 0,
+  hidingDescriptor: 0,
+};
+const forwardingProxy = new Proxy({ ...allLaunchGates }, {
+  getPrototypeOf(target) {
+    proxyTrapCalls.forwardingPrototype += 1;
+    return Reflect.getPrototypeOf(target);
+  },
+  ownKeys(target) {
+    proxyTrapCalls.forwardingOwnKeys += 1;
+    return Reflect.ownKeys(target);
+  },
+  getOwnPropertyDescriptor(target, property) {
+    proxyTrapCalls.forwardingDescriptor += 1;
+    return Reflect.getOwnPropertyDescriptor(target, property);
+  },
+});
+const syntheticProxy = new Proxy({}, {
+  getPrototypeOf() {
+    proxyTrapCalls.syntheticPrototype += 1;
+    return Object.prototype;
+  },
+  ownKeys() {
+    proxyTrapCalls.syntheticOwnKeys += 1;
+    return [...Object.keys(allLaunchGates)];
+  },
+  getOwnPropertyDescriptor(_target, property) {
+    proxyTrapCalls.syntheticDescriptor += 1;
+    return Object.hasOwn(allLaunchGates, property)
+      ? { value: true, writable: true, enumerable: true, configurable: true }
+      : undefined;
+  },
+});
+const hidingExtraProxy = new Proxy({ ...allLaunchGates, hiddenExtra: true }, {
+  getPrototypeOf(target) {
+    proxyTrapCalls.hidingPrototype += 1;
+    return Reflect.getPrototypeOf(target);
+  },
+  ownKeys() {
+    proxyTrapCalls.hidingOwnKeys += 1;
+    return [...Object.keys(allLaunchGates)];
+  },
+  getOwnPropertyDescriptor(target, property) {
+    proxyTrapCalls.hidingDescriptor += 1;
+    return Reflect.getOwnPropertyDescriptor(target, property);
+  },
+});
 const customPrototypeProxy = new Proxy({ ...allLaunchGates }, {
   getPrototypeOf() {
     return customPrototype;
@@ -195,6 +252,14 @@ for (const malformed of [
   new ReleaseGateInstance(),
   customPrototypeGates,
   nullPrototypeGates,
+  transparentProxy,
+  nestedProxy,
+  forwardingProxy,
+  syntheticProxy,
+  hidingExtraProxy,
+  new Proxy(new ReleaseGateInstance(), {}),
+  new Proxy(customPrototypeGates, {}),
+  new Proxy(nullPrototypeGates, {}),
   customPrototypeProxy,
   nullPrototypeProxy,
   throwingPrototypeProxy,
@@ -202,6 +267,17 @@ for (const malformed of [
   throwingDescriptorProxy,
   revokedReleaseProxyControl.proxy,
 ]) assertLaunchHeld(malformed);
+assert.deepEqual(proxyTrapCalls, {
+  forwardingPrototype: 0,
+  forwardingOwnKeys: 0,
+  forwardingDescriptor: 0,
+  syntheticPrototype: 0,
+  syntheticOwnKeys: 0,
+  syntheticDescriptor: 0,
+  hidingPrototype: 0,
+  hidingOwnKeys: 0,
+  hidingDescriptor: 0,
+});
 const acceptedRuntime = resolveCustomerContractRuntime(allLaunchGates);
 assert.equal(acceptedRuntime.launchReleased, true);
 assert.equal(acceptedRuntime.cta, OPS_DRAG_CUSTOMER_CONTRACT.cta);
@@ -215,6 +291,7 @@ assertBusinessUseInputCeilingAcknowledgment(true);
 const intakeSource = readFileSync("app/services/custom-ops-hub/CustomOpsHubClient.js", "utf8");
 const legacyIngestSource = readFileSync("app/api/studioflows/ingest-lead/route.ts", "utf8");
 const heldPageSource = readFileSync("app/ops-drag-report/page.tsx", "utf8");
+const launchReleaseSource = readFileSync("lib/ops-drag-report/launch-release.server.ts", "utf8");
 assert.equal(intakeSource.includes("OPS_DRAG_PRIVACY_DISCLOSURE"), false);
 assert.equal(intakeSource.includes("businessUseAccepted"), false);
 assert.equal(legacyIngestSource.includes("ops_drag_input_contract"), false);
@@ -225,6 +302,14 @@ assert.equal(heldPageSource.includes("<Link"), false);
 assert.equal(heldPageSource.includes("OPS_DRAG_CUSTOMER_CONTRACT.geography"), false);
 assert.ok(heldPageSource.includes("runtime.geography"));
 assert.ok(heldPageSource.includes("Purchase and submission actions remain unavailable"));
+assert.ok(heldPageSource.includes('export const runtime = "nodejs"'));
+assert.ok(heldPageSource.includes("launch-release.server"));
+assert.ok(launchReleaseSource.includes('from "node:util"'));
+assert.ok(launchReleaseSource.indexOf("types.isProxy(gates)") < launchReleaseSource.indexOf("Object.getPrototypeOf(gates)"));
+assert.ok(launchReleaseSource.indexOf("types.isProxy(gates)") < launchReleaseSource.indexOf("Reflect.ownKeys(gates)"));
+assert.ok(
+  launchReleaseSource.indexOf("types.isProxy(gates)") < launchReleaseSource.indexOf("Object.getOwnPropertyDescriptors(gates)"),
+);
 
 const legacyInvocations = {
   leadStorage: 0,

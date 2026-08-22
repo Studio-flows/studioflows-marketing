@@ -1,8 +1,10 @@
 import {
   OPS_DRAG_CUSTOMER_CONTRACT,
   OPS_DRAG_PRIVACY_DISCLOSURE,
-  resolveCustomerContractRuntime,
 } from "@/lib/ops-drag-report/accepted-contract";
+import { resolveCustomerContractRuntime } from "@/lib/ops-drag-report/launch-release.server";
+
+export const runtime = "nodejs";
 
 export const metadata = {
   title: "Ops Drag Report | StudioFlows",

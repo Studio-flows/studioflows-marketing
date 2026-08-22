@@ -570,8 +570,12 @@ const invalidatedThenAppliedStore = new MultiRecordStore([
     last_activity_at: "2031-12-25T00:00:00.000Z",
     lease: { owner: OWNER, acquired_at: "2032-01-01T00:00:00.000Z", attempts: 1 },
   }),
-  record("UNPAID_SUBMISSION", runtimeRow(), {
+  record("RAW_PAID_SUBMISSION", runtimeRow(), {
     record_id: "00000000-0000-0000-0000-000000000002",
+    lease: { owner: OWNER, acquired_at: "2032-01-01T00:00:00.000Z", attempts: 1 },
+  }),
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000003",
     last_activity_at: "2031-12-25T00:00:00.000Z",
     lease: { owner: OWNER, acquired_at: "2032-01-01T00:00:00.000Z", attempts: 1 },
   }),
@@ -581,7 +585,7 @@ const invalidatedThenAppliedAdapter = createRetentionMutationAdapter({
   enabled: true,
   async deleteRecord() {
     invalidationApplyCalls += 1;
-    return invalidationApplyCalls === 1 ? "DEFERRED" : "APPLIED";
+    return invalidationApplyCalls < 3 ? "DEFERRED" : "APPLIED";
   },
   async reduceRecord() { throw new Error("invalidation fixture must not reduce"); },
 });
@@ -592,8 +596,8 @@ const invalidatedThenAppliedResult = await runRetentionCleanupWorker({
   now: "2032-01-01T00:00:00.000Z",
   staleBefore: "2031-12-31T23:45:00.000Z",
 });
-assert.deepEqual(invalidatedThenAppliedResult, { scanned: 2, applied: 1, held: 0, skipped: 1, blocked: 0 });
-assert.equal(invalidatedThenAppliedStore.receipts.length, 1, "the unrelated second row must still complete");
+assert.deepEqual(invalidatedThenAppliedResult, { scanned: 3, applied: 1, held: 0, skipped: 2, blocked: 0 });
+assert.equal(invalidatedThenAppliedStore.receipts.length, 1, "the unrelated final row must still complete");
 assert.deepEqual(invalidatedThenAppliedStore.releases, [], "lifecycle invalidation must not enter release failure handling");
 await runRetentionCleanupWorker({
   store: firstStore,
@@ -728,7 +732,7 @@ assert.equal(lifecycleStoreUpdate.ops_drag_retention_stage, "AWAITING_TERMINAL")
 assert.equal(lifecycleStoreUpdate.ops_drag_retention_lease_owner, null);
 assert.equal(lifecycleStoreUpdate.ops_drag_retention_attempts, 0);
 assert.match(applyFunction, /v_expected_stage := p_patch ->> 'expected_stage';[\s\S]+ops_drag_retention_lease_owner is distinct from p_owner/);
-assert.match(applyFunction, /ops_drag_retention_lease_owner is null[\s\S]+v_expected_stage = 'UNPAID_SUBMISSION'[\s\S]+return 'DEFERRED'/);
+assert.match(applyFunction, /ops_drag_retention_lease_owner is null then\s+return 'DEFERRED'/);
 assert.match(orderStore, /retention_redacted === true/);
 for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION).filter((key) => key !== "pre_qual")) {
   assert.match(ingestLeadRoute, new RegExp(`${key}:`), `${key} fixture must remain bound to the actual intake shape`);

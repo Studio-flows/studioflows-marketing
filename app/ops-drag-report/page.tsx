@@ -12,12 +12,12 @@ export const metadata = {
 export default function OpsDragReportPage() {
   const runtime = resolveCustomerContractRuntime({
     sourceHashesAccepted: false,
-    taxPathCleared: false,
-    stripeConfigurationAccepted: false,
-    checkoutAccepted: false,
-    deliveryAccepted: false,
-    supportRefundAccepted: false,
-    usOnlyAccepted: false,
+    managedPaymentsAccepted: false,
+    taxConfigurationAccepted: false,
+    providerRuntimeAccepted: false,
+    productionReleaseAccepted: false,
+    dependencySecurityAccepted: false,
+    campaignControlsAccepted: false,
     kiroLaunchReleased: false,
   });
 
@@ -32,7 +32,7 @@ export default function OpsDragReportPage() {
           {OPS_DRAG_CUSTOMER_CONTRACT.introduction}
         </p>
         <p className="mt-5 text-lg font-semibold text-stone-950">{OPS_DRAG_CUSTOMER_CONTRACT.price}</p>
-        <p className="mt-2 text-sm font-medium text-amber-900">{OPS_DRAG_CUSTOMER_CONTRACT.geography}</p>
+        {runtime.geography ? <p className="mt-2 text-sm font-medium text-amber-900">{runtime.geography}</p> : null}
         <p className="mt-4 max-w-2xl text-sm leading-7 text-stone-700">{OPS_DRAG_CUSTOMER_CONTRACT.supportLine}</p>
 
         <div className="mt-8 rounded-2xl border border-stone-300 bg-white p-6">

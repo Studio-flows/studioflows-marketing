@@ -60,27 +60,44 @@ export const OPS_DRAG_CUSTOMER_CONTRACT = {
   ],
 } as const;
 
-export type CustomerContractRuntimeGates = {
-  sourceHashesAccepted: boolean;
-  taxPathCleared: boolean;
-  stripeConfigurationAccepted: boolean;
-  checkoutAccepted: boolean;
-  deliveryAccepted: boolean;
-  supportRefundAccepted: boolean;
-  usOnlyAccepted: boolean;
-  kiroLaunchReleased: boolean;
-};
+export const CUSTOMER_LAUNCH_GATE_KEYS = [
+  "sourceHashesAccepted",
+  "managedPaymentsAccepted",
+  "taxConfigurationAccepted",
+  "providerRuntimeAccepted",
+  "productionReleaseAccepted",
+  "dependencySecurityAccepted",
+  "campaignControlsAccepted",
+  "kiroLaunchReleased",
+] as const;
 
-export function isCompleteCustomerLaunchRelease(gates: CustomerContractRuntimeGates): boolean {
-  return Object.values(gates).every((value) => value === true);
+export type CustomerContractRuntimeGates = Record<(typeof CUSTOMER_LAUNCH_GATE_KEYS)[number], true>;
+
+export function isCompleteCustomerLaunchRelease(gates: unknown): gates is CustomerContractRuntimeGates {
+  if (gates === null || typeof gates !== "object" || Array.isArray(gates)) return false;
+  try {
+    const ownKeys = Reflect.ownKeys(gates);
+    if (
+      ownKeys.length !== CUSTOMER_LAUNCH_GATE_KEYS.length ||
+      ownKeys.some((key) => typeof key !== "string" || !CUSTOMER_LAUNCH_GATE_KEYS.includes(key as never))
+    ) return false;
+    const descriptors = Object.getOwnPropertyDescriptors(gates);
+    return CUSTOMER_LAUNCH_GATE_KEYS.every((key) => {
+      const descriptor = descriptors[key];
+      return descriptor !== undefined && "value" in descriptor && descriptor.value === true;
+    });
+  } catch {
+    return false;
+  }
 }
 
-export function resolveCustomerContractRuntime(gates: CustomerContractRuntimeGates) {
+export function resolveCustomerContractRuntime(gates: unknown) {
   const launchReleased = isCompleteCustomerLaunchRelease(gates);
   return {
     launchReleased,
     cta: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.cta : null,
     purchaseAction: launchReleased ? "/ops-drag-report/intake" : null,
+    geography: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.geography : null,
     checkout: launchReleased ? OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[1] : null,
     delivery: launchReleased
       ? {

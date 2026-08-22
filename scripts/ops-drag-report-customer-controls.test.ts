@@ -85,29 +85,81 @@ for (const forbidden of ["Pinpoints the root cause", "Guaranteed savings", "Avai
 }
 const allLaunchGates: CustomerContractRuntimeGates = {
   sourceHashesAccepted: true,
-  taxPathCleared: true,
-  stripeConfigurationAccepted: true,
-  checkoutAccepted: true,
-  deliveryAccepted: true,
-  supportRefundAccepted: true,
-  usOnlyAccepted: true,
+  managedPaymentsAccepted: true,
+  taxConfigurationAccepted: true,
+  providerRuntimeAccepted: true,
+  productionReleaseAccepted: true,
+  dependencySecurityAccepted: true,
+  campaignControlsAccepted: true,
   kiroLaunchReleased: true,
 };
-for (const gate of Object.keys(allLaunchGates) as Array<keyof CustomerContractRuntimeGates>) {
-  const heldRuntime = resolveCustomerContractRuntime({ ...allLaunchGates, [gate]: false });
+const expectedHeldRuntime = {
+  launchReleased: false,
+  cta: null,
+  purchaseAction: null,
+  geography: null,
+  checkout: null,
+  delivery: null,
+  supportRefund: null,
+};
+function assertLaunchHeld(value: unknown): void {
+  const heldRuntime = resolveCustomerContractRuntime(value);
   assert.deepEqual(heldRuntime, {
-    launchReleased: false,
-    cta: null,
-    purchaseAction: null,
-    checkout: null,
-    delivery: null,
-    supportRefund: null,
+    ...expectedHeldRuntime,
   });
+  assert.equal(JSON.stringify(heldRuntime).includes("Initial launch availability"), false);
+  assert.equal(JSON.stringify(heldRuntime).includes("available now"), false);
 }
+for (const gate of Object.keys(allLaunchGates) as Array<keyof CustomerContractRuntimeGates>) {
+  assertLaunchHeld({ ...allLaunchGates, [gate]: false });
+}
+const inheritedOnly = Object.create(allLaunchGates) as Record<string, unknown>;
+const missingOwnKey = Object.assign(Object.create({ kiroLaunchReleased: true }), {
+  sourceHashesAccepted: true,
+  managedPaymentsAccepted: true,
+  taxConfigurationAccepted: true,
+  providerRuntimeAccepted: true,
+  productionReleaseAccepted: true,
+  dependencySecurityAccepted: true,
+  campaignControlsAccepted: true,
+});
+const truthyNonBoolean = { ...allLaunchGates, providerRuntimeAccepted: "true" };
+const caseVariant = { ...allLaunchGates } as Record<string, unknown>;
+delete caseVariant.kiroLaunchReleased;
+caseVariant.KiroLaunchReleased = true;
+const accessorGates = Object.fromEntries(Object.keys(allLaunchGates).map((key) => [key, true]));
+Object.defineProperty(accessorGates, "providerRuntimeAccepted", { enumerable: true, get: () => true });
+const symbolExtra = { ...allLaunchGates, [Symbol("extra")]: true };
+const nonEnumerableExtra = { ...allLaunchGates };
+Object.defineProperty(nonEnumerableExtra, "extra", { value: true, enumerable: false });
+const throwingProxy = new Proxy({}, { ownKeys() { throw new Error("malformed gate proxy"); } });
+for (const malformed of [
+  undefined,
+  null,
+  [],
+  [true, true, true, true, true, true, true, true],
+  "true",
+  1,
+  true,
+  false,
+  {},
+  { sourceHashesAccepted: true },
+  { ...allLaunchGates, kiroLaunchReleased: undefined },
+  { ...allLaunchGates, extra: true },
+  inheritedOnly,
+  missingOwnKey,
+  truthyNonBoolean,
+  caseVariant,
+  accessorGates,
+  symbolExtra,
+  nonEnumerableExtra,
+  throwingProxy,
+]) assertLaunchHeld(malformed);
 const acceptedRuntime = resolveCustomerContractRuntime(allLaunchGates);
 assert.equal(acceptedRuntime.launchReleased, true);
 assert.equal(acceptedRuntime.cta, OPS_DRAG_CUSTOMER_CONTRACT.cta);
 assert.equal(acceptedRuntime.purchaseAction, "/ops-drag-report/intake");
+assert.equal(acceptedRuntime.geography, OPS_DRAG_CUSTOMER_CONTRACT.geography);
 assert.equal(acceptedRuntime.checkout, OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[1]);
 assert.equal(acceptedRuntime.delivery?.receives, OPS_DRAG_CUSTOMER_CONTRACT.runtimeReceives);
 assert.equal(acceptedRuntime.supportRefund, OPS_DRAG_CUSTOMER_CONTRACT.supportRefund);
@@ -123,6 +175,8 @@ assert.equal(legacyIngestSource.includes("business_use_input_ceiling_ack"), fals
 assert.equal(heldPageSource.includes("OPS_DRAG_CUSTOMER_CONTRACT.cta"), false);
 assert.equal(heldPageSource.includes("OpsDragReportCheckout"), false);
 assert.equal(heldPageSource.includes("<Link"), false);
+assert.equal(heldPageSource.includes("OPS_DRAG_CUSTOMER_CONTRACT.geography"), false);
+assert.ok(heldPageSource.includes("runtime.geography"));
 assert.ok(heldPageSource.includes("Purchase and submission actions remain unavailable"));
 
 const legacyInvocations = {

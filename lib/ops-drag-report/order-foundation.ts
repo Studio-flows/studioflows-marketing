@@ -92,6 +92,8 @@ export type OpsDragAutomationState = {
     lease_owner: string | null;
     idempotency_key: string | null;
     provider_refund_id: string | null;
+    request_outcome_unknown_count: number;
+    max_request_outcome_unknown_count: 3;
   };
   sla: {
     generation_due_at: string;

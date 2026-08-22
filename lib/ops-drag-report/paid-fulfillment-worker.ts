@@ -2,7 +2,9 @@ import {
   applyRefundProviderEvent,
   claimRefundAttempt,
   expireDeliverySla,
+  RefundSubmissionOutcomeUnknownError,
   recordRefundRequestFailure,
+  recordRefundSubmissionOutcomeUnknown,
   type EmailProviderAdapter,
   type RefundProviderAdapter,
   type ReportGenerationAdapter,
@@ -38,7 +40,13 @@ export async function processPaidFulfillmentWorkerOrder(input: {
     order = await input.store.transition((current) => expireDeliverySla(current, input.recordedAt));
   }
 
-  if (refundStatus(order) !== "REQUIRED" && refundStatus(order) !== "RETRYABLE") {
+  if (refundStatus(order) === "CREATED" || refundStatus(order) === "SUCCEEDED") return "noop";
+
+  if (
+    refundStatus(order) !== "REQUIRED" &&
+    refundStatus(order) !== "RETRYABLE" &&
+    refundStatus(order) !== "OWNED"
+  ) {
     const orchestration = await orchestratePaidOpsDragFulfillment({
       store: input.store,
       generationAdapter: input.generationAdapter,
@@ -52,13 +60,18 @@ export async function processPaidFulfillmentWorkerOrder(input: {
   }
 
   let ownership = claimRefundAttempt(order, input.recordedAt);
-  if (ownership.disposition !== "acquired") return "noop";
-  order = await input.store.transition((current) => {
-    const currentOwnership = claimRefundAttempt(current, input.recordedAt);
-    ownership = currentOwnership;
-    return currentOwnership.order;
-  });
-  if (ownership.disposition !== "acquired") return "noop";
+  if (refundStatus(order) !== "OWNED") {
+    order = await input.store.transition((current) => {
+      const currentOwnership = claimRefundAttempt(current, input.recordedAt);
+      ownership = currentOwnership;
+      return currentOwnership.order;
+    });
+  }
+  if (refundStatus(order) !== "OWNED") return "noop";
+  if (
+    order.automation!.refund.request_outcome_unknown_count >=
+    order.automation!.refund.max_request_outcome_unknown_count
+  ) return "blocked";
 
   let refundAdapter: RefundProviderAdapter;
   try {
@@ -79,7 +92,13 @@ export async function processPaidFulfillmentWorkerOrder(input: {
       currency: "usd",
       idempotencyKey: ownership.idempotencyKey,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof RefundSubmissionOutcomeUnknownError) {
+      await input.store.transition((current) =>
+        recordRefundSubmissionOutcomeUnknown(current, input.recordedAt)
+      );
+      return "blocked";
+    }
     await input.store.transition((current) =>
       recordRefundRequestFailure(current, "REFUND_PROVIDER_REQUEST_FAILED", input.recordedAt)
     );

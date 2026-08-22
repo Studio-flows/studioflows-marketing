@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 
 import {
   expireDeliverySla,
+  RefundSubmissionOutcomeUnknownError,
   type EmailProviderAdapter,
   type RefundProviderAdapter,
 } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
@@ -54,6 +55,7 @@ function createPaidOrder(id: string): OpsDragOrder {
 class AtomicOrderStore implements PaidFulfillmentOrderStore {
   private order: OpsDragOrder;
   private serial: Promise<void> = Promise.resolve();
+  failNextRefundCreatedCommit = false;
 
   constructor(order: OpsDragOrder) {
     this.order = structuredClone(order);
@@ -66,12 +68,53 @@ class AtomicOrderStore implements PaidFulfillmentOrderStore {
 
   async transition(apply: (order: OpsDragOrder) => OpsDragOrder): Promise<OpsDragOrder> {
     let result: OpsDragOrder | null = null;
+    let failure: Error | null = null;
     this.serial = this.serial.then(() => {
-      this.order = structuredClone(apply(structuredClone(this.order)));
-      result = structuredClone(this.order);
+      try {
+        const next = apply(structuredClone(this.order));
+        if (this.failNextRefundCreatedCommit && next.automation?.refund.status === "CREATED") {
+          this.failNextRefundCreatedCommit = false;
+          throw new Error("fixture crash before refund response persistence");
+        }
+        this.order = structuredClone(next);
+        result = structuredClone(this.order);
+      } catch (error) {
+        failure = error instanceof Error ? error : new Error("fixture transition failed");
+      }
     });
     await this.serial;
+    if (failure) throw failure;
     return result!;
+  }
+}
+
+class IdempotentRefundFixture implements RefundProviderAdapter {
+  calls = 0;
+  acceptedRefunds = 0;
+  unknownResponsesRemaining: number;
+  readonly idempotencyKeys: string[] = [];
+  private readonly refunds = new Map<string, string>();
+
+  constructor(unknownResponses = 0) {
+    this.unknownResponsesRemaining = unknownResponses;
+  }
+
+  async requestFullRefund(
+    input: Parameters<RefundProviderAdapter["requestFullRefund"]>[0]
+  ): Promise<{ providerRefundId: string }> {
+    this.calls += 1;
+    this.idempotencyKeys.push(input.idempotencyKey);
+    let refundId = this.refunds.get(input.idempotencyKey);
+    if (!refundId) {
+      refundId = `re_${input.checkoutSessionId}`;
+      this.refunds.set(input.idempotencyKey, refundId);
+      this.acceptedRefunds += 1;
+    }
+    if (this.unknownResponsesRemaining > 0) {
+      this.unknownResponsesRemaining -= 1;
+      throw new RefundSubmissionOutcomeUnknownError();
+    }
+    return { providerRefundId: refundId };
   }
 }
 
@@ -164,6 +207,74 @@ assert.equal(
 );
 assert.ok(verifyReceiptChain(refundConfigFailure));
 
+const refundCrashStore = new AtomicOrderStore(expireDeliverySla(createPaidOrder("refund-response-crash"), REFUND_AT));
+refundCrashStore.failNextRefundCreatedCommit = true;
+const crashRefundProvider = new IdempotentRefundFixture();
+await assert.rejects(() => processPaidFulfillmentWorkerOrder({
+  store: refundCrashStore,
+  generationAdapter,
+  createEmailAdapter: () => successfulEmail,
+  createRefundAdapter: () => crashRefundProvider,
+  recordedAt: REFUND_AT,
+}), /fixture crash before refund response persistence/);
+const ownedAfterCrash = await refundCrashStore.load();
+assert.equal(ownedAfterCrash.automation?.refund.status, "OWNED");
+assert.equal(ownedAfterCrash.automation?.refund.attempts, 1);
+const crashKey = ownedAfterCrash.automation?.refund.idempotency_key;
+assert.ok(crashKey);
+const refundCrashRecovery = await processPaidFulfillmentWorkerOrder({
+  store: refundCrashStore,
+  generationAdapter,
+  createEmailAdapter: () => successfulEmail,
+  createRefundAdapter: () => crashRefundProvider,
+  recordedAt: "2026-08-22T21:00:01.000Z",
+});
+assert.equal(refundCrashRecovery, "processed");
+assert.equal((await refundCrashStore.load()).automation?.refund.status, "CREATED");
+assert.equal(crashRefundProvider.acceptedRefunds, 1);
+assert.equal(new Set(crashRefundProvider.idempotencyKeys).size, 1);
+assert.equal(crashRefundProvider.idempotencyKeys[0], crashKey);
+const refundCrashDuplicateWake = await processPaidFulfillmentWorkerOrder({
+  store: refundCrashStore,
+  generationAdapter,
+  createEmailAdapter: () => successfulEmail,
+  createRefundAdapter: () => crashRefundProvider,
+  recordedAt: "2026-08-22T21:00:02.000Z",
+});
+assert.equal(refundCrashDuplicateWake, "noop");
+assert.equal(crashRefundProvider.acceptedRefunds, 1);
+
+const refundUnknownStore = new AtomicOrderStore(expireDeliverySla(createPaidOrder("refund-response-unknown"), REFUND_AT));
+const unknownRefundProvider = new IdempotentRefundFixture(1);
+const unknownRefundFirst = await processPaidFulfillmentWorkerOrder({
+  store: refundUnknownStore,
+  generationAdapter,
+  createEmailAdapter: () => successfulEmail,
+  createRefundAdapter: () => unknownRefundProvider,
+  recordedAt: REFUND_AT,
+});
+assert.equal(unknownRefundFirst, "blocked");
+const refundUnknownOwned = await refundUnknownStore.load();
+assert.equal(refundUnknownOwned.automation?.refund.status, "OWNED");
+assert.equal(refundUnknownOwned.automation?.refund.attempts, 1);
+assert.equal(refundUnknownOwned.automation?.refund.request_outcome_unknown_count, 1);
+const unknownRefundSecond = await processPaidFulfillmentWorkerOrder({
+  store: refundUnknownStore,
+  generationAdapter,
+  createEmailAdapter: () => successfulEmail,
+  createRefundAdapter: () => unknownRefundProvider,
+  recordedAt: "2026-08-22T21:00:01.000Z",
+});
+assert.equal(unknownRefundSecond, "processed");
+const refundUnknownCreated = await refundUnknownStore.load();
+assert.equal(refundUnknownCreated.automation?.refund.status, "CREATED");
+assert.equal(refundUnknownCreated.automation?.refund.attempts, 1);
+assert.equal(unknownRefundProvider.acceptedRefunds, 1);
+assert.equal(new Set(unknownRefundProvider.idempotencyKeys).size, 1);
+const refundReceiptJson = JSON.stringify(refundUnknownCreated.receipts);
+assert.doesNotMatch(refundReceiptJson, /refund-response-unknown@example\.com|missing context/);
+assert.ok(verifyReceiptChain(refundUnknownCreated));
+
 type BatchFixture = {
   store: AtomicOrderStore;
   emailFactory(): EmailProviderAdapter;
@@ -210,6 +321,7 @@ const terminalRows = Array.from({ length: 10 }, (_, index) => {
   return { cursorId: `${index + 1}`.padStart(3, "0"), order };
 });
 const eligibleEleventh = createPaidOrder("eligible-eleventh");
+assert.equal(eligibleEleventh.automation, null, "fixture must preserve explicit JSON-null automation");
 const rotationRows = [...terminalRows, { cursorId: "011", order: eligibleEleventh }];
 const firstWake = selectBoundedWorkerPage({
   rows: rotationRows,
@@ -262,9 +374,15 @@ const workerMigration = readFileSync(
 assert.match(workerMigration, /for update/i);
 assert.match(workerMigration, /order by lead\.id asc[\s\S]*limit p_limit/i);
 assert.match(workerMigration, /after_id = v_last_id/i);
+assert.match(
+  workerMigration,
+  /jsonb_typeof\(page\.metadata #> '\{ops_drag_report_order,automation\}'\) = 'null'/i
+);
+assert.match(workerMigration, /refund,status\}' in \('REQUIRED', 'RETRYABLE', 'OWNED'\)/i);
 assert.match(workerMigration, /grant execute[\s\S]*to service_role/i);
 assert.doesNotMatch(workerMigration, /grant execute[\s\S]*to (?:anon|authenticated)/i);
+assert.equal((workerMigration.match(/\$\$/g) ?? []).length, 2, "migration function body must have one balanced dollar quote");
 
 console.log(
-  "OPS_DRAG_REPORT_WORKER_ISOLATION_PASS delivery_without_refund_config=PASS refund_without_email_config=PASS bounded_config_receipts=PASS batch_continues=PASS durable_rotation_reference=PASS due_selection=PASS"
+  "OPS_DRAG_REPORT_WORKER_ISOLATION_PASS delivery_without_refund_config=PASS refund_without_email_config=PASS bounded_config_receipts=PASS refund_owned_crash_recovery=PASS refund_unknown_same_key=PASS batch_continues=PASS json_null_cursor_recovery=PASS due_selection=PASS migration_contract=PASS"
 );

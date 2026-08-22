@@ -19,6 +19,7 @@ export const OPS_DRAG_REPORT_GENERATION_MAX_ATTEMPTS = 3 as const;
 export const OPS_DRAG_REPORT_DELIVERY_MAX_ATTEMPTS = 3 as const;
 export const OPS_DRAG_REPORT_SUBMISSION_OUTCOME_UNKNOWN_MAX_RETRIES = 3 as const;
 export const OPS_DRAG_REPORT_REFUND_MAX_ATTEMPTS = 3 as const;
+export const OPS_DRAG_REPORT_REFUND_OUTCOME_UNKNOWN_MAX_RETRIES = 3 as const;
 
 export type OpsDragReportDocument = {
   schema_version: typeof OPS_DRAG_REPORT_SCHEMA_VERSION;
@@ -89,6 +90,15 @@ export type RefundProviderAdapter = {
     idempotencyKey: string;
   }): Promise<{ providerRefundId: string }>;
 };
+
+export class RefundSubmissionOutcomeUnknownError extends Error {
+  readonly code = "REFUND_SUBMISSION_OUTCOME_UNKNOWN";
+
+  constructor() {
+    super("Refund provider submission outcome is unknown");
+    this.name = "RefundSubmissionOutcomeUnknownError";
+  }
+}
 
 export type EmailProviderEvent = {
   eventId: string;
@@ -304,6 +314,14 @@ function initializeAutomation(order: OpsDragOrder): OpsDragAutomationState {
           order.automation.delivery.max_submission_outcome_unknown_count ??
           OPS_DRAG_REPORT_SUBMISSION_OUTCOME_UNKNOWN_MAX_RETRIES,
       },
+      refund: {
+        ...order.automation.refund,
+        request_outcome_unknown_count:
+          order.automation.refund.request_outcome_unknown_count ?? 0,
+        max_request_outcome_unknown_count:
+          order.automation.refund.max_request_outcome_unknown_count ??
+          OPS_DRAG_REPORT_REFUND_OUTCOME_UNKNOWN_MAX_RETRIES,
+      },
     };
   }
   const paidAt = order.payment!.paidAt;
@@ -339,6 +357,8 @@ function initializeAutomation(order: OpsDragOrder): OpsDragAutomationState {
       lease_owner: null,
       idempotency_key: null,
       provider_refund_id: null,
+      request_outcome_unknown_count: 0,
+      max_request_outcome_unknown_count: OPS_DRAG_REPORT_REFUND_OUTCOME_UNKNOWN_MAX_RETRIES,
     },
     sla: {
       generation_due_at: addMinutes(paidAt, 1),
@@ -869,6 +889,9 @@ export function claimRefundAttempt(order: OpsDragOrder, recordedAt: string): Ref
     };
   }
   if (next.automation.refund.status === "OWNED" || next.automation.refund.status === "CREATED") {
+    if (!next.automation.refund.lease_owner || !next.automation.refund.idempotency_key) {
+      throw new Error("Existing refund ownership binding is incomplete");
+    }
     return {
       disposition: "duplicate",
       order,
@@ -890,6 +913,7 @@ export function claimRefundAttempt(order: OpsDragOrder, recordedAt: string): Ref
   next.automation.refund.attempts = attemptNumber;
   next.automation.refund.idempotency_key = idempotencyKey;
   next.automation.refund.lease_owner = leaseOwner;
+  next.automation.refund.request_outcome_unknown_count = 0;
   next.automation.attempts.push(createAttempt(order, "REFUND", attemptNumber, "STARTED", recordedAt, null));
   const updated = appendAutomationReceipt(next.order, "REFUND_ATTEMPT_OWNED", recordedAt, {
     attempt_number: attemptNumber,
@@ -984,6 +1008,37 @@ export function recordRefundRequestFailure(
     provider_confirmed_refunded: false,
     failure_code: failureCode,
     attempt_number: next.automation.refund.attempts,
+  });
+}
+
+export function recordRefundSubmissionOutcomeUnknown(
+  order: OpsDragOrder,
+  recordedAt: string
+): OpsDragOrder {
+  const next = cloneWithAutomation(order);
+  if (
+    next.automation.refund.status !== "OWNED" ||
+    next.automation.refund.attempts === 0 ||
+    !next.automation.refund.lease_owner ||
+    !next.automation.refund.idempotency_key
+  ) {
+    throw new Error("Unknown refund outcome requires the active refund lease");
+  }
+  if (
+    next.automation.refund.request_outcome_unknown_count >=
+    next.automation.refund.max_request_outcome_unknown_count
+  ) return order;
+  next.automation.refund.request_outcome_unknown_count += 1;
+  return appendAutomationReceipt(next.order, "REFUND_PROVIDER_EVENT_RECORDED", recordedAt, {
+    provider_event_id: null,
+    provider_refund_id: null,
+    provider_state: "SUBMISSION_OUTCOME_UNKNOWN",
+    provider_confirmed_refunded: false,
+    attempt_number: next.automation.refund.attempts,
+    refund_lease_owner: next.automation.refund.lease_owner,
+    refund_idempotency_key: next.automation.refund.idempotency_key,
+    transport_retry_count: next.automation.refund.request_outcome_unknown_count,
+    max_transport_retries: next.automation.refund.max_request_outcome_unknown_count,
   });
 }
 

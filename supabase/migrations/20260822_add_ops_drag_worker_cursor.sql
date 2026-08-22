@@ -80,7 +80,8 @@ begin
      and coalesce(page.metadata #>> '{ops_drag_report_order,automation,terminal_disposition}', '') = ''
      and (
        jsonb_typeof(page.metadata #> '{ops_drag_report_order,automation}') is null
-       or page.metadata #>> '{ops_drag_report_order,automation,refund,status}' in ('REQUIRED', 'RETRYABLE')
+       or jsonb_typeof(page.metadata #> '{ops_drag_report_order,automation}') = 'null'
+       or page.metadata #>> '{ops_drag_report_order,automation,refund,status}' in ('REQUIRED', 'RETRYABLE', 'OWNED')
        or page.metadata #>> '{ops_drag_report_order,automation,generation,status}' in ('PENDING', 'IN_PROGRESS', 'RETRYABLE')
        or page.metadata #>> '{ops_drag_report_order,automation,delivery,status}' in ('PENDING', 'RETRYABLE', 'SUBMITTING')
        or (

@@ -14,7 +14,7 @@ export function isOpsDragOrderWorkerEligibleDue(order: OpsDragOrder, recordedAt:
   if (!order.payment || order.automation?.terminal_disposition) return false;
   const automation = order.automation;
   if (!automation) return true;
-  if (automation.refund.status === "REQUIRED" || automation.refund.status === "RETRYABLE") return true;
+  if (["REQUIRED", "RETRYABLE", "OWNED"].includes(automation.refund.status)) return true;
   if (automation.refund.status !== "NOT_REQUIRED") return false;
   if (["PENDING", "IN_PROGRESS", "RETRYABLE"].includes(automation.generation.status)) return true;
   if (automation.generation.status !== "VALIDATED") return false;

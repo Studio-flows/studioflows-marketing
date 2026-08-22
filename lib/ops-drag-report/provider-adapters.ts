@@ -5,7 +5,10 @@ import type {
   EmailProviderAdapter,
   RefundProviderAdapter,
 } from "./delivery-refund-state-machine.ts";
-import { EmailSubmissionOutcomeUnknownError } from "./delivery-refund-state-machine.ts";
+import {
+  EmailSubmissionOutcomeUnknownError,
+  RefundSubmissionOutcomeUnknownError,
+} from "./delivery-refund-state-machine.ts";
 
 export type ProviderMode = "test" | "live";
 
@@ -185,7 +188,7 @@ export function createStripeRefundAdapterFactory(input: {
             },
             { idempotencyKey: expectedKey }
           );
-          if (!refund.id) throw new Error("Stripe did not return a refund ID");
+          if (!refund.id) throw new RefundSubmissionOutcomeUnknownError();
           return { providerRefundId: refund.id };
         },
       };
@@ -219,7 +222,17 @@ export function createStripeRefundTransport(restrictedKey: string): StripeRefund
   });
   return {
     async create(input, options) {
-      return stripe.refunds.create(input, options);
+      try {
+        return await stripe.refunds.create(input, options);
+      } catch (error) {
+        const type = error && typeof error === "object" && "type" in error
+          ? String((error as { type?: unknown }).type ?? "")
+          : "";
+        if (type === "StripeConnectionError" || type === "StripeAPIError") {
+          throw new RefundSubmissionOutcomeUnknownError();
+        }
+        throw error;
+      }
     },
   };
 }

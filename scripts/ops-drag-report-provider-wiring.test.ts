@@ -27,6 +27,7 @@ import {
 import {
   EmailSubmissionOutcomeUnknownError,
   expireDeliverySla,
+  RefundSubmissionOutcomeUnknownError,
 } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
 import {
   claimFulfillmentOwnership,
@@ -224,6 +225,22 @@ await assert.rejects(
     idempotencyKey: "ops-drag:cs_test_fixture:refund:v1",
   }),
   /exceeds/
+);
+const unknownRefundOutcomeAdapter = createStripeRefundAdapter({
+  environment: testEnvironment,
+  transport: { async create() { return { id: "" }; } },
+  orderId: "odr_fixture",
+  submissionId: "sub_fixture",
+});
+await assert.rejects(
+  () => unknownRefundOutcomeAdapter.requestFullRefund({
+    checkoutSessionId: "cs_test_fixture",
+    paymentReferenceId: "pi_test_fixture",
+    remainingRefundableAmount: 2_900,
+    currency: "usd",
+    idempotencyKey: "ops-drag:cs_test_fixture:refund:v1",
+  }),
+  (error) => error instanceof RefundSubmissionOutcomeUnknownError
 );
 
 const resendRawBody = JSON.stringify({

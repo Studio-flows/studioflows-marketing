@@ -4,8 +4,10 @@ import Stripe from "stripe";
 
 import {
   OPS_DRAG_REPORT_AMOUNT_CENTS,
+  OPS_DRAG_REPORT_INTEGRATION_IDENTIFIER,
   OPS_DRAG_REPORT_TAX_CODE,
   buildCheckoutSessionParams,
+  checkoutCountryGateStatus,
   createCheckoutIdempotencyKey,
   evaluateFulfillmentSession,
   hashEmail,
@@ -43,14 +45,36 @@ const params = buildCheckoutSessionParams(lead, "https://preview.example.com", b
 
 assert.equal(params.mode, "payment");
 assert.deepEqual(params.managed_payments, { enabled: true });
+assert.equal(params.integration_identifier, OPS_DRAG_REPORT_INTEGRATION_IDENTIFIER);
 assert.equal(params.customer_email, lead.workEmail);
 assert.equal(params.line_items?.[0]?.price_data?.unit_amount, OPS_DRAG_REPORT_AMOUNT_CENTS);
+assert.equal(params.line_items?.[0]?.price_data?.currency, "usd");
 assert.equal(params.line_items?.[0]?.price_data?.product_data?.tax_code, OPS_DRAG_REPORT_TAX_CODE);
-assert.deepEqual(params.shipping_address_collection?.allowed_countries, ["US"]);
 assert.equal(params.billing_address_collection, "required");
-assert.ok(!("payment_method_types" in params), "dynamic payment methods must remain enabled");
-assert.ok(!("automatic_tax" in params), "Managed Payments owns tax calculation");
+for (const unsupportedParameter of [
+  "automatic_tax",
+  "tax_id_collection",
+  "excluded_payment_method_types",
+  "adaptive_pricing",
+  "payment_method_configuration",
+  "payment_method_options",
+  "payment_method_types",
+  "customer_update",
+  "shipping_address_collection",
+  "shipping_options",
+  "payment_intent_data",
+  "invoice_creation",
+] as const) {
+  assert.ok(
+    !(unsupportedParameter in params),
+    `Managed Payments request must omit unsupported parameter ${unsupportedParameter}`
+  );
+}
 assert.ok(!JSON.stringify(params.metadata).includes(lead.workEmail), "metadata must not contain raw email");
+assert.equal(checkoutCountryGateStatus("CA", false), 403);
+assert.equal(checkoutCountryGateStatus(null, false), 403);
+assert.equal(checkoutCountryGateStatus(" us ", false), null);
+assert.equal(checkoutCountryGateStatus("CA", true), null);
 assert.equal(createCheckoutIdempotencyKey(lead.id), `ops-drag:${lead.id}:checkout:v1`);
 assert.equal(params.metadata?.intake_digest, snapshot.digest);
 assert.equal(params.metadata?.order_id, order.order_id);

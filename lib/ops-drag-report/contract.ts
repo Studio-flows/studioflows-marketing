@@ -63,6 +63,11 @@ export function createCheckoutIdempotencyKey(submissionId: string): string {
   return `ops-drag:${normalized}:checkout:v1`;
 }
 
+export function checkoutCountryGateStatus(country: string | null, isLocal: boolean): 403 | null {
+  const normalized = country?.trim().toUpperCase() || null;
+  return !isLocal && normalized !== "US" ? 403 : null;
+}
+
 export function buildCheckoutSessionParams(
   lead: CheckoutLead,
   returnOrigin: string,
@@ -81,7 +86,6 @@ export function buildCheckoutSessionParams(
     customer_email: normalized.workEmail,
     client_reference_id: normalized.id,
     billing_address_collection: "required",
-    shipping_address_collection: { allowed_countries: ["US"] },
     line_items: [
       {
         quantity: 1,

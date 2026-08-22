@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 
 import {
   buildCheckoutSessionParams,
+  checkoutCountryGateStatus,
   createCheckoutIdempotencyKey,
   normalizeCheckoutLead,
 } from "@/lib/ops-drag-report/contract";
@@ -23,8 +24,12 @@ function requestCountry(req: NextRequest): string | null {
 export async function POST(req: NextRequest) {
   const country = requestCountry(req);
   const isLocal = req.nextUrl.hostname === "localhost" || req.nextUrl.hostname === "127.0.0.1";
-  if (!isLocal && country !== "US") {
-    return NextResponse.json({ error: "Ops Drag Report checkout is currently US-only" }, { status: 403 });
+  const countryGateStatus = checkoutCountryGateStatus(country, isLocal);
+  if (countryGateStatus) {
+    return NextResponse.json(
+      { error: "Ops Drag Report checkout is currently US-only" },
+      { status: countryGateStatus }
+    );
   }
 
   const body = (await req.json().catch(() => null)) as Record<string, unknown> | null;

@@ -12,6 +12,14 @@ import {
 
 export type ProviderMode = "test" | "live";
 
+export type ResendTransportError = {
+  name: string;
+  message: string;
+  statusCode: number | null;
+  responsePresent: boolean;
+  headersPresent: boolean;
+};
+
 export type ResendTransport = {
   send(input: {
     from: string;
@@ -21,7 +29,7 @@ export type ResendTransport = {
     attachments: [{ filename: string; content: Buffer }];
     tags: [{ name: "order_id"; value: string }, { name: "submission_id"; value: string }];
     idempotencyKey: string;
-  }): Promise<{ id: string | null; error: string | null }>;
+  }): Promise<{ id: string | null; error: ResendTransportError | null }>;
 };
 
 export type StripeRefundTransport = {
@@ -83,6 +91,21 @@ export function createDeliveryIdempotencyKey(orderId: string, attemptNumber: num
   return `ops-drag:${orderId}:delivery:${attemptNumber}:v1`;
 }
 
+function isResendSubmissionOutcomeUnknown(error: ResendTransportError): boolean {
+  // No HTTP response cannot prove rejection. Timeouts, retry-later responses,
+  // and server failures are also ambiguous and must retain the same key.
+  if (!error.responsePresent || error.statusCode === null) return true;
+  if (error.statusCode === 408 || error.statusCode === 425 || error.statusCode === 429) return true;
+  if (error.statusCode >= 500) return true;
+
+  // A concrete 4xx response is a definitive provider rejection. Its provider
+  // body/message is deliberately not surfaced through the adapter error.
+  if (error.statusCode >= 400 && error.statusCode < 500) return false;
+
+  // Unknown or malformed classifications fail conservatively.
+  return true;
+}
+
 export function createResendEmailAdapter(input: {
   environment: ProviderEnvironment;
   transport: ResendTransport;
@@ -112,7 +135,12 @@ export function createResendEmailAdapter(input: {
       } catch {
         throw new EmailSubmissionOutcomeUnknownError();
       }
-      if (result.error) throw new Error(result.error);
+      if (result.error) {
+        if (isResendSubmissionOutcomeUnknown(result.error)) {
+          throw new EmailSubmissionOutcomeUnknownError();
+        }
+        throw new Error("Email provider definitively rejected submission");
+      }
       if (!result.id) throw new EmailSubmissionOutcomeUnknownError();
       return { providerMessageId: result.id };
     },
@@ -138,7 +166,16 @@ export function createResendTransport(apiKey: string): ResendTransport {
     async send(input) {
       const { idempotencyKey, ...message } = input;
       const result = await resend.emails.send(message, { idempotencyKey });
-      return { id: result.data?.id ?? null, error: result.error?.message ?? null };
+      const error = result.error
+        ? {
+            name: result.error.name,
+            message: result.error.message,
+            statusCode: result.error.statusCode,
+            responsePresent: result.error.statusCode !== null,
+            headersPresent: result.headers !== null,
+          }
+        : null;
+      return { id: result.data?.id ?? null, error };
     },
   };
 }

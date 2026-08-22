@@ -21,7 +21,12 @@ import {
   orchestratePaidOpsDragFulfillment,
   type PaidFulfillmentOrderStore,
 } from "../lib/ops-drag-report/paid-fulfillment-orchestrator.ts";
-import { createDeliveryIdempotencyKey } from "../lib/ops-drag-report/provider-adapters.ts";
+import {
+  createDeliveryIdempotencyKey,
+  createResendEmailAdapter,
+  createResendTransport,
+  type ProviderEnvironment,
+} from "../lib/ops-drag-report/provider-adapters.ts";
 import {
   claimFulfillmentOwnership,
   createAdmittedOrder,
@@ -32,6 +37,12 @@ import {
 
 const PAID_AT = "2026-08-22T20:00:00.000Z";
 const RUN_AT = "2026-08-22T20:01:00.000Z";
+const SDK_TEST_ENVIRONMENT: ProviderEnvironment = {
+  OPS_DRAG_REPORT_PROVIDER_MODE: "test",
+  OPS_DRAG_REPORT_PROVIDER_TEST_ENABLED: "true",
+  RESEND_API_KEY: "re_test_installed_sdk_fixture",
+  OPS_DRAG_REPORT_EMAIL_FROM: "StudioFlows <reports@example.com>",
+};
 
 function createPaidOrder(overrides: Record<string, unknown> = {}): OpsDragOrder {
   const snapshot = createAdmittedSnapshot({
@@ -265,6 +276,102 @@ const ambiguousSecond = await orchestratePaidOpsDragFulfillment({
 assert.equal(ambiguousSecond.disposition, "DELIVERY_SUBMITTED");
 assert.equal(ambiguousResumeEmail.acceptedSends, 1);
 assert.equal(new Set(ambiguousResumeEmail.idempotencyKeys).size, 1);
+
+const originalFetch = globalThis.fetch;
+const originalConsoleError = console.error;
+try {
+  console.error = () => undefined;
+  const acceptedSdkMessages = new Map<string, string>();
+  const sdkIdempotencyKeys: string[] = [];
+  let providerAcceptedSends = 0;
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    const key = new Headers(init?.headers).get("idempotency-key");
+    assert.ok(key, "installed SDK must forward the delivery idempotency key");
+    sdkIdempotencyKeys.push(key);
+    const priorMessage = acceptedSdkMessages.get(key);
+    if (!priorMessage) {
+      const acceptedMessage = "msg_sdk_response_loss";
+      acceptedSdkMessages.set(key, acceptedMessage);
+      providerAcceptedSends += 1;
+      throw new TypeError("fixture response lost after provider acceptance");
+    }
+    return new Response(JSON.stringify({ id: priorMessage }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+
+  const sdkBoundaryEmail = createResendEmailAdapter({
+    environment: SDK_TEST_ENVIRONMENT,
+    transport: createResendTransport(SDK_TEST_ENVIRONMENT.RESEND_API_KEY!),
+  });
+  const sdkBoundaryStore = new AtomicOrderStore(validatedCrashOrder);
+  const sdkBoundaryFirst = await orchestratePaidOpsDragFulfillment({
+    store: sdkBoundaryStore,
+    generationAdapter: deterministic,
+    emailAdapter: sdkBoundaryEmail,
+    recordedAt: "2026-08-22T20:01:07.000Z",
+  });
+  assert.equal(sdkBoundaryFirst.disposition, "DELIVERY_OUTCOME_UNKNOWN");
+  assert.equal(sdkBoundaryFirst.order.automation?.delivery.status, "SUBMITTING");
+  assert.equal(sdkBoundaryFirst.order.automation?.delivery.attempts, 1);
+  const sdkBoundarySecond = await orchestratePaidOpsDragFulfillment({
+    store: sdkBoundaryStore,
+    generationAdapter: deterministic,
+    emailAdapter: sdkBoundaryEmail,
+    recordedAt: "2026-08-22T20:01:08.000Z",
+  });
+  assert.equal(sdkBoundarySecond.disposition, "DELIVERY_SUBMITTED");
+  assert.equal(sdkBoundarySecond.order.automation?.delivery.attempts, 1);
+  assert.equal(providerAcceptedSends, 1, "response-loss recovery must not create a second accepted send");
+  assert.equal(new Set(sdkIdempotencyKeys).size, 1, "response-loss recovery must retain the same key");
+
+  const definitiveProviderDetail = "provider-private-validation-detail";
+  const definitiveIdempotencyKeys: string[] = [];
+  let definitiveProviderCalls = 0;
+  globalThis.fetch = (async (_input: string | URL | Request, init?: RequestInit) => {
+    definitiveProviderCalls += 1;
+    const key = new Headers(init?.headers).get("idempotency-key");
+    assert.ok(key);
+    definitiveIdempotencyKeys.push(key);
+    return new Response(JSON.stringify({
+      name: "validation_error",
+      message: definitiveProviderDetail,
+      statusCode: 422,
+    }), {
+      status: 422,
+      headers: { "content-type": "application/json", "x-provider-private": "must-not-persist" },
+    });
+  }) as typeof fetch;
+  const definitiveSdkEmail = createResendEmailAdapter({
+    environment: SDK_TEST_ENVIRONMENT,
+    transport: createResendTransport(SDK_TEST_ENVIRONMENT.RESEND_API_KEY!),
+  });
+  const definitiveSdkStore = new AtomicOrderStore(validatedCrashOrder);
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    const definitiveFailure = await orchestratePaidOpsDragFulfillment({
+      store: definitiveSdkStore,
+      generationAdapter: deterministic,
+      emailAdapter: definitiveSdkEmail,
+      recordedAt: `2026-08-22T20:1${attempt}:00.000Z`,
+    });
+    assert.equal(
+      definitiveFailure.disposition,
+      attempt === 3 ? "DELIVERY_FAILED" : "DELIVERY_RETRYABLE"
+    );
+  }
+  const definitiveSdkOrder = await definitiveSdkStore.load();
+  assert.equal(definitiveSdkOrder.automation?.delivery.attempts, 3);
+  assert.equal(definitiveSdkOrder.automation?.delivery.status, "FAILED");
+  assert.equal(definitiveSdkOrder.automation?.refund.status, "REQUIRED");
+  assert.equal(definitiveProviderCalls, 3);
+  assert.equal(new Set(definitiveIdempotencyKeys).size, 3, "definitive rejections consume bounded attempts");
+  assert.doesNotMatch(JSON.stringify(definitiveSdkOrder.receipts), new RegExp(definitiveProviderDetail));
+  assert.doesNotMatch(JSON.stringify(definitiveSdkOrder.receipts), /x-provider-private/);
+} finally {
+  globalThis.fetch = originalFetch;
+  console.error = originalConsoleError;
+}
 
 const webhookReconcileStore = new AtomicOrderStore(validatedCrashOrder);
 await webhookReconcileStore.transition((order) => claimDeliverySubmissionAttempt(order, RUN_AT).order);

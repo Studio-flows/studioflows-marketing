@@ -6,6 +6,7 @@ import Stripe from "stripe";
 import {
   createDeliveryIdempotencyKey,
   createResendEmailAdapter,
+  createResendTransport,
   createStripeRefundAdapter,
   type ProviderEnvironment,
   type ResendTransport,
@@ -190,6 +191,112 @@ await assert.rejects(
     attemptNumber: 1,
   }),
   (error) => error instanceof EmailSubmissionOutcomeUnknownError
+);
+
+const sdkRequest = emailRequest;
+assert.ok(sdkRequest, "successful fixture must capture the SDK request shape");
+const originalFetch = globalThis.fetch;
+const originalConsoleError = console.error;
+try {
+  console.error = () => undefined;
+  globalThis.fetch = (async () => {
+    throw new TypeError("fixture response lost after request write");
+  }) as typeof fetch;
+  const sdkTransport = createResendTransport("re_test_installed_sdk_fixture");
+  const sdkResult = await sdkTransport.send(sdkRequest);
+  assert.equal(sdkResult.id, null);
+  assert.deepEqual(sdkResult.error, {
+    name: "application_error",
+    message: "Unable to fetch data. The request could not be resolved.",
+    statusCode: null,
+    responsePresent: false,
+    headersPresent: false,
+  });
+  const sdkAdapter = createResendEmailAdapter({ environment: testEnvironment, transport: sdkTransport });
+  await assert.rejects(
+    () => sdkAdapter.submit({
+      orderId: "odr_sdk_boundary",
+      submissionId: "sub_sdk_boundary",
+      deliveryEmail: "owner@example.com",
+      reportSha256: "a".repeat(64),
+      pdfSha256: "b".repeat(64),
+      pdfBytes: new TextEncoder().encode("%PDF-1.7 sdk boundary fixture"),
+      filename: "studioflows-ops-drag-report.pdf",
+      attemptNumber: 1,
+    }),
+    (error) => error instanceof EmailSubmissionOutcomeUnknownError
+  );
+} finally {
+  globalThis.fetch = originalFetch;
+  console.error = originalConsoleError;
+}
+
+for (const statusCode of [408, 425, 429, 500, 503]) {
+  const ambiguousHttpAdapter = createResendEmailAdapter({
+    environment: testEnvironment,
+    transport: {
+      async send() {
+        return {
+          id: null,
+          error: {
+            name: "application_error",
+            message: "provider detail must not escape",
+            statusCode,
+            responsePresent: true,
+            headersPresent: true,
+          },
+        };
+      },
+    },
+  });
+  await assert.rejects(
+    () => ambiguousHttpAdapter.submit({
+      orderId: "odr_ambiguous_http",
+      submissionId: "sub_ambiguous_http",
+      deliveryEmail: "owner@example.com",
+      reportSha256: "a".repeat(64),
+      pdfSha256: "b".repeat(64),
+      pdfBytes: new TextEncoder().encode("%PDF-1.7 ambiguous response fixture"),
+      filename: "studioflows-ops-drag-report.pdf",
+      attemptNumber: 1,
+    }),
+    (error) => error instanceof EmailSubmissionOutcomeUnknownError,
+    `HTTP ${statusCode} must preserve the same delivery attempt and key`
+  );
+}
+
+const definitiveHttpAdapter = createResendEmailAdapter({
+  environment: testEnvironment,
+  transport: {
+    async send() {
+      return {
+        id: null,
+        error: {
+          name: "validation_error",
+          message: "provider body must remain redacted",
+          statusCode: 422,
+          responsePresent: true,
+          headersPresent: true,
+        },
+      };
+    },
+  },
+});
+await assert.rejects(
+  () => definitiveHttpAdapter.submit({
+    orderId: "odr_definitive_http",
+    submissionId: "sub_definitive_http",
+    deliveryEmail: "owner@example.com",
+    reportSha256: "a".repeat(64),
+    pdfSha256: "b".repeat(64),
+    pdfBytes: new TextEncoder().encode("%PDF-1.7 definitive response fixture"),
+    filename: "studioflows-ops-drag-report.pdf",
+    attemptNumber: 1,
+  }),
+  (error) =>
+    error instanceof Error &&
+    !(error instanceof EmailSubmissionOutcomeUnknownError) &&
+    error.message === "Email provider definitively rejected submission"
 );
 
 let refundRequest: Parameters<StripeRefundTransport["create"]>[0] | null = null;

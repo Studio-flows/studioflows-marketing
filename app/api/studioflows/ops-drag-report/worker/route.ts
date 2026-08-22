@@ -9,12 +9,11 @@ import {
   transitionOpsDragOrder,
 } from "@/lib/ops-drag-report/order-store";
 import {
-  createStripeRefundAdapter,
   createStripeRefundTransport,
-  readProviderMode,
 } from "@/lib/ops-drag-report/provider-adapters";
 import {
   assertSchedulerRequest,
+  preflightStripeRefundWorker,
   runBoundedProviderWorker,
 } from "@/lib/ops-drag-report/provider-worker";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
@@ -32,9 +31,10 @@ export async function GET(req: Request) {
       expectedSecret: process.env.OPS_DRAG_REPORT_WORKER_SECRET,
       enabled: process.env.OPS_DRAG_REPORT_PROVIDER_WORKER_ENABLED,
     });
-    readProviderMode(process.env);
-    const restrictedKey = process.env.STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY?.trim() ?? "";
-    const refundTransport = createStripeRefundTransport(restrictedKey);
+    const refundAdapterFactory = preflightStripeRefundWorker({
+      environment: process.env,
+      createTransport: createStripeRefundTransport,
+    });
     const supabase = createMarketingSupabaseServerClient();
     if (!supabase) throw new Error("Ops Drag Report order storage is not configured");
     const now = new Date().toISOString();
@@ -58,9 +58,7 @@ export async function GET(req: Request) {
         if (ownership.disposition !== "acquired") return "noop";
         let response: { providerRefundId: string };
         try {
-          const adapter = createStripeRefundAdapter({
-            environment: process.env,
-            transport: refundTransport,
+          const adapter = refundAdapterFactory.forOrder({
             orderId: ownership.order.order_id,
             submissionId: ownership.order.submission_id,
           });

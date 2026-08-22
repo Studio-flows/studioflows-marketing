@@ -20,8 +20,16 @@ import {
 } from "../lib/ops-drag-report/provider-webhooks.ts";
 import {
   assertSchedulerRequest,
+  preflightStripeRefundWorker,
   runBoundedProviderWorker,
 } from "../lib/ops-drag-report/provider-worker.ts";
+import { expireDeliverySla } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
+import {
+  claimFulfillmentOwnership,
+  createAdmittedOrder,
+  createAdmittedSnapshot,
+  type OpsDragOrder,
+} from "../lib/ops-drag-report/order-foundation.ts";
 
 const disabledEnvironment: ProviderEnvironment = {
   OPS_DRAG_REPORT_PROVIDER_MODE: "test",
@@ -34,6 +42,74 @@ const testEnvironment: ProviderEnvironment = {
   OPS_DRAG_REPORT_PROVIDER_TEST_ENABLED: "true",
   STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY: "rk_test_fixture",
 };
+
+function createRefundRequiredOrder(): OpsDragOrder {
+  const snapshot = createAdmittedSnapshot(
+    { id: "provider-preflight-submission", work_email: "owner@example.com", raw_answers: {}, metadata: {} },
+    "provider-preflight-submission",
+    "2026-08-22T20:00:00.000Z"
+  );
+  const paid = claimFulfillmentOwnership(createAdmittedOrder(snapshot), {
+    checkoutSessionId: "cs_test_provider_preflight",
+    paymentReferenceId: "pi_test_provider_preflight",
+    webhookEventId: "evt_test_provider_preflight",
+    paidAt: "2026-08-22T20:10:00.000Z",
+    amountTotal: 2_900,
+    currency: "usd",
+    customerEmailSha256: "a".repeat(64),
+    snapshotDigest: snapshot.digest,
+  }, "2026-08-22T20:10:01.000Z").order;
+  return expireDeliverySla(paid, "2026-08-22T21:00:00.000Z");
+}
+
+function assertPreflightFailsBeforeMutation(environment: ProviderEnvironment, expected: RegExp): void {
+  const order = createRefundRequiredOrder();
+  const receiptCount = order.receipts.length;
+  let scans = 0;
+  let leases = 0;
+  let providerCalls = 0;
+  assert.throws(() => {
+    const factory = preflightStripeRefundWorker({
+      environment,
+      createTransport: () => ({
+        async create() {
+          providerCalls += 1;
+          return { id: "re_must_not_run" };
+        },
+      }),
+    });
+    scans += 1;
+    leases += 1;
+    void factory;
+  }, expected);
+  assert.equal(scans, 0);
+  assert.equal(leases, 0);
+  assert.equal(providerCalls, 0);
+  assert.equal(order.automation?.refund.status, "REQUIRED");
+  assert.equal(order.automation?.refund.attempts, 0);
+  assert.equal(order.automation?.refund.lease_owner, null);
+  assert.equal(order.receipts.length, receiptCount);
+}
+
+assertPreflightFailsBeforeMutation({
+  ...testEnvironment,
+  STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY: "rk_live_fixture",
+}, /mode-matched restricted key/);
+assertPreflightFailsBeforeMutation({
+  ...testEnvironment,
+  OPS_DRAG_REPORT_PROVIDER_MODE: "live",
+  OPS_DRAG_REPORT_PROVIDER_LIVE_ENABLED: "true",
+  OPS_DRAG_REPORT_LIVE_ENABLED: "true",
+  STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY: "rk_test_fixture",
+}, /mode-matched restricted key/);
+assertPreflightFailsBeforeMutation({
+  ...testEnvironment,
+  STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY: undefined,
+}, /not configured/);
+assertPreflightFailsBeforeMutation({
+  ...testEnvironment,
+  OPS_DRAG_REPORT_PROVIDER_MODE: "invalid",
+}, /explicitly test or live/);
 
 const unusedEmailTransport: ResendTransport = {
   async send() {
@@ -241,5 +317,5 @@ await assert.rejects(
 );
 
 console.log(
-  "OPS_DRAG_REPORT_PROVIDER_WIRING_PASS email=1 refund=1 resend_signature=PASS stripe_signature=PASS scheduler_owners=3"
+  "OPS_DRAG_REPORT_PROVIDER_WIRING_PASS email=1 refund=1 resend_signature=PASS stripe_signature=PASS scheduler_owners=3 preflight_before_scan=PASS mismatch_cases=4"
 );

@@ -1,4 +1,21 @@
+import {
+  createStripeRefundAdapterFactory,
+  validateStripeRefundAdapterConfiguration,
+  type ProviderEnvironment,
+  type StripeRefundAdapterFactory,
+  type StripeRefundTransport,
+} from "./provider-adapters.ts";
+
 export const OPS_DRAG_WORKER_MAX_BATCH = 10;
+
+export function preflightStripeRefundWorker(input: {
+  environment: ProviderEnvironment;
+  createTransport(restrictedKey: string): StripeRefundTransport;
+}): StripeRefundAdapterFactory {
+  const configuration = validateStripeRefundAdapterConfiguration(input.environment);
+  const transport = input.createTransport(configuration.restrictedKey);
+  return createStripeRefundAdapterFactory({ environment: input.environment, transport });
+}
 
 export function assertSchedulerRequest(input: {
   authorization: string | null;

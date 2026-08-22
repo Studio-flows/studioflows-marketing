@@ -40,6 +40,10 @@ export type ProviderEnvironment = {
   STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY?: string;
 };
 
+export type StripeRefundAdapterFactory = {
+  forOrder(input: { orderId: string; submissionId: string }): RefundProviderAdapter;
+};
+
 function requireNonEmpty(value: string | undefined, label: string): string {
   const normalized = value?.trim() ?? "";
   if (!normalized) throw new Error(`${label} is not configured`);
@@ -116,47 +120,72 @@ export function createResendTransport(apiKey: string): ResendTransport {
   };
 }
 
+export function validateStripeRefundAdapterConfiguration(
+  environment: ProviderEnvironment
+): { mode: ProviderMode; restrictedKey: string } {
+  const mode = readProviderMode(environment);
+  const restrictedKey = requireNonEmpty(
+    environment.STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY,
+    "Stripe restricted key"
+  );
+  if (!restrictedKey.startsWith(`rk_${mode}_`)) {
+    throw new Error("Stripe refund adapter requires a mode-matched restricted key");
+  }
+  return { mode, restrictedKey };
+}
+
+export function createStripeRefundAdapterFactory(input: {
+  environment: ProviderEnvironment;
+  transport: StripeRefundTransport;
+}): StripeRefundAdapterFactory {
+  validateStripeRefundAdapterConfiguration(input.environment);
+  return {
+    forOrder(order) {
+      return {
+        async requestFullRefund(request) {
+          if (request.currency !== "usd") throw new Error("Refund currency must be usd");
+          if (
+            !Number.isInteger(request.remainingRefundableAmount) ||
+            request.remainingRefundableAmount < 1 ||
+            request.remainingRefundableAmount > 2_900
+          ) {
+            throw new Error("Refund amount exceeds the remaining refundable order amount");
+          }
+          const expectedKey = `ops-drag:${request.checkoutSessionId}:refund:v1`;
+          if (request.idempotencyKey !== expectedKey) throw new Error("Refund idempotency key mismatch");
+          const refund = await input.transport.create(
+            {
+              payment_intent: request.paymentReferenceId,
+              amount: request.remainingRefundableAmount,
+              metadata: {
+                order_id: order.orderId,
+                submission_id: order.submissionId,
+                checkout_session_id: request.checkoutSessionId,
+              },
+            },
+            { idempotencyKey: expectedKey }
+          );
+          if (!refund.id) throw new Error("Stripe did not return a refund ID");
+          return { providerRefundId: refund.id };
+        },
+      };
+    },
+  };
+}
+
 export function createStripeRefundAdapter(input: {
   environment: ProviderEnvironment;
   transport: StripeRefundTransport;
   orderId: string;
   submissionId: string;
 }): RefundProviderAdapter {
-  const mode = readProviderMode(input.environment);
-  const key = requireNonEmpty(
-    input.environment.STRIPE_OPS_DRAG_REPORT_RESTRICTED_KEY,
-    "Stripe restricted key"
-  );
-  if (!key.startsWith(`rk_${mode}_`)) throw new Error("Stripe refund adapter requires a mode-matched restricted key");
-
-  return {
-    async requestFullRefund(request) {
-      if (request.currency !== "usd") throw new Error("Refund currency must be usd");
-      if (
-        !Number.isInteger(request.remainingRefundableAmount) ||
-        request.remainingRefundableAmount < 1 ||
-        request.remainingRefundableAmount > 2_900
-      ) {
-        throw new Error("Refund amount exceeds the remaining refundable order amount");
-      }
-      const expectedKey = `ops-drag:${request.checkoutSessionId}:refund:v1`;
-      if (request.idempotencyKey !== expectedKey) throw new Error("Refund idempotency key mismatch");
-      const refund = await input.transport.create(
-        {
-          payment_intent: request.paymentReferenceId,
-          amount: request.remainingRefundableAmount,
-          metadata: {
-            order_id: input.orderId,
-            submission_id: input.submissionId,
-            checkout_session_id: request.checkoutSessionId,
-          },
-        },
-        { idempotencyKey: expectedKey }
-      );
-      if (!refund.id) throw new Error("Stripe did not return a refund ID");
-      return { providerRefundId: refund.id };
-    },
-  };
+  return createStripeRefundAdapterFactory({
+    environment: input.environment,
+    transport: input.transport,
+  }).forOrder({
+    orderId: input.orderId,
+    submissionId: input.submissionId,
+  });
 }
 
 export function createStripeRefundTransport(restrictedKey: string): StripeRefundTransport {

@@ -5,7 +5,8 @@
     "build": "next build",
     "start": "next start",
     "dev": "next dev",
-    "dev:fresh": "node scripts/dev-fresh.mjs"
+    "dev:fresh": "node scripts/dev-fresh.mjs",
+    "test:ops-drag-report": "node --experimental-strip-types scripts/ops-drag-report-contract.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.8",
@@ -26,6 +27,7 @@
     "react-dom": "18.2.0",
     "react-use": "^17.6.0",
     "resend": "^6.14.0",
+    "stripe": "22.4.0",
     "tailwind-merge": "^3.5.0",
     "typescript": "^6.0.3"
   },

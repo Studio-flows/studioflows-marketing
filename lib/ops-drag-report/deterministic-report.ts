@@ -1,4 +1,5 @@
 import {
+  assertOpsDragReportContentAllowed,
   OPS_DRAG_REPORT_SCHEMA_VERSION,
   OPS_DRAG_REPORT_TEMPLATE_VERSION,
   type OpsDragReportDocument,
@@ -22,7 +23,10 @@ function requireSnapshot(snapshot: OpsDragAdmittedSnapshot, submissionId: string
 function boundedText(value: JsonValue | undefined, fallback: string): string {
   if (typeof value !== "string") return fallback;
   const normalized = value.replace(/\s+/g, " ").trim();
-  return normalized ? normalized.slice(0, 160) : fallback;
+  if (!normalized) return fallback;
+  const bounded = normalized.slice(0, 160);
+  assertOpsDragReportContentAllowed(bounded);
+  return bounded;
 }
 
 function unique(values: string[]): string[] {
@@ -71,7 +75,7 @@ export function buildDeterministicOpsDragReport(input: {
       "Day 6: Run the changed path once and capture timing, exceptions, and owner feedback.",
       "Day 7: Keep, revise, or reverse the change based on the collected operating evidence.",
     ],
-    limitations: "This automated report uses only the submitted Ops Check snapshot. It identifies where to investigate first and does not establish root cause, promise an outcome, provide implementation, or constitute professional services or advice.",
+    limitations: "This automated report uses only the submitted Ops Check snapshot. It identifies where to investigate first, treats every finding as a hypothesis, and includes operational information only.",
     evidence_to_collect: [
       "Elapsed time and waiting time for one representative work item.",
       "The owner and system responsible at each handoff.",

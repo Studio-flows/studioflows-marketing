@@ -56,9 +56,13 @@ function refundEligibleAt(order: OpsDragOrder): string {
 export async function orchestratePaidOpsDragFulfillment(input: {
   store: PaidFulfillmentOrderStore;
   generationAdapter: ReportGenerationAdapter;
-  emailAdapter: EmailProviderAdapter;
+  emailAdapter?: EmailProviderAdapter;
+  createEmailAdapter?: () => EmailProviderAdapter;
   recordedAt: string;
 }): Promise<{ disposition: PaidFulfillmentDisposition; order: OpsDragOrder }> {
+  if (Boolean(input.emailAdapter) === Boolean(input.createEmailAdapter)) {
+    throw new Error("Paid fulfillment requires exactly one email adapter source");
+  }
   let order = await input.store.load();
   requireOwnedPaidOrder(order);
   if (order.automation?.terminal_disposition) return { disposition: "TERMINAL_NOOP", order };
@@ -144,8 +148,25 @@ export async function orchestratePaidOpsDragFulfillment(input: {
     throw new Error("Delivery submission idempotency binding mismatch");
   }
   let providerMessageId: string;
+  let emailAdapter: EmailProviderAdapter;
   try {
-    const result = await input.emailAdapter.submit({
+    emailAdapter = input.emailAdapter ?? input.createEmailAdapter!();
+  } catch {
+    order = await input.store.transition((current) =>
+      recordDeliverySubmissionFailure(
+        current,
+        attemptNumber,
+        "EMAIL_PROVIDER_CONFIGURATION_FAILED",
+        input.recordedAt
+      )
+    );
+    return {
+      disposition: order.automation?.delivery.status === "FAILED" ? "DELIVERY_FAILED" : "DELIVERY_RETRYABLE",
+      order,
+    };
+  }
+  try {
+    const result = await emailAdapter.submit({
       orderId: order.order_id,
       submissionId: order.submission_id,
       deliveryEmail: order.snapshot.delivery_email,

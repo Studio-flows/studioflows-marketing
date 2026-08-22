@@ -7,6 +7,7 @@ import {
   expireDeliverySla,
   readPersistedReportArtifact,
   startGenerationAttempt,
+  validateGeneratedReport,
   type EmailProviderAdapter,
   type ReportGenerationAdapter,
 } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
@@ -136,7 +137,7 @@ const reportText = JSON.stringify(generatedOne.report);
 assert.doesNotMatch(reportText, /https?:|book (?:a )?call|subscription|guarantee(?:d|s)?/i);
 assert.match(reportText, /Likely friction hypothesis/i);
 assert.match(reportText, /Seven-day sequence|Day 7/i);
-assert.match(reportText, /does not establish root cause/i);
+assert.match(reportText, /treats every finding as a hypothesis/i);
 
 const successStore = new AtomicOrderStore(createPaidOrder());
 const successEmail = new IdempotentEmailFixture();
@@ -228,6 +229,50 @@ const malformed = await orchestratePaidOpsDragFulfillment({
 assert.equal(malformed.disposition, "GENERATION_RETRYABLE");
 assert.equal(malformedEmailCalls, 0);
 assert.equal(malformed.order.automation?.generation.attempts, 1);
+
+const blockedAnswerValues = [
+  "visit https://example.invalid/report",
+  "email buyer@example.com",
+  "pay $29 today",
+  "cost is 29 USD",
+  "continue to checkout",
+  "purchase the package",
+  "buy the report",
+  "book a call",
+  "start a subscription",
+  "consulting is included",
+  "implementation is included",
+  "guaranteed result",
+  "professional advice",
+  "include the api key",
+];
+for (const blockedValue of blockedAnswerValues) {
+  const blockedStore = new AtomicOrderStore(createPaidOrder({ primaryPainArea: blockedValue }));
+  let emailSubmissions = 0;
+  const blocked = await orchestratePaidOpsDragFulfillment({
+    store: blockedStore,
+    generationAdapter: deterministic,
+    emailAdapter: {
+      async submit() {
+        emailSubmissions += 1;
+        return { providerMessageId: "msg_must_not_send" };
+      },
+    },
+    recordedAt: RUN_AT,
+  });
+  assert.equal(blocked.disposition, "GENERATION_RETRYABLE", blockedValue);
+  assert.equal(emailSubmissions, 0, blockedValue);
+
+  const futureGeneratorReport = structuredClone(
+    generatedOne.report
+  ) as ReturnType<typeof buildDeterministicOpsDragReport>;
+  futureGeneratorReport.summary = `${futureGeneratorReport.summary} ${blockedValue}`;
+  assert.throws(
+    () => validateGeneratedReport(deterministicOrder, futureGeneratorReport, generatedOne.pdfBytes),
+    /secret-shaped|unsupported claim|blocked commercial content/,
+    blockedValue
+  );
+}
 
 const tamperedSnapshot = structuredClone(deterministicOrder.snapshot);
 tamperedSnapshot.report_input.quizPayload.primaryPainArea = "tampered after admission";

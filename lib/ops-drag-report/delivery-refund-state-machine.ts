@@ -236,6 +236,17 @@ const UNSUPPORTED_CLAIM_PATTERNS = [
   /\bwe (?:audited|verified) your\b/i,
 ] as const;
 
+const BLOCKED_COMMERCIAL_CONTENT_PATTERNS = [
+  /\bhttps?:\/\/|\bwww\.|\b[a-z0-9.-]+\.(?:com|co|io|net|org)\b/i,
+  /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/i,
+  /[$€£]\s?\d|\b(?:usd|eur|gbp)\s?\d|\b\d+(?:\.\d{1,2})?\s?(?:usd|eur|gbp|dollars?|euros?|pounds?)\b/i,
+  /\b(?:price|pricing|checkout|purchase|buy|subscription|subscribe)\b/i,
+  /\b(?:book|schedule)\s+(?:a\s+)?call\b/i,
+  /\b(?:consulting|implementation)\b/i,
+  /\bprofessional\s+(?:services?|advice)\b/i,
+  /\b(?:password|api[_ -]?key|access[_ -]?token|secret[_ -]?key|credential)s?\b/i,
+] as const;
+
 function requirePaidOrder(order: OpsDragOrder): void {
   if (!order.payment || !order.fulfillment.lease_owner) {
     throw new Error("Delivery automation requires an admitted payment and fulfillment owner");
@@ -351,14 +362,20 @@ function assertExactFields(value: Record<string, unknown>): void {
   if (canonicalJson(actual) !== canonicalJson(expected)) throw new Error("Report contains missing or unsupported fields");
 }
 
-function scanReportContent(report: OpsDragReportDocument): void {
-  const content = canonicalJson(report);
+export function assertOpsDragReportContentAllowed(content: string): void {
   if (SECRET_PATTERNS.some((pattern) => pattern.test(content))) {
     throw new Error("Report contains secret-shaped content");
   }
   if (UNSUPPORTED_CLAIM_PATTERNS.some((pattern) => pattern.test(content))) {
     throw new Error("Report contains an unsupported claim");
   }
+  if (BLOCKED_COMMERCIAL_CONTENT_PATTERNS.some((pattern) => pattern.test(content))) {
+    throw new Error("Report contains blocked commercial content");
+  }
+}
+
+function scanReportContent(report: OpsDragReportDocument): void {
+  assertOpsDragReportContentAllowed(canonicalJson(report));
 }
 
 export function validateGeneratedReport(

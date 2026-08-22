@@ -82,7 +82,7 @@ function createReport(order: OpsDragOrder): OpsDragReportDocument {
       "Adjust the narrowest failing step.",
       "Compare the evidence with the baseline.",
     ],
-    limitations: "This report uses submitted inputs and does not constitute an audit or professional advice.",
+    limitations: "This report uses submitted inputs and presents operational hypotheses only.",
     evidence_to_collect: ["Handoff timestamp", "Named owner", "Rework count"],
   };
 }

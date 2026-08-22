@@ -668,7 +668,7 @@ function createDeliveredOrder(): OpsDragOrder {
     summary: "Submitted inputs suggest a handoff hypothesis to test.",
     hypotheses: ["The handoff may lack one owner."],
     seven_day_sequence: ["Observe", "Name owner", "Record entry", "Run handoff", "Measure", "Adjust", "Compare"],
-    limitations: "Response-based hypotheses only; not an audit or professional advice.",
+    limitations: "Response-based operational hypotheses only.",
     evidence_to_collect: ["Wait time"],
   };
   order = admitGeneratedReport(order, report, new TextEncoder().encode("%PDF-1.7 fixture"), "2026-08-22T20:01:04.000Z");

@@ -1,12 +1,6 @@
-import {
-  applyRefundProviderEvent,
-  expireDeliverySla,
-  recordRefundRequestFailure,
-} from "@/lib/ops-drag-report/delivery-refund-state-machine";
 import { createDeterministicReportGenerationAdapter } from "@/lib/ops-drag-report/deterministic-report";
-import { orchestratePaidOpsDragFulfillment } from "@/lib/ops-drag-report/paid-fulfillment-orchestrator";
+import { processPaidFulfillmentWorkerOrder } from "@/lib/ops-drag-report/paid-fulfillment-worker";
 import {
-  claimOpsDragRefund,
   loadOpsDragOrder,
   listOpsDragOrdersForWorker,
   transitionOpsDragOrder,
@@ -25,10 +19,6 @@ import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
 
-function dueForSlaExpiry(refundEligibleAt: string, now: string): boolean {
-  return Date.parse(now) >= Date.parse(refundEligibleAt);
-}
-
 export async function GET(req: Request) {
   try {
     assertSchedulerRequest({
@@ -36,77 +26,31 @@ export async function GET(req: Request) {
       expectedSecret: process.env.OPS_DRAG_REPORT_WORKER_SECRET,
       enabled: process.env.OPS_DRAG_REPORT_PROVIDER_WORKER_ENABLED,
     });
-    const refundAdapterFactory = preflightStripeRefundWorker({
-      environment: process.env,
-      createTransport: createStripeRefundTransport,
-    });
-    const emailAdapter = preflightResendDeliveryWorker({
-      environment: process.env,
-      createTransport: createResendTransport,
-    });
     const generationAdapter = createDeterministicReportGenerationAdapter();
     const supabase = createMarketingSupabaseServerClient();
     if (!supabase) throw new Error("Ops Drag Report order storage is not configured");
     const now = new Date().toISOString();
     const result = await runBoundedProviderWorker({
       loadBatch: (limit) => listOpsDragOrdersForWorker(supabase, limit),
-      async process(observed) {
-        if (!observed.payment || observed.automation?.terminal_disposition) return "noop";
-        let order = observed;
-        const refundEligibleAt = order.automation?.sla.refund_eligible_at ??
-          new Date(Date.parse(order.payment.paidAt) + 45 * 60_000).toISOString();
-        if (
-          (order.automation?.refund.status ?? "NOT_REQUIRED") === "NOT_REQUIRED" &&
-          dueForSlaExpiry(refundEligibleAt, now)
-        ) {
-          order = await transitionOpsDragOrder(supabase, order.submission_id, (current) =>
-            expireDeliverySla(current, now)
-          );
-        }
-        if (order.automation?.refund.status !== "REQUIRED" && order.automation?.refund.status !== "RETRYABLE") {
-          const orchestration = await orchestratePaidOpsDragFulfillment({
-            store: {
-              load: () => loadOpsDragOrder(supabase, observed.submission_id),
-              transition: (apply) => transitionOpsDragOrder(supabase, observed.submission_id, apply),
-            },
-            generationAdapter,
-            emailAdapter,
-            recordedAt: now,
-          });
-          return orchestration.disposition === "DELIVERY_SUBMITTED" ? "processed" :
-            orchestration.disposition === "ALREADY_SUBMITTED" || orchestration.disposition === "TERMINAL_NOOP"
-              ? "noop"
-              : "blocked";
-        }
-        const ownership = await claimOpsDragRefund(supabase, order.submission_id, now);
-        if (ownership.disposition !== "acquired") return "noop";
-        let response: { providerRefundId: string };
-        try {
-          const adapter = refundAdapterFactory.forOrder({
-            orderId: ownership.order.order_id,
-            submissionId: ownership.order.submission_id,
-          });
-          response = await adapter.requestFullRefund({
-            checkoutSessionId: ownership.order.payment!.checkoutSessionId,
-            paymentReferenceId: ownership.order.payment!.paymentReferenceId,
-            remainingRefundableAmount: ownership.order.payment!.amountTotal,
-            currency: "usd",
-            idempotencyKey: ownership.idempotencyKey,
-          });
-        } catch {
-          await transitionOpsDragOrder(supabase, ownership.order.submission_id, (current) =>
-            recordRefundRequestFailure(current, "REFUND_PROVIDER_REQUEST_FAILED", now)
-          );
-          return "blocked";
-        }
-        await transitionOpsDragOrder(supabase, ownership.order.submission_id, (current) =>
-          applyRefundProviderEvent(current, {
-            eventId: `refund_create_response:${response.providerRefundId}`,
-            providerRefundId: response.providerRefundId,
-            type: "refund.created",
-          }, now)
-        );
-        return "processed";
+      process(observed) {
+        const store = {
+          load: () => loadOpsDragOrder(supabase, observed.submission_id),
+          transition: (apply: Parameters<typeof transitionOpsDragOrder>[2]) =>
+            transitionOpsDragOrder(supabase, observed.submission_id, apply),
+        };
+        return processPaidFulfillmentWorkerOrder({
+          store,
+          generationAdapter,
+          createEmailAdapter: () => preflightResendDeliveryWorker({
+            environment: process.env,
+            createTransport: createResendTransport,
+          }),
+          createRefundAdapter: (order) => preflightStripeRefundWorker({
+            environment: process.env,
+            createTransport: createStripeRefundTransport,
+          }).forOrder({ orderId: order.order_id, submissionId: order.submission_id }),
+          recordedAt: now,
+        });
       },
     });
     return Response.json({ ok: true, ...result });

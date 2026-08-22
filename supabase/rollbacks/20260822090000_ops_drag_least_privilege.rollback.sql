@@ -8,7 +8,7 @@ declare
   v_table regclass := to_regclass('public.custom_ops_hub_leads');
   v_function regprocedure := to_regprocedure('public.set_custom_ops_hub_leads_updated_at()');
   v_expected_privileges constant text[] := array[
-    'DELETE', 'INSERT', 'REFERENCES', 'SELECT', 'TRIGGER', 'TRUNCATE', 'UPDATE'
+    'INSERT', 'SELECT', 'UPDATE'
   ];
 begin
   if v_table is null or v_function is null then
@@ -16,7 +16,10 @@ begin
   end if;
   if not exists (
     select 1 from pg_class c
-    where c.oid = v_table and c.relrowsecurity and not c.relforcerowsecurity
+    where c.oid = v_table
+      and c.relowner = 'postgres'::regrole
+      and c.relrowsecurity
+      and not c.relforcerowsecurity
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_ROLLBACK_PRECONDITION: RLS state drifted';
   end if;
@@ -47,17 +50,46 @@ begin
   if not exists (
     select 1 from pg_proc p
     where p.oid = v_function
+      and p.proowner = 'postgres'::regrole
       and not p.prosecdef
       and p.proconfig = array['search_path=pg_catalog']::text[]
+      and p.proacl is not null
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_ROLLBACK_PRECONDITION: function config drifted';
+  end if;
+  if exists (
+    select 1
+    from pg_proc p
+    cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where p.oid = v_function and acl.grantee <> p.proowner
+  ) or exists (
+    select 1
+    from unnest(array['anon', 'authenticated', 'service_role']) role_name
+    where has_function_privilege(role_name, v_function, 'EXECUTE')
+  ) then
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_ROLLBACK_PRECONDITION: function ACL drifted';
   end if;
 end
 $rollback_precheck$;
 
-alter function public.set_custom_ops_hub_leads_updated_at() reset search_path;
+drop trigger trg_set_custom_ops_hub_leads_updated_at on public.custom_ops_hub_leads;
+drop function public.set_custom_ops_hub_leads_updated_at();
+create function public.set_custom_ops_hub_leads_updated_at()
+returns trigger
+language plpgsql
+as $$
+begin
+  new.updated_at = now();
+  return new;
+end;
+$$;
+alter function public.set_custom_ops_hub_leads_updated_at() owner to postgres;
+create trigger trg_set_custom_ops_hub_leads_updated_at
+before update on public.custom_ops_hub_leads
+for each row
+execute procedure public.set_custom_ops_hub_leads_updated_at();
 grant select, insert, update, delete, truncate, references, trigger
-  on table public.custom_ops_hub_leads to anon, authenticated;
+  on table public.custom_ops_hub_leads to anon, authenticated, service_role;
 create policy "Allow custom ops hub lead inserts"
 on public.custom_ops_hub_leads
 for insert
@@ -78,7 +110,10 @@ declare
 begin
   if not exists (
     select 1 from pg_class c
-    where c.oid = v_table and c.relrowsecurity and not c.relforcerowsecurity
+    where c.oid = v_table
+      and c.relowner = 'postgres'::regrole
+      and c.relrowsecurity
+      and not c.relforcerowsecurity
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_ROLLBACK_POSTCHECK: RLS state is invalid';
   end if;
@@ -126,9 +161,20 @@ begin
   end if;
   if not exists (
     select 1 from pg_proc p
-    where p.oid = v_function and not p.prosecdef and p.proconfig is null
+    where p.oid = v_function
+      and p.proowner = 'postgres'::regrole
+      and not p.prosecdef
+      and p.proconfig is null
+      and p.proacl is null
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_ROLLBACK_POSTCHECK: function config restoration failed';
+  end if;
+  if exists (
+    select 1
+    from unnest(array['anon', 'authenticated', 'service_role']) role_name
+    where not has_function_privilege(role_name, v_function, 'EXECUTE')
+  ) then
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_ROLLBACK_POSTCHECK: default function ACL restoration failed';
   end if;
   select n.nspname
   into v_pgcrypto_schema

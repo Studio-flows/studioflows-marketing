@@ -191,9 +191,6 @@ export async function POST(req: NextRequest) {
     from: bookFrom,
   });
   const opsTeardownUrl = buildOpsTeardownThankYouUrl({
-    leadId,
-    email,
-    from: handoffFrom,
     siteOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.studioflows.co",
   });
   return NextResponse.json({

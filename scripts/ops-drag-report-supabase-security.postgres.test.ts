@@ -82,38 +82,43 @@ with target as (
 )
 select json_build_object(
   'rls', (select relrowsecurity and not relforcerowsecurity from target),
+  'table_owner', (select pg_get_userbyid(relowner) from pg_class where oid='public.custom_ops_hub_leads'::regclass),
+  'function_owner', (select pg_get_userbyid(proowner) from pg_proc where oid='public.set_custom_ops_hub_leads_updated_at()'::regprocedure),
   'policies', (select count(*) from pg_policy where polrelid = 'public.custom_ops_hub_leads'::regclass),
   'client_acl', (select count(*) from information_schema.role_table_grants where table_schema='public' and table_name='custom_ops_hub_leads' and grantee in ('anon','authenticated')),
   'service_privileges', (select privileges from service_privileges),
+  'function_client_execute', (select count(*) from unnest(array['anon','authenticated','service_role']) r where has_function_privilege(r, 'public.set_custom_ops_hub_leads_updated_at()'::regprocedure, 'EXECUTE')),
+  'function_nonowner_acl', (select count(*) from pg_proc p cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl where p.oid='public.set_custom_ops_hub_leads_updated_at()'::regprocedure and acl.grantee <> p.proowner),
   'proconfig', (select proconfig from pg_proc where oid='public.set_custom_ops_hub_leads_updated_at()'::regprocedure),
   'trigger_count', (select count(*) from pg_trigger where tgrelid='public.custom_ops_hub_leads'::regclass and not tgisinternal)
 );
 `));
 assert.deepEqual(postApply, {
   rls: true,
+  table_owner: "postgres",
+  function_owner: "postgres",
   policies: 0,
   client_acl: 0,
-  service_privileges: ["DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"],
+  service_privileges: ["INSERT", "SELECT", "UPDATE"],
+  function_client_execute: 0,
+  function_nonowner_acl: 0,
   proconfig: ["search_path=pg_catalog"],
   trigger_count: 1,
 });
 
 const triggerProof = psql(`
-insert into public.custom_ops_hub_leads(id, updated_at)
-values ('00000000-0000-4000-8000-000000000001', '2000-01-01T00:00:00Z');
-update public.custom_ops_hub_leads set updated_at='2000-01-01T00:00:00Z'
-where id='00000000-0000-4000-8000-000000000001';
-select case when updated_at > '2000-01-01T00:00:00Z'::timestamptz then 'TRIGGER_PASS' else 'TRIGGER_FAIL' end
-from public.custom_ops_hub_leads where id='00000000-0000-4000-8000-000000000001';
-`);
-assert.ok(triggerProof.split("\n").includes("TRIGGER_PASS"));
-assert.equal(psql(`
 set role service_role;
-insert into public.custom_ops_hub_leads(id) values ('00000000-0000-4000-8000-000000000002');
+insert into public.custom_ops_hub_leads(id, updated_at)
+values ('00000000-0000-4000-8000-000000000002', '2000-01-01T00:00:00Z');
 select count(*) from public.custom_ops_hub_leads where id='00000000-0000-4000-8000-000000000002';
-update public.custom_ops_hub_leads set updated_at=now() where id='00000000-0000-4000-8000-000000000002';
-delete from public.custom_ops_hub_leads where id='00000000-0000-4000-8000-000000000002';
-`), "1");
+update public.custom_ops_hub_leads set updated_at='2000-01-01T00:00:00Z'
+where id='00000000-0000-4000-8000-000000000002';
+select case when updated_at > '2000-01-01T00:00:00Z'::timestamptz then 'TRIGGER_PASS' else 'TRIGGER_FAIL' end
+from public.custom_ops_hub_leads where id='00000000-0000-4000-8000-000000000002';
+`);
+assert.deepEqual(triggerProof.split(/\r?\n/), ["1", "TRIGGER_PASS"]);
+assert.equal(psql(`select has_table_privilege('service_role','public.custom_ops_hub_leads','DELETE') or has_table_privilege('service_role','public.custom_ops_hub_leads','TRUNCATE') or has_table_privilege('service_role','public.custom_ops_hub_leads','REFERENCES') or has_table_privilege('service_role','public.custom_ops_hub_leads','TRIGGER');`), "f");
+psql(`reset role; delete from public.custom_ops_hub_leads where id='00000000-0000-4000-8000-000000000002';`);
 
 psql(rollback);
 const postRollback = JSON.parse(psql(`
@@ -122,7 +127,10 @@ select json_build_object(
   'policy_count', (select count(*) from pg_policy where polrelid='public.custom_ops_hub_leads'::regclass and polname='Allow custom ops hub lead inserts'),
   'anon_privileges', (select array_agg(privilege_type order by privilege_type) from information_schema.role_table_grants where table_schema='public' and table_name='custom_ops_hub_leads' and grantee='anon'),
   'authenticated_privileges', (select array_agg(privilege_type order by privilege_type) from information_schema.role_table_grants where table_schema='public' and table_name='custom_ops_hub_leads' and grantee='authenticated'),
+  'service_privileges', (select array_agg(privilege_type order by privilege_type) from information_schema.role_table_grants where table_schema='public' and table_name='custom_ops_hub_leads' and grantee='service_role'),
   'proconfig', (select proconfig from pg_proc where oid='public.set_custom_ops_hub_leads_updated_at()'::regprocedure),
+  'proacl_is_null', (select proacl is null from pg_proc where oid='public.set_custom_ops_hub_leads_updated_at()'::regprocedure),
+  'default_execute_count', (select count(*) from unnest(array['anon','authenticated','service_role']) r where has_function_privilege(r, 'public.set_custom_ops_hub_leads_updated_at()'::regprocedure, 'EXECUTE')),
   'function_hash', encode(digest(convert_to(pg_get_functiondef('public.set_custom_ops_hub_leads_updated_at()'::regprocedure),'UTF8'),'sha256'),'hex')
 );
 `));
@@ -131,7 +139,10 @@ assert.deepEqual(postRollback, {
   policy_count: 1,
   anon_privileges: ["DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"],
   authenticated_privileges: ["DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"],
+  service_privileges: ["DELETE", "INSERT", "REFERENCES", "SELECT", "TRIGGER", "TRUNCATE", "UPDATE"],
   proconfig: null,
+  proacl_is_null: true,
+  default_execute_count: 3,
   function_hash: "84bee0ca31f59de421bc59cf960473b388d32961000c7cff8988d4ed63d101eb",
 });
 
@@ -157,6 +168,22 @@ assert.deepEqual(driftPreserved, {
   proconfig: null,
 });
 
+psql(`
+drop policy "Allow custom ops hub lead inserts" on public.custom_ops_hub_leads;
+create policy "Allow custom ops hub lead inserts"
+on public.custom_ops_hub_leads for insert to anon, authenticated with check (true);
+grant execute on function public.set_custom_ops_hub_leads_updated_at() to service_role;
+revoke execute on function public.set_custom_ops_hub_leads_updated_at() from authenticated;
+`);
+const functionAclDrift = psql(migration, true);
+assert.match(functionAclDrift, /trigger function owner, properties, or ACL drifted/);
+assert.equal(psql(`select proconfig is null and proacl is not null from pg_proc where oid='public.set_custom_ops_hub_leads_updated_at()'::regprocedure;`), "t");
+
+psql(`alter table public.custom_ops_hub_leads owner to service_role;`);
+const ownerDrift = psql(migration, true);
+assert.match(ownerDrift, /RLS state drifted/);
+assert.equal(psql(`select pg_get_userbyid(relowner) || '|' || (select count(*)::text from pg_policy where polrelid='public.custom_ops_hub_leads'::regclass) from pg_class where oid='public.custom_ops_hub_leads'::regclass;`), "service_role|1");
+
 console.log(
-  "OPS_DRAG_REPORT_SUPABASE_POSTGRES_PASS exact_before=PASS apply=PASS service_role_crud=PASS trigger=PASS rollback=EXACT drift_abort=ATOMIC",
+  "OPS_DRAG_REPORT_SUPABASE_POSTGRES_PASS exact_before=PASS apply=PASS service_role_select_insert_update_only=PASS owner_delete_only=PASS trigger_without_execute=PASS rollback=EXACT policy_acl_owner_drift_abort=ATOMIC",
 );

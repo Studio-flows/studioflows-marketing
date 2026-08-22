@@ -12,7 +12,7 @@ export async function loadOpsDragLead(
   supabase: SupabaseClient,
   leadId: string
 ): Promise<OpsDragLeadRow> {
-  const row = (await fetchLeadRow(supabase, leadId, "")) as OpsDragLeadRow | null;
+  const row = (await fetchLeadRow(supabase, leadId)) as OpsDragLeadRow | null;
   if (!row) throw new Error("Ops Check lead not found");
   return row;
 }

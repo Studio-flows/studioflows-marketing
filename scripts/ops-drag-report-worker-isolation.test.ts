@@ -368,7 +368,7 @@ const submittedDueWake = selectBoundedWorkerPage({
 });
 assert.deepEqual(submittedDueWake.orders.map((order) => order.submission_id), ["delivery-path"]);
 const workerMigration = readFileSync(
-  new URL("../supabase/migrations/20260822_add_ops_drag_worker_cursor.sql", import.meta.url),
+  new URL("../supabase/migrations/20260822100000_add_ops_drag_worker_cursor.sql", import.meta.url),
   "utf8"
 );
 assert.match(workerMigration, /for update/i);

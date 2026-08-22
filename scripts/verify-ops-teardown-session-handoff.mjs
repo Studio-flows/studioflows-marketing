@@ -68,15 +68,17 @@ assert.match(continuationUrl, /continue=ops-teardown/);
 assert.match(continuationUrl, /lead_id=/);
 
 const thankYouUrl = buildOpsTeardownThankYouUrl({
-  leadId: LEAD_ID,
-  email: EMAIL,
-  from: "homepage-ops-check-qualified",
+  viewToken: "view-token-fixture",
+  pdfToken: "pdf-token-fixture",
+  emailToken: "email-token-fixture",
   siteOrigin: "https://www.studioflows.co",
 });
 assert.equal(
   thankYouUrl,
-  `https://www.studioflows.co/services/custom-ops-hub/teardown?lead_id=${LEAD_ID}&email=${encodeURIComponent(EMAIL)}&from=homepage-ops-check-qualified`
+  "https://www.studioflows.co/services/custom-ops-hub/teardown#view_token=view-token-fixture&pdf_token=pdf-token-fixture&email_token=email-token-fixture"
 );
+assert.equal(thankYouUrl.includes(LEAD_ID), false);
+assert.equal(thankYouUrl.includes(EMAIL), false);
 
 // OT-A5: book_call_url + ops_teardown_url builders
 const bookUrl = buildOpsAuditBookUrl({

@@ -26,6 +26,7 @@ Do not set either switch in Production during preview. Do not expose or link `/o
 - `OPS_DRAG_REPORT_PROVIDER_LIVE_ENABLED`: must be exactly `true`, together with `OPS_DRAG_REPORT_LIVE_ENABLED=true`, before live-provider execution.
 - `OPS_DRAG_REPORT_PROVIDER_WORKER_ENABLED`: must be exactly `true` before the bounded worker can run.
 - `OPS_DRAG_REPORT_WORKER_SECRET`: minimum 32-character bearer secret used by the scheduler request.
+- `OPS_DRAG_REPORT_ORDER_TOKEN_SECRET`: minimum 32-character server-only HMAC secret for short-lived, purpose-bound teardown view/PDF/email access. Missing configuration fails before privileged client construction.
 - Existing Supabase server configuration used by `custom_ops_hub_leads`.
 
 The Stripe restricted key should grant only the minimum permissions required to create and read Checkout Sessions for this flow. Secrets stay in Vercel environment storage and are never written to the repository or receipts.
@@ -44,6 +45,8 @@ The Stripe restricted key should grant only the minimum permissions required to 
 10. A hard bounce or expired delivery-confirmation SLA requires a full refund. Refund ownership uses exactly `ops-drag:{checkout_session_id}:refund:v1`; `refund.created` is nonterminal and only provider-confirmed success terminates as `REFUNDED`.
 11. Signed, expiring, single-use tokens bind results, redelivery, or refund requests to one order and one action. Token IDs are stored only for replay prevention and are hashed in receipts.
 12. Attempt, delivery, refund, token, and terminal evidence extends the existing redacted hash chain. Exactly one terminal outcome is allowed, and only `DELIVERED` qualifies as a verified first sale.
+
+The legacy teardown API no longer accepts email or lead ID as authorization. Its view, PDF, and email entrypoints require distinct 15-minute HMAC tokens bound to the paid order, Checkout Session, payment reference, immutable snapshot digest, and recipient digest. Tokens are carried in the URL fragment for the browser handoff, removed immediately, and sent only as bearer authorization. Email delivery always uses the recipient reloaded from the verified order; client-supplied recipients are rejected before any database client or provider call.
 
 This preview contains fail-closed Resend and Stripe refund adapters, verified webhook entrypoints, and a bounded one-pass SLA/refund worker. All provider and worker gates remain disabled. The retained proof uses injected fixture transports only; it does not call an email or refund provider, send a message, issue a refund, or expose a report URL.
 

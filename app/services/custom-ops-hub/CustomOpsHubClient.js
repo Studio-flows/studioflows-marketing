@@ -436,11 +436,7 @@ export default function CustomOpsHubClient() {
     if (typeof window === "undefined") return;
     if (!isOpsTeardownContinuation(window.location.search)) return;
 
-    const params = new URLSearchParams(window.location.search);
     const teardownUrl = buildOpsTeardownThankYouUrl({
-      leadId: params.get("lead_id"),
-      email: params.get("email"),
-      from: params.get("from") ?? "homepage-ops-check-qualified",
       siteOrigin: window.location.origin,
     });
     router.replace(teardownUrl);

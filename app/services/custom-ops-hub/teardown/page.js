@@ -13,14 +13,6 @@ export const metadata = {
   },
 };
 
-export default function OpsTeardownThankYouPage({ searchParams }) {
-  const query = new URLSearchParams();
-  for (const [key, value] of Object.entries(searchParams ?? {})) {
-    if (typeof value === "string" && value.trim()) {
-      query.set(key, value);
-    }
-  }
-  const initialSearch = query.toString() ? `?${query.toString()}` : "";
-
-  return <OpsTeardownThankYouClient initialSearch={initialSearch} />;
+export default function OpsTeardownThankYouPage() {
+  return <OpsTeardownThankYouClient />;
 }

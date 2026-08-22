@@ -8,9 +8,9 @@ import path from "node:path";
 import { buildOpsTeardownSheet } from "../lib/ops-teardown/build-teardown-sheet.js";
 import { renderTeardownPdf } from "../lib/ops-teardown/render-teardown-pdf.js";
 import {
-  buildTeardownPdfDownloadUrl,
+  buildTeardownPdfEndpoint,
   buildTeardownReferralMailto,
-  buildTeardownShareUrl,
+  buildTeardownSecureAccessUrl,
 } from "../lib/ops-teardown/teardown-share.js";
 
 function sanitizePdfFilename(companyName) {
@@ -57,19 +57,16 @@ assert.equal(pdfBuffer.subarray(0, 4).toString("utf8"), "%PDF");
 const filename = sanitizePdfFilename(fixture.company_name);
 assert.match(filename, /^studioflows-ops-teardown-acme-ops-inc\.pdf$/);
 
-const pdfUrl = buildTeardownPdfDownloadUrl({
-  leadId: fixture.lead_id,
-  email: "founder@acme.example",
-  siteOrigin: "https://www.studioflows.co",
-});
-assert.match(pdfUrl, /\/api\/studioflows\/ops-teardown\/pdf\?/);
+const pdfUrl = buildTeardownPdfEndpoint("https://www.studioflows.co");
+assert.equal(pdfUrl, "https://www.studioflows.co/api/studioflows/ops-teardown/pdf");
 
-const shareUrl = buildTeardownShareUrl({
-  leadId: fixture.lead_id,
-  email: "founder@acme.example",
+const shareUrl = buildTeardownSecureAccessUrl({
+  viewToken: "view-token-fixture",
+  pdfToken: "pdf-token-fixture",
+  emailToken: "email-token-fixture",
   siteOrigin: "https://www.studioflows.co",
 });
-assert.match(shareUrl, /\/services\/custom-ops-hub\/teardown\?/);
+assert.match(shareUrl, /\/services\/custom-ops-hub\/teardown#/);
 
 const mailto = buildTeardownReferralMailto({
   companyName: fixture.company_name,

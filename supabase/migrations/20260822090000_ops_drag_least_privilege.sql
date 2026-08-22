@@ -10,7 +10,9 @@ declare
   v_pgcrypto_schema name;
   v_definition text;
   v_definition_hash text;
-  v_expected_privileges constant text[] := array[
+  v_acl_contract text;
+  v_acl_fingerprint text;
+  v_expected_pre_privileges constant text[] := array[
     'DELETE', 'INSERT', 'REFERENCES', 'SELECT', 'TRIGGER', 'TRUNCATE', 'UPDATE'
   ];
 begin
@@ -21,11 +23,21 @@ begin
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: trigger function is missing';
   end if;
 
+  select n.nspname
+  into v_pgcrypto_schema
+  from pg_extension e
+  join pg_namespace n on n.oid = e.extnamespace
+  where e.extname = 'pgcrypto';
+  if v_pgcrypto_schema is null then
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: pgcrypto is missing';
+  end if;
+
   if not exists (
     select 1
     from pg_class c
     where c.oid = v_table
       and c.relkind = 'r'
+      and c.relowner = 'postgres'::regrole
       and c.relrowsecurity
       and not c.relforcerowsecurity
   ) then
@@ -86,7 +98,7 @@ begin
       where c.oid = v_table
         and grantee.rolname = expected_role
         and not acl.is_grantable
-    ) is distinct from v_expected_privileges
+    ) is distinct from v_expected_pre_privileges
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: role grant state drifted';
   end if;
@@ -116,19 +128,40 @@ begin
       and l.lanname = 'plpgsql'
       and p.prorettype = 'trigger'::regtype
       and p.pronargs = 0
+      and p.proowner = 'postgres'::regrole
       and not p.prosecdef
       and p.proconfig is null
+      and p.proacl is null
   ) then
-    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: trigger function properties drifted';
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: trigger function owner, properties, or ACL drifted';
+  end if;
+  if exists (
+    select 1
+    from unnest(array['anon', 'authenticated', 'service_role']) role_name
+    where not has_function_privilege(role_name, v_function, 'EXECUTE')
+  ) then
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: default function EXECUTE state drifted';
   end if;
 
-  select n.nspname
-  into v_pgcrypto_schema
-  from pg_extension e
-  join pg_namespace n on n.oid = e.extnamespace
-  where e.extname = 'pgcrypto';
-  if v_pgcrypto_schema is null then
-    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: pgcrypto is missing';
+  select format(
+    'owner=%s|proacl=%s|public=%s|anon=%s|authenticated=%s|service_role=%s',
+    pg_get_userbyid(p.proowner),
+    case when p.proacl is null then 'NULL' else p.proacl::text end,
+    case when exists (
+      select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+      where acl.grantee = 0 and acl.privilege_type = 'EXECUTE'
+    ) then 'EXECUTE' else 'NONE' end,
+    case when has_function_privilege('anon', p.oid, 'EXECUTE') then 'EXECUTE' else 'NONE' end,
+    case when has_function_privilege('authenticated', p.oid, 'EXECUTE') then 'EXECUTE' else 'NONE' end,
+    case when has_function_privilege('service_role', p.oid, 'EXECUTE') then 'EXECUTE' else 'NONE' end
+  ) into v_acl_contract
+  from pg_proc p where p.oid = v_function;
+  execute format(
+    'select encode(%I.digest(convert_to($1, ''UTF8''), ''sha256''), ''hex'')',
+    v_pgcrypto_schema
+  ) into v_acl_fingerprint using v_acl_contract;
+  if v_acl_fingerprint <> '1bfb32393dc2741a0437bf56888312d0e5af9085de949df91a822ed8c00bac79' then
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_PRECONDITION: function ACL fingerprint mismatch';
   end if;
 
   select pg_get_functiondef(v_function) into v_definition;
@@ -144,7 +177,11 @@ $migration_precheck$;
 
 drop policy "Allow custom ops hub lead inserts" on public.custom_ops_hub_leads;
 revoke all privileges on table public.custom_ops_hub_leads from public, anon, authenticated;
+revoke all privileges on table public.custom_ops_hub_leads from service_role;
+grant select, insert, update on table public.custom_ops_hub_leads to service_role;
 alter table public.custom_ops_hub_leads enable row level security;
+revoke execute on function public.set_custom_ops_hub_leads_updated_at()
+  from public, anon, authenticated, service_role;
 alter function public.set_custom_ops_hub_leads_updated_at() set search_path = pg_catalog;
 
 do $migration_postcheck$
@@ -152,12 +189,15 @@ declare
   v_table regclass := 'public.custom_ops_hub_leads'::regclass;
   v_function regprocedure := 'public.set_custom_ops_hub_leads_updated_at()'::regprocedure;
   v_expected_privileges constant text[] := array[
-    'DELETE', 'INSERT', 'REFERENCES', 'SELECT', 'TRIGGER', 'TRUNCATE', 'UPDATE'
+    'INSERT', 'SELECT', 'UPDATE'
   ];
 begin
   if not exists (
     select 1 from pg_class c
-    where c.oid = v_table and c.relrowsecurity and not c.relforcerowsecurity
+    where c.oid = v_table
+      and c.relowner = 'postgres'::regrole
+      and c.relrowsecurity
+      and not c.relforcerowsecurity
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_POSTCHECK: RLS state is invalid';
   end if;
@@ -189,10 +229,25 @@ begin
     select 1
     from pg_proc p
     where p.oid = v_function
+      and p.proowner = 'postgres'::regrole
       and not p.prosecdef
       and p.proconfig = array['search_path=pg_catalog']::text[]
+      and p.proacl is not null
   ) then
     raise exception 'OPS_DRAG_LEAST_PRIVILEGE_POSTCHECK: safe search_path is absent';
+  end if;
+  if exists (
+    select 1
+    from pg_proc p
+    cross join lateral aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) acl
+    where p.oid = v_function
+      and acl.grantee <> p.proowner
+  ) or not has_function_privilege('postgres', v_function, 'EXECUTE') or exists (
+    select 1
+    from unnest(array['anon', 'authenticated', 'service_role']) role_name
+    where has_function_privilege(role_name, v_function, 'EXECUTE')
+  ) then
+    raise exception 'OPS_DRAG_LEAST_PRIVILEGE_POSTCHECK: function EXECUTE is not owner-only';
   end if;
   if not exists (
     select 1 from pg_trigger t

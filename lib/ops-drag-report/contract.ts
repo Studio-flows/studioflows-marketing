@@ -17,8 +17,25 @@ export type CheckoutLead = {
   workEmail: string;
 };
 
+export type CheckoutOrderBinding = {
+  orderId: string;
+  submissionId: string;
+  snapshotDigest: string;
+};
+
+export type ExpectedFulfillmentBinding = CheckoutOrderBinding & {
+  deliveryEmail: string;
+};
+
 export type FulfillmentDecision =
-  | { state: "fulfill"; leadId: string; customerEmail: string }
+  | {
+      state: "fulfill";
+      submissionId: string;
+      customerEmail: string;
+      paymentReferenceId: string;
+      paidAt: string;
+      snapshotDigest: string;
+    }
   | { state: "pending"; reason: "payment_not_paid" }
   | { state: "reject"; reason: string };
 
@@ -40,24 +57,22 @@ export function normalizeCheckoutLead(input: CheckoutLead): CheckoutLead {
   return { id, workEmail };
 }
 
-export function createIntakeDigest(lead: CheckoutLead): string {
-  const normalized = normalizeCheckoutLead(lead);
-  return createHash("sha256")
-    .update(`${normalized.id}|${OPS_DRAG_REPORT_OFFER_VERSION}`)
-    .digest("hex");
-}
-
-export function createCheckoutIdempotencyKey(lead: CheckoutLead): string {
-  return `ops-drag-report-${OPS_DRAG_REPORT_OFFER_VERSION}-${createIntakeDigest(lead).slice(0, 32)}`;
+export function createCheckoutIdempotencyKey(submissionId: string): string {
+  const normalized = submissionId.trim();
+  if (!UUID_PATTERN.test(normalized)) throw new Error("A valid submission reference is required");
+  return `ops-drag:${normalized}:checkout:v1`;
 }
 
 export function buildCheckoutSessionParams(
   lead: CheckoutLead,
-  returnOrigin: string
+  returnOrigin: string,
+  binding: CheckoutOrderBinding
 ): Stripe.Checkout.SessionCreateParams {
   const normalized = normalizeCheckoutLead(lead);
   const origin = normalizeOrigin(returnOrigin);
-  const intakeDigest = createIntakeDigest(normalized);
+  if (binding.submissionId !== normalized.id) throw new Error("Checkout submission binding mismatch");
+  if (!/^[a-f0-9]{64}$/.test(binding.snapshotDigest)) throw new Error("Checkout snapshot digest is invalid");
+  if (!/^odr_[a-f0-9]{32}$/.test(binding.orderId)) throw new Error("Checkout order binding is invalid");
 
   return {
     mode: "payment",
@@ -85,7 +100,11 @@ export function buildCheckoutSessionParams(
       offer_id: OPS_DRAG_REPORT_OFFER_ID,
       offer_version: OPS_DRAG_REPORT_OFFER_VERSION,
       lead_id: normalized.id,
-      intake_digest: intakeDigest,
+      submission_id: binding.submissionId,
+      order_id: binding.orderId,
+      intake_digest: binding.snapshotDigest,
+      cadence: "ONE_TIME",
+      quantity: "1",
       fulfillment_contract: "ops_drag_report_email_v1",
       market: "US",
     },
@@ -102,11 +121,43 @@ function readCustomerCountry(session: Stripe.Checkout.Session): string | null {
   return shippingCountry ? shippingCountry.toUpperCase() : null;
 }
 
+function readPaymentReference(session: Stripe.Checkout.Session): string | null {
+  if (typeof session.payment_intent === "string") return session.payment_intent;
+  if (session.payment_intent && typeof session.payment_intent.id === "string") return session.payment_intent.id;
+  return null;
+}
+
+export function readFulfillmentSubmissionId(session: Stripe.Checkout.Session): string {
+  const submissionId = session.metadata?.submission_id?.trim() ?? "";
+  if (!UUID_PATTERN.test(submissionId)) throw new Error("Webhook submission reference is invalid");
+  return submissionId;
+}
+
 export function evaluateFulfillmentSession(
-  session: Stripe.Checkout.Session
+  session: Stripe.Checkout.Session,
+  expected: ExpectedFulfillmentBinding
 ): FulfillmentDecision {
+  if (session.mode !== "payment") return { state: "reject", reason: "session_mode_mismatch" };
   if (session.metadata?.offer_id !== OPS_DRAG_REPORT_OFFER_ID) {
     return { state: "reject", reason: "offer_mismatch" };
+  }
+  if (session.metadata?.offer_version !== OPS_DRAG_REPORT_OFFER_VERSION) {
+    return { state: "reject", reason: "offer_version_mismatch" };
+  }
+  if (session.metadata?.cadence !== "ONE_TIME" || session.metadata?.quantity !== "1") {
+    return { state: "reject", reason: "one_time_product_binding_mismatch" };
+  }
+  if (session.client_reference_id !== expected.submissionId) {
+    return { state: "reject", reason: "client_reference_mismatch" };
+  }
+  if (session.metadata?.submission_id !== expected.submissionId || session.metadata?.lead_id !== expected.submissionId) {
+    return { state: "reject", reason: "submission_reference_mismatch" };
+  }
+  if (session.metadata?.order_id !== expected.orderId) {
+    return { state: "reject", reason: "order_reference_mismatch" };
+  }
+  if (session.metadata?.intake_digest !== expected.snapshotDigest) {
+    return { state: "reject", reason: "snapshot_digest_mismatch" };
   }
   if (session.amount_total !== OPS_DRAG_REPORT_AMOUNT_CENTS) {
     return { state: "reject", reason: "amount_mismatch" };
@@ -118,19 +169,30 @@ export function evaluateFulfillmentSession(
     return { state: "pending", reason: "payment_not_paid" };
   }
 
-  const leadId = session.metadata?.lead_id?.trim() ?? "";
-  if (!UUID_PATTERN.test(leadId)) {
-    return { state: "reject", reason: "lead_reference_invalid" };
-  }
-
   const customerEmail = session.customer_details?.email?.trim().toLowerCase() ?? "";
   if (!customerEmail) return { state: "reject", reason: "customer_email_missing" };
+  if (customerEmail !== expected.deliveryEmail.trim().toLowerCase()) {
+    return { state: "reject", reason: "customer_email_mismatch" };
+  }
 
   if (readCustomerCountry(session) !== "US") {
     return { state: "reject", reason: "customer_country_not_us" };
   }
 
-  return { state: "fulfill", leadId, customerEmail };
+  const paymentReferenceId = readPaymentReference(session);
+  if (!paymentReferenceId) return { state: "reject", reason: "payment_reference_missing" };
+  if (typeof session.created !== "number" || !Number.isFinite(session.created)) {
+    return { state: "reject", reason: "paid_timestamp_missing" };
+  }
+
+  return {
+    state: "fulfill",
+    submissionId: expected.submissionId,
+    customerEmail,
+    paymentReferenceId,
+    paidAt: new Date(session.created * 1_000).toISOString(),
+    snapshotDigest: expected.snapshotDigest,
+  };
 }
 
 export function hashEmail(email: string): string {

@@ -1,0 +1,110 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+
+import {
+  claimFulfillmentOwnership,
+  createAdmittedOrder,
+  type FulfillmentOwnershipResult,
+  type OpsDragAdmittedSnapshot,
+  type OpsDragOrder,
+  type OpsDragPaymentAdmission,
+} from "@/lib/ops-drag-report/order-foundation";
+
+const ORDER_METADATA_KEY = "ops_drag_report_order";
+const MAX_CAS_ATTEMPTS = 5;
+
+type LeadMetadataRow = {
+  id: string;
+  metadata: Record<string, unknown>;
+};
+
+function readMetadata(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
+function readOrder(metadata: Record<string, unknown>): OpsDragOrder | null {
+  const value = metadata[ORDER_METADATA_KEY];
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const order = value as Partial<OpsDragOrder>;
+  if (order.version !== "v1" || typeof order.order_id !== "string" || typeof order.submission_id !== "string") {
+    throw new Error("Stored Ops Drag Report order is malformed");
+  }
+  return value as OpsDragOrder;
+}
+
+async function loadMetadataRow(supabase: SupabaseClient, submissionId: string): Promise<LeadMetadataRow> {
+  const { data, error } = await supabase
+    .from("custom_ops_hub_leads")
+    .select("id, metadata")
+    .eq("id", submissionId)
+    .maybeSingle();
+  if (error) throw new Error(error.message || "Unable to load Ops Drag Report order metadata");
+  if (!data || typeof data.id !== "string") throw new Error("Ops Check submission not found for order storage");
+  return { id: data.id, metadata: readMetadata(data.metadata) };
+}
+
+async function compareAndSwapOrder(
+  supabase: SupabaseClient,
+  row: LeadMetadataRow,
+  order: OpsDragOrder
+): Promise<boolean> {
+  const nextMetadata = { ...row.metadata, [ORDER_METADATA_KEY]: order };
+  const { data, error } = await supabase
+    .from("custom_ops_hub_leads")
+    .update({ metadata: nextMetadata })
+    .eq("id", row.id)
+    .eq("metadata", row.metadata)
+    .select("id")
+    .maybeSingle();
+  if (error) throw new Error(error.message || "Unable to atomically update Ops Drag Report order");
+  return Boolean(data);
+}
+
+export async function admitOpsDragOrder(
+  supabase: SupabaseClient,
+  snapshot: OpsDragAdmittedSnapshot
+): Promise<OpsDragOrder> {
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
+    const row = await loadMetadataRow(supabase, snapshot.submission_id);
+    const current = readOrder(row.metadata);
+    if (current) {
+      if (current.snapshot.digest !== snapshot.digest) {
+        throw new Error("The admitted Ops Check snapshot is immutable and does not match this submission");
+      }
+      return current;
+    }
+
+    const order = createAdmittedOrder(snapshot);
+    if (await compareAndSwapOrder(supabase, row, order)) return order;
+  }
+  throw new Error("Ops Drag Report order admission lost its atomic update budget");
+}
+
+export async function loadOpsDragOrder(
+  supabase: SupabaseClient,
+  submissionId: string
+): Promise<OpsDragOrder> {
+  const row = await loadMetadataRow(supabase, submissionId);
+  const order = readOrder(row.metadata);
+  if (!order) throw new Error("Ops Drag Report order has not been admitted");
+  return order;
+}
+
+export async function claimOpsDragFulfillment(
+  supabase: SupabaseClient,
+  submissionId: string,
+  payment: OpsDragPaymentAdmission,
+  recordedAt: string
+): Promise<FulfillmentOwnershipResult> {
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
+    const row = await loadMetadataRow(supabase, submissionId);
+    const current = readOrder(row.metadata);
+    if (!current) throw new Error("Ops Drag Report order has not been admitted");
+
+    const transition = claimFulfillmentOwnership(current, payment, recordedAt);
+    if (transition.order === current) return transition;
+    if (await compareAndSwapOrder(supabase, row, transition.order)) return transition;
+  }
+  throw new Error("Ops Drag Report fulfillment lease lost its atomic update budget");
+}

@@ -27,11 +27,13 @@ The Stripe restricted key should grant only the minimum permissions required to 
 ## Fulfillment and idempotency
 
 1. An existing Ops Check lead ID is resolved server-side; the browser never provides price, tax code, delivery email, or product metadata.
-2. Checkout Session creation uses a deterministic idempotency key derived from the lead and offer version.
-3. The webhook reads the raw body and verifies the Stripe signature before processing.
-4. Only paid, USD 29, US-address, matching-offer Sessions are fulfilled.
-5. Resend receives `ops-drag-report/{checkout_session_id}` as its idempotency key.
-6. The existing lead metadata stores one redacted fulfillment receipt. It includes only an email hash, not the address.
+2. The admitted report input is projected into an immutable allowlisted snapshot. Its canonical SHA-256 digest binds the order and Checkout metadata.
+3. Checkout Session creation uses exactly `ops-drag:{submission_id}:checkout:v1`.
+4. The webhook reads the raw body and verifies the Stripe signature before processing.
+5. Payment admission validates session mode, offer/version, one-time cadence and quantity, submission/client/order references, snapshot digest, paid state, payment reference, amount, currency, email, and US country.
+6. The existing lead metadata stores the durable order. JSON compare-and-swap makes payment-event deduplication and one-order fulfillment ownership one atomic transition without a schema change.
+7. The transition appends a hash-chained, allowlisted receipt containing email SHA-256 only. It never stores the raw webhook payload or raw email in the receipt chain.
+8. This foundation gate stops at fulfillment ownership. Report generation, provider delivery, delivery confirmation, retries, and refunds remain later held gates.
 
 ## Rollback
 
@@ -39,6 +41,8 @@ The Stripe restricted key should grant only the minimum permissions required to 
 2. Remove any public link to `/ops-drag-report`.
 3. Preserve the webhook until already-paid Sessions are fulfilled or refunded under the approved refund policy.
 4. Revert the feature branch or PR. No schema rollback is required because this build adds no table or migration.
+
+Rollback receipt: the pre-foundation branch commit is `d0c6fc443205543f3326cfd8e6ff4b65ba8f2acb`. Repointing the feature branch to that commit removes the durable foundation preview without touching production or changing any schema.
 
 ## Proof ladder
 

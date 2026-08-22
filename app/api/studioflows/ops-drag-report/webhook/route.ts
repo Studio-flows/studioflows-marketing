@@ -1,15 +1,12 @@
 import type Stripe from "stripe";
 
-import { evaluateFulfillmentSession, hashEmail } from "@/lib/ops-drag-report/contract";
 import {
-  loadOpsDragLead,
-  readFulfillmentReceipt,
-  readLeadEmail,
-  storeFulfillmentReceipt,
-} from "@/lib/ops-drag-report/lead-store";
-import { sendPaidOpsDragReport } from "@/lib/ops-drag-report/send-report";
+  evaluateFulfillmentSession,
+  hashEmail,
+  readFulfillmentSubmissionId,
+} from "@/lib/ops-drag-report/contract";
+import { claimOpsDragFulfillment, loadOpsDragOrder } from "@/lib/ops-drag-report/order-store";
 import { createOpsDragStripeClient, readWebhookSecret } from "@/lib/ops-drag-report/stripe-server";
-import { buildOpsTeardownSheet, mapLeadRowToTeardownInput } from "@/lib/ops-teardown/build-teardown-sheet";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
 export const runtime = "nodejs";
@@ -53,7 +50,16 @@ export async function POST(req: Request) {
 
     const session = event.data.object as Stripe.Checkout.Session;
     if (session.livemode !== (mode === "live")) throw new Error("Stripe mode mismatch");
-    const decision = evaluateFulfillmentSession(session);
+    const supabase = createMarketingSupabaseServerClient();
+    if (!supabase) throw new Error("Ops Check order storage is not configured");
+    const submissionId = readFulfillmentSubmissionId(session);
+    const order = await loadOpsDragOrder(supabase, submissionId);
+    const decision = evaluateFulfillmentSession(session, {
+      orderId: order.order_id,
+      submissionId: order.submission_id,
+      snapshotDigest: order.snapshot.digest,
+      deliveryEmail: order.snapshot.delivery_email,
+    });
     if (decision.state !== "fulfill") {
       return Response.json({
         received: true,
@@ -62,35 +68,28 @@ export async function POST(req: Request) {
       });
     }
 
-    const supabase = createMarketingSupabaseServerClient();
-    if (!supabase) throw new Error("Ops Check lead lookup is not configured");
-    const row = await loadOpsDragLead(supabase, decision.leadId);
-    if (readLeadEmail(row) !== decision.customerEmail) throw new Error("Checkout delivery email mismatch");
-
-    const prior = readFulfillmentReceipt(row);
-    if (prior?.checkout_session_id === session.id) {
-      return Response.json({ received: true, state: "duplicate", receipt: prior });
-    }
-
-    const sheet = buildOpsTeardownSheet(mapLeadRowToTeardownInput(row, decision.leadId));
-    const delivery = await sendPaidOpsDragReport({
-      sheet,
-      toEmail: decision.customerEmail,
-      checkoutSessionId: session.id,
+    const transition = await claimOpsDragFulfillment(
+      supabase,
+      decision.submissionId,
+      {
+        checkoutSessionId: session.id,
+        paymentReferenceId: decision.paymentReferenceId,
+        webhookEventId: event.id,
+        paidAt: decision.paidAt,
+        amountTotal: session.amount_total ?? 0,
+        currency: "usd",
+        customerEmailSha256: hashEmail(decision.customerEmail),
+        snapshotDigest: decision.snapshotDigest,
+      },
+      new Date(event.created * 1_000).toISOString()
+    );
+    return Response.json({
+      received: true,
+      state: transition.disposition === "acquired" ? "fulfillment_owned" : "duplicate",
+      order_id: transition.order.order_id,
+      lease_owner: transition.leaseOwner,
+      receipt: transition.order.receipts.at(-1) ?? null,
     });
-    const receipt = {
-      version: "v1",
-      state: "fulfilled",
-      checkout_session_id: session.id,
-      stripe_event_id: event.id,
-      customer_email_sha256: hashEmail(decision.customerEmail),
-      amount_total: session.amount_total,
-      currency: session.currency,
-      email_id: delivery.emailId,
-      fulfilled_at: new Date().toISOString(),
-    };
-    await storeFulfillmentReceipt(supabase, row, receipt);
-    return Response.json({ received: true, state: "fulfilled", receipt });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Webhook processing failed";
     return Response.json({ error: message }, { status: 500 });

@@ -6,6 +6,8 @@ import {
   normalizeCheckoutLead,
 } from "@/lib/ops-drag-report/contract";
 import { loadOpsDragLead, readLeadEmail } from "@/lib/ops-drag-report/lead-store";
+import { createAdmittedSnapshot } from "@/lib/ops-drag-report/order-foundation";
+import { admitOpsDragOrder } from "@/lib/ops-drag-report/order-store";
 import { createOpsDragStripeClient } from "@/lib/ops-drag-report/stripe-server";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -34,16 +36,24 @@ export async function POST(req: NextRequest) {
     const supabase = createMarketingSupabaseServerClient();
     if (!supabase) throw new Error("Ops Check lead lookup is not configured");
     const row = await loadOpsDragLead(supabase, leadId);
-    const lead = normalizeCheckoutLead({ id: row.id ?? leadId, workEmail: readLeadEmail(row) });
-    const params = buildCheckoutSessionParams(lead, req.nextUrl.origin);
+    const submissionId = typeof row.id === "string" ? row.id : leadId;
+    const lead = normalizeCheckoutLead({ id: submissionId, workEmail: readLeadEmail(row) });
+    const snapshot = createAdmittedSnapshot(row, submissionId, new Date().toISOString());
+    const order = await admitOpsDragOrder(supabase, snapshot);
+    const params = buildCheckoutSessionParams(lead, req.nextUrl.origin, {
+      orderId: order.order_id,
+      submissionId: order.submission_id,
+      snapshotDigest: order.snapshot.digest,
+    });
     const session = await client.checkout.sessions.create(params, {
-      idempotencyKey: createCheckoutIdempotencyKey(lead),
+      idempotencyKey: createCheckoutIdempotencyKey(order.submission_id),
     });
 
     if (!session.url) throw new Error("Stripe did not return a hosted Checkout URL");
     return NextResponse.json({
       checkout_url: session.url,
       checkout_session_id: session.id,
+      order_id: order.order_id,
       mode,
       offer: { amount: 2900, currency: "usd" },
     });

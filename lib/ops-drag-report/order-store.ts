@@ -32,6 +32,9 @@ function readOrder(metadata: Record<string, unknown>): OpsDragOrder | null {
   const value = metadata[ORDER_METADATA_KEY];
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const order = value as Partial<OpsDragOrder>;
+  if ((value as Record<string, unknown>).retention_redacted === true) {
+    throw new Error("Stored Ops Drag Report order is retention-redacted and cannot re-enter fulfillment");
+  }
   if (order.version !== "v1" || typeof order.order_id !== "string" || typeof order.submission_id !== "string") {
     throw new Error("Stored Ops Drag Report order is malformed");
   }
@@ -52,12 +55,16 @@ async function loadMetadataRow(supabase: SupabaseClient, submissionId: string): 
 async function compareAndSwapOrder(
   supabase: SupabaseClient,
   row: LeadMetadataRow,
-  order: OpsDragOrder
+  order: OpsDragOrder,
+  legitimateActivityAt?: string
 ): Promise<boolean> {
   const nextMetadata = { ...row.metadata, [ORDER_METADATA_KEY]: order };
+  const update = legitimateActivityAt
+    ? { metadata: nextMetadata, ops_drag_last_legitimate_activity_at: legitimateActivityAt }
+    : { metadata: nextMetadata };
   const { data, error } = await supabase
     .from("custom_ops_hub_leads")
-    .update({ metadata: nextMetadata })
+    .update(update)
     .eq("id", row.id)
     .eq("metadata", row.metadata)
     .select("id")
@@ -81,7 +88,7 @@ export async function admitOpsDragOrder(
     }
 
     const order = createAdmittedOrder(snapshot);
-    if (await compareAndSwapOrder(supabase, row, order)) return order;
+    if (await compareAndSwapOrder(supabase, row, order, snapshot.admitted_at)) return order;
   }
   throw new Error("Ops Drag Report order admission lost its atomic update budget");
 }

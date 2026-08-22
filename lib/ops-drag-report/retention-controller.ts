@@ -34,8 +34,13 @@ export type RetentionRecord = {
   support_closed_at: string | null;
   dispute_resolved_at: string | null;
   transaction_at: string | null;
-  legal_hold: { id: string; released_at: string | null } | null;
+  legal_hold: {
+    id: string;
+    released_at: string | null;
+    data_classes?: Array<RetentionDataClass | "ALL">;
+  } | null;
   lease: { owner: string; acquired_at: string; attempts: number } | null;
+  previous_retention_receipt_hash?: string | null;
   payload: Record<string, JsonValue>;
 };
 
@@ -55,6 +60,8 @@ export type RetentionReceipt = {
   lease_owner_hash: string;
   attempt: number;
   evidence_hash: string;
+  previous_receipt_hash: string | null;
+  receipt_hash: string;
 };
 
 function timestamp(value: string | null, label: string): number {
@@ -128,7 +135,10 @@ export function reduceDetailedLedger(payload: Record<string, JsonValue>): Record
 
 export function planRetentionAction(record: RetentionRecord, now: string): RetentionAction {
   const dueAt = calculateRetentionDueAt(record);
-  if (record.legal_hold && !record.legal_hold.released_at) {
+  const holdClasses = record.legal_hold?.data_classes;
+  const holdCoversClass = !holdClasses || holdClasses.length === 0 ||
+    holdClasses.includes("ALL") || holdClasses.includes(record.data_class);
+  if (record.legal_hold && !record.legal_hold.released_at && holdCoversClass) {
     return { kind: "HOLD", due_at: dueAt, reason: "SCOPED_LEGAL_HOLD" };
   }
   if (timestamp(now, "now") < timestamp(dueAt, "due_at")) {
@@ -141,19 +151,23 @@ export function planRetentionAction(record: RetentionRecord, now: string): Reten
 }
 
 export type RetentionMutationAdapter = {
-  apply(record: RetentionRecord, action: Extract<RetentionAction, { kind: "DELETE" | "REDUCE" }>): Promise<void>;
+  apply(
+    record: RetentionRecord,
+    action: Extract<RetentionAction, { kind: "DELETE" | "REDUCE" }>,
+    receipt: RetentionReceipt
+  ): Promise<void>;
 };
 
 export function createRetentionMutationAdapter(input: {
   enabled: boolean;
-  deleteRecord(record: RetentionRecord): Promise<void>;
-  reduceRecord(record: RetentionRecord, reduced: Record<string, JsonValue>): Promise<void>;
+  deleteRecord(record: RetentionRecord, receipt: RetentionReceipt): Promise<void>;
+  reduceRecord(record: RetentionRecord, reduced: Record<string, JsonValue>, receipt: RetentionReceipt): Promise<void>;
 }): RetentionMutationAdapter {
   if (!input.enabled) throw new Error("Retention mutation adapter is disabled");
   return {
-    async apply(record, action) {
-      if (action.kind === "DELETE") await input.deleteRecord(record);
-      else await input.reduceRecord(record, action.reduced);
+    async apply(record, action, receipt) {
+      if (action.kind === "DELETE") await input.deleteRecord(record, receipt);
+      else await input.reduceRecord(record, action.reduced, receipt);
     },
   };
 }
@@ -177,7 +191,13 @@ function retentionReceipt(record: RetentionRecord, action: Extract<RetentionActi
     lease_owner_hash: sha256(record.lease.owner),
     attempt: record.lease.attempts,
   };
-  return { ...evidence, evidence_hash: sha256(canonicalJson(evidence)) };
+  const evidenceHash = sha256(canonicalJson(evidence));
+  const chained = {
+    ...evidence,
+    evidence_hash: evidenceHash,
+    previous_receipt_hash: record.previous_retention_receipt_hash ?? null,
+  };
+  return { ...chained, receipt_hash: sha256(canonicalJson(chained)) };
 }
 
 export async function runRetentionCleanupWorker(input: {
@@ -195,7 +215,14 @@ export async function runRetentionCleanupWorker(input: {
   const records = (await input.store.loadBatch(limit)).slice(0, limit);
   const result = { scanned: records.length, applied: 0, held: 0, skipped: 0, blocked: 0 };
   for (const observed of records) {
-    const action = planRetentionAction(observed, input.now);
+    let action: RetentionAction;
+    try {
+      action = planRetentionAction(observed, input.now);
+    } catch {
+      await input.store.release(observed.record_id, "RETENTION_TIMESTAMP_INVALID");
+      result.blocked += 1;
+      continue;
+    }
     if (action.kind === "NONE") {
       result.skipped += 1;
       continue;
@@ -204,7 +231,10 @@ export async function runRetentionCleanupWorker(input: {
       result.held += 1;
       continue;
     }
-    const claimed = await input.store.claim(observed.record_id, input.owner, input.now, input.staleBefore);
+    const preclaimed = observed.lease?.owner === input.owner && observed.lease.acquired_at === input.now
+      ? observed
+      : null;
+    const claimed = preclaimed ?? await input.store.claim(observed.record_id, input.owner, input.now, input.staleBefore);
     if (!claimed) {
       result.skipped += 1;
       continue;
@@ -221,8 +251,9 @@ export async function runRetentionCleanupWorker(input: {
         result.skipped += 1;
         continue;
       }
-      await input.adapter.apply(claimed, claimedAction);
-      await input.store.complete(claimed.record_id, retentionReceipt(claimed, claimedAction, input.now));
+      const receipt = retentionReceipt(claimed, claimedAction, input.now);
+      await input.adapter.apply(claimed, claimedAction, receipt);
+      await input.store.complete(claimed.record_id, receipt);
       result.applied += 1;
     } catch {
       await input.store.release(observed.record_id, "RETENTION_ADAPTER_FAILED");
@@ -235,4 +266,21 @@ export async function runRetentionCleanupWorker(input: {
 export function retentionReceiptContainsRawPayload(receipt: RetentionReceipt, payload: Record<string, JsonValue>): boolean {
   const serialized = canonicalJson(receipt);
   return Object.values(payload).some((value) => typeof value === "string" && value.length > 0 && serialized.includes(value));
+}
+
+export function verifyRetentionReceiptChain(receipts: RetentionReceipt[]): boolean {
+  let previous: string | null = null;
+  for (const receipt of receipts) {
+    if (receipt.previous_receipt_hash !== previous) return false;
+    const { receipt_hash: receiptHash, ...chained } = receipt;
+    if (sha256(canonicalJson(chained)) !== receiptHash) return false;
+    const {
+      evidence_hash: evidenceHash,
+      previous_receipt_hash: _previousReceiptHash,
+      ...evidence
+    } = chained;
+    if (sha256(canonicalJson(evidence)) !== evidenceHash) return false;
+    previous = receiptHash;
+  }
+  return true;
 }

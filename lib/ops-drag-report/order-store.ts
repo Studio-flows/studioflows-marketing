@@ -9,6 +9,7 @@ import {
   type OpsDragPaymentAdmission,
 } from "@/lib/ops-drag-report/order-foundation";
 import {
+  admitPaidNonUsAutomaticRefund,
   claimRefundAttempt,
   type RefundOwnershipResult,
 } from "@/lib/ops-drag-report/delivery-refund-state-machine";
@@ -119,6 +120,24 @@ export async function claimOpsDragFulfillment(
     if (await compareAndSwapOrder(supabase, row, transition.order, recordedAt)) return transition;
   }
   throw new Error("Ops Drag Report fulfillment lease lost its atomic update budget");
+}
+
+export async function claimOpsDragPaidNonUsRefund(
+  supabase: SupabaseClient,
+  submissionId: string,
+  payment: OpsDragPaymentAdmission,
+  recordedAt: string
+): Promise<ReturnType<typeof admitPaidNonUsAutomaticRefund>> {
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
+    const row = await loadMetadataRow(supabase, submissionId);
+    const current = readOrder(row.metadata);
+    if (!current) throw new Error("Ops Drag Report order has not been admitted");
+
+    const transition = admitPaidNonUsAutomaticRefund(current, payment, recordedAt);
+    if (transition.order === current) return transition;
+    if (await compareAndSwapOrder(supabase, row, transition.order, recordedAt)) return transition;
+  }
+  throw new Error("Ops Drag Report paid non-US refund admission lost its atomic update budget");
 }
 
 export async function transitionOpsDragOrder(

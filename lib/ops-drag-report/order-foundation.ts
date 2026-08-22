@@ -22,6 +22,7 @@ export type OpsDragAdmittedSnapshot = {
 export type OpsDragReceiptKind =
   | "SUBMISSION_ADMITTED"
   | "PAYMENT_ADMITTED_FULFILLMENT_OWNED"
+  | "PAYMENT_ADMITTED_REFUND_REQUIRED"
   | "DUPLICATE_PAYMENT_EVENT_NOOP"
   | "GENERATION_ATTEMPT_RECORDED"
   | "REPORT_VALIDATED"
@@ -129,6 +130,12 @@ export type OpsDragPaymentAdmission = {
   currency: "usd";
   customerEmailSha256: string;
   snapshotDigest: string;
+  refundReason?: "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT";
+};
+
+export type PaidNonUsRefundAdmissionResult = {
+  disposition: "acquired" | "duplicate";
+  order: OpsDragOrder;
 };
 
 export type OpsDragOrder = {
@@ -330,6 +337,13 @@ function assertPaymentMatchesOrder(order: OpsDragOrder, payment: OpsDragPaymentA
   if (order.payment && order.payment.checkoutSessionId !== payment.checkoutSessionId) {
     throw new Error("A different Checkout Session is already bound to this order");
   }
+  if (order.payment) {
+    const { webhookEventId: _storedEventId, ...storedBinding } = order.payment;
+    const { webhookEventId: _candidateEventId, ...candidateBinding } = payment;
+    if (canonicalJson(storedBinding) !== canonicalJson(candidateBinding)) {
+      throw new Error("Checkout payment admission binding mismatch");
+    }
+  }
 }
 
 export function claimFulfillmentOwnership(
@@ -338,6 +352,7 @@ export function claimFulfillmentOwnership(
   recordedAt: string
 ): FulfillmentOwnershipResult {
   assertPaymentMatchesOrder(order, payment);
+  if (payment.refundReason) throw new Error("Refund-only payments cannot claim fulfillment ownership");
   const existingOwner = order.fulfillment.lease_owner;
 
   if (order.processed_event_ids.includes(payment.webhookEventId)) {
@@ -387,6 +402,67 @@ export function claimFulfillmentOwnership(
     }
   );
   return { disposition: "acquired", order: acquired, leaseOwner };
+}
+
+export function admitPaidNonUsRefundRequirement(
+  order: OpsDragOrder,
+  payment: OpsDragPaymentAdmission,
+  recordedAt: string
+): PaidNonUsRefundAdmissionResult {
+  assertPaymentMatchesOrder(order, payment);
+  if (payment.refundReason !== "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT") {
+    throw new Error("Paid non-US refund admission reason is invalid");
+  }
+  if (order.fulfillment.lease_owner) {
+    throw new Error("A fulfillment-owned order cannot enter the paid non-US refund path");
+  }
+  if (order.processed_event_ids.includes(payment.webhookEventId)) {
+    if (!order.payment || order.payment.refundReason !== payment.refundReason) {
+      throw new Error("Processed paid non-US event has no matching payment admission");
+    }
+    return { disposition: "duplicate", order };
+  }
+
+  assertTransition(order.workflow_status, "IN_PROGRESS");
+  if (order.payment) {
+    const duplicateOrder: OpsDragOrder = {
+      ...order,
+      processed_event_ids: [...order.processed_event_ids, payment.webhookEventId],
+      receipts: appendReceipt(order, "DUPLICATE_PAYMENT_EVENT_NOOP", recordedAt, {
+        checkout_session_id: payment.checkoutSessionId,
+        webhook_event_id: payment.webhookEventId,
+        refund_reason: payment.refundReason,
+      }),
+    };
+    return { disposition: "duplicate", order: duplicateOrder };
+  }
+
+  const admitted: OpsDragOrder = {
+    ...order,
+    workflow_status: "IN_PROGRESS",
+    payment,
+    processed_event_ids: [...order.processed_event_ids, payment.webhookEventId],
+    receipts: [],
+  };
+  admitted.receipts = appendReceipt(
+    { ...admitted, receipts: order.receipts },
+    "PAYMENT_ADMITTED_REFUND_REQUIRED",
+    recordedAt,
+    {
+      checkout_session_id: payment.checkoutSessionId,
+      payment_reference_id: payment.paymentReferenceId,
+      webhook_event_id: payment.webhookEventId,
+      signature_verified: true,
+      amount_total: payment.amountTotal,
+      currency: payment.currency,
+      paid_at: payment.paidAt,
+      snapshot_digest: payment.snapshotDigest,
+      customer_email_sha256: payment.customerEmailSha256,
+      refund_reason: payment.refundReason,
+      fulfillment_permitted: false,
+    }
+  );
+  return { disposition: "acquired", order: admitted };
 }
 
 export function verifyReceiptChain(order: OpsDragOrder): boolean {

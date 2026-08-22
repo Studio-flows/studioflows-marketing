@@ -2,12 +2,15 @@ import { createHash, createHmac, timingSafeEqual } from "node:crypto";
 
 import {
   appendReceipt,
+  admitPaidNonUsRefundRequirement,
   canonicalJson,
   sha256,
   type JsonValue,
   type OpsDragAutomationAttempt,
   type OpsDragAutomationState,
   type OpsDragOrder,
+  type OpsDragPaymentAdmission,
+  type PaidNonUsRefundAdmissionResult,
   type OpsDragTerminalDisposition,
 } from "./order-foundation.ts";
 
@@ -268,7 +271,10 @@ const BLOCKED_COMMERCIAL_CONTENT_PATTERNS = [
 ] as const;
 
 function requirePaidOrder(order: OpsDragOrder): void {
-  if (!order.payment || !order.fulfillment.lease_owner) {
+  const isPaidNonUsRefund =
+    order.payment?.refundReason === "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT" &&
+    order.fulfillment.lease_owner === null;
+  if (!order.payment || (!order.fulfillment.lease_owner && !isPaidNonUsRefund)) {
     throw new Error("Delivery automation requires an admitted payment and fulfillment owner");
   }
 }
@@ -762,6 +768,20 @@ function requireRefund(order: OpsDragOrder, reason: string, recordedAt: string):
     refund_eligible_at: next.automation.sla.refund_eligible_at,
     refund_initiation_due_at: next.automation.sla.refund_initiation_due_at,
   });
+}
+
+export function admitPaidNonUsAutomaticRefund(
+  order: OpsDragOrder,
+  payment: OpsDragPaymentAdmission,
+  recordedAt: string
+): PaidNonUsRefundAdmissionResult {
+  const admission = admitPaidNonUsRefundRequirement(order, payment, recordedAt);
+  const refundOrder = requireRefund(
+    admission.order,
+    "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT",
+    recordedAt
+  );
+  return { ...admission, order: refundOrder };
 }
 
 function classifyEmailProviderEvent(

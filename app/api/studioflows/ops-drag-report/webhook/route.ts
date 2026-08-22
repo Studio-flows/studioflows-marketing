@@ -5,7 +5,11 @@ import {
   hashEmail,
   readFulfillmentSubmissionId,
 } from "@/lib/ops-drag-report/contract";
-import { claimOpsDragFulfillment, loadOpsDragOrder } from "@/lib/ops-drag-report/order-store";
+import {
+  claimOpsDragFulfillment,
+  claimOpsDragPaidNonUsRefund,
+  loadOpsDragOrder,
+} from "@/lib/ops-drag-report/order-store";
 import { transitionOpsDragOrder } from "@/lib/ops-drag-report/order-store";
 import { applyRefundProviderEvent } from "@/lib/ops-drag-report/delivery-refund-state-machine";
 import { createDeterministicReportGenerationAdapter } from "@/lib/ops-drag-report/deterministic-report";
@@ -86,11 +90,39 @@ export async function POST(req: Request) {
       snapshotDigest: order.snapshot.digest,
       deliveryEmail: order.snapshot.delivery_email,
     });
-    if (decision.state !== "fulfill") {
+    if (decision.state === "pending" || decision.state === "reject") {
       return Response.json({
         received: true,
         state: decision.state,
         reason: decision.reason,
+      });
+    }
+
+    const recordedAt = new Date(event.created * 1_000).toISOString();
+    if (decision.state === "refund_required") {
+      const transition = await claimOpsDragPaidNonUsRefund(
+        supabase,
+        decision.submissionId,
+        {
+          checkoutSessionId: session.id,
+          paymentReferenceId: decision.paymentReferenceId,
+          webhookEventId: event.id,
+          paidAt: decision.paidAt,
+          amountTotal: session.amount_total ?? 0,
+          currency: "usd",
+          customerEmailSha256: hashEmail(decision.customerEmail),
+          snapshotDigest: decision.snapshotDigest,
+          refundReason: decision.reason,
+        },
+        recordedAt
+      );
+      return Response.json({
+        received: true,
+        state: "refund_required",
+        reason: decision.reason,
+        disposition: transition.disposition,
+        order_id: transition.order.order_id,
+        receipt: transition.order.receipts.at(-1) ?? null,
       });
     }
 
@@ -107,7 +139,7 @@ export async function POST(req: Request) {
         customerEmailSha256: hashEmail(decision.customerEmail),
         snapshotDigest: decision.snapshotDigest,
       },
-      new Date(event.created * 1_000).toISOString()
+      recordedAt
     );
     const orchestration = await orchestratePaidOpsDragFulfillment({
       store: {

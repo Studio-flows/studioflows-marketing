@@ -122,7 +122,23 @@ assert.deepEqual(
     ...paidSession,
     customer_details: { email: lead.workEmail, address: { country: "CA" } },
   } as Stripe.Checkout.Session, binding),
-  { state: "reject", reason: "customer_country_not_us" }
+  {
+    state: "refund_required",
+    reason: "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT",
+    submissionId: lead.id,
+    customerEmail: lead.workEmail,
+    paymentReferenceId: "pi_test_contract",
+    paidAt: new Date(1_780_000_000_000).toISOString(),
+    snapshotDigest: snapshot.digest,
+  }
+);
+expectRejection(
+  { ...paidSession, customer_details: { email: lead.workEmail, address: { country: null } } },
+  "customer_billing_country_unverified"
+);
+expectRejection(
+  { ...paidSession, customer_details: { email: lead.workEmail, address: { country: "UNKNOWN" } } },
+  "customer_billing_country_unverified"
 );
 assert.deepEqual(
   evaluateFulfillmentSession({ ...paidSession, mode: "subscription" } as Stripe.Checkout.Session, binding),

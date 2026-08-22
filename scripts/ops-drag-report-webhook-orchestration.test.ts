@@ -1,7 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import type { EmailProviderAdapter, RefundProviderAdapter } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
+import {
+  admitPaidNonUsAutomaticRefund,
+  applyRefundProviderEvent,
+  claimRefundAttempt,
+  countsAsVerifiedFirstSale,
+  startGenerationAttempt,
+  type EmailProviderAdapter,
+  type RefundProviderAdapter,
+} from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
 import { createDeterministicReportGenerationAdapter } from "../lib/ops-drag-report/deterministic-report.ts";
 import {
   orchestratePaidOpsDragFulfillment,
@@ -176,6 +184,112 @@ assert.equal(duplicateDelivery.order.automation?.delivery.attempts, 1);
 assert.equal(duplicateDelivery.order.automation?.delivery.submission_lease_owner, firstLeaseOwner);
 assert.ok(verifyReceiptChain(duplicateDelivery.order));
 
+const nonUsAdmitted = createOrder("paid-non-us-refund");
+const nonUsPayment: OpsDragPaymentAdmission = {
+  ...paymentFor(nonUsAdmitted, "evt_paid_non_us_1"),
+  refundReason: "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT",
+};
+const nonUsStore = new AtomicOrderStore(nonUsAdmitted);
+await Promise.all(
+  Array.from({ length: 32 }, (_, index) =>
+    nonUsStore.transition((current) =>
+      admitPaidNonUsAutomaticRefund(
+        current,
+        { ...nonUsPayment, webhookEventId: `evt_paid_non_us_${index + 1}` },
+        `2026-08-22T20:02:${String(index).padStart(2, "0")}.000Z`
+      ).order
+    )
+  )
+);
+const nonUsRequired = await nonUsStore.load();
+assert.equal(nonUsRequired.payment?.refundReason, "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT");
+assert.equal(nonUsRequired.fulfillment.lease_owner, null);
+assert.equal(nonUsRequired.automation?.refund.status, "REQUIRED");
+assert.equal(nonUsRequired.automation?.generation.attempts, 0);
+assert.equal(nonUsRequired.automation?.delivery.attempts, 0);
+assert.equal(nonUsRequired.receipts.filter((receipt) => receipt.kind === "PAYMENT_ADMITTED_REFUND_REQUIRED").length, 1);
+assert.equal(nonUsRequired.receipts.filter((receipt) => receipt.kind === "REFUND_REQUIRED").length, 1);
+assert.equal(countsAsVerifiedFirstSale(nonUsRequired), false);
+assert.throws(
+  () => startGenerationAttempt(nonUsRequired, "2026-08-22T20:03:00.000Z"),
+  /Refund-path orders cannot start generation/
+);
+assert.equal(JSON.stringify(nonUsRequired).includes("123 Maple"), false);
+
+await Promise.all(
+  Array.from({ length: 32 }, () =>
+    nonUsStore.transition((current) => claimRefundAttempt(current, "2026-08-22T20:03:01.000Z").order)
+  )
+);
+const nonUsOwned = await nonUsStore.load();
+assert.equal(nonUsOwned.automation?.refund.status, "OWNED");
+assert.equal(nonUsOwned.automation?.refund.attempts, 1);
+assert.equal(nonUsOwned.receipts.filter((receipt) => receipt.kind === "REFUND_ATTEMPT_OWNED").length, 1);
+assert.equal(
+  nonUsOwned.automation?.refund.idempotency_key,
+  `ops-drag:${nonUsPayment.checkoutSessionId}:refund:v1`
+);
+
+let acceptedRefunds = 0;
+const acceptedRefundKeys = new Set<string>();
+const automaticRefundAdapter: RefundProviderAdapter = {
+  async requestFullRefund(input) {
+    assert.equal(input.remainingRefundableAmount, 2_900);
+    assert.equal(input.currency, "usd");
+    assert.equal(input.idempotencyKey, `ops-drag:${nonUsPayment.checkoutSessionId}:refund:v1`);
+    if (!acceptedRefundKeys.has(input.idempotencyKey)) {
+      acceptedRefundKeys.add(input.idempotencyKey);
+      acceptedRefunds += 1;
+    }
+    return { providerRefundId: "re_paid_non_us_fixture" };
+  },
+};
+const refundRecovery = await processPaidFulfillmentWorkerOrder({
+  store: nonUsStore,
+  generationAdapter,
+  createEmailAdapter: () => {
+    throw new Error("Paid non-US refund path must never create an email adapter");
+  },
+  createRefundAdapter: () => automaticRefundAdapter,
+  recordedAt: "2026-08-22T20:03:02.000Z",
+});
+assert.equal(refundRecovery, "processed");
+assert.equal(acceptedRefunds, 1);
+const refundCreated = await nonUsStore.load();
+assert.equal(refundCreated.automation?.refund.status, "CREATED");
+assert.equal(refundCreated.automation?.terminal_disposition, null);
+await Promise.all(
+  Array.from({ length: 16 }, () =>
+    processPaidFulfillmentWorkerOrder({
+      store: nonUsStore,
+      generationAdapter,
+      createEmailAdapter: () => {
+        throw new Error("Paid non-US refund path must never create an email adapter");
+      },
+      createRefundAdapter: () => automaticRefundAdapter,
+      recordedAt: "2026-08-22T20:03:03.000Z",
+    })
+  )
+);
+assert.equal(acceptedRefunds, 1);
+await nonUsStore.transition((current) =>
+  applyRefundProviderEvent(
+    current,
+    {
+      eventId: "evt_paid_non_us_refund_succeeded",
+      providerRefundId: "re_paid_non_us_fixture",
+      type: "refund.succeeded",
+    },
+    "2026-08-22T20:04:00.000Z"
+  )
+);
+const nonUsRefunded = await nonUsStore.load();
+assert.equal(nonUsRefunded.automation?.terminal_disposition, "REFUNDED");
+assert.equal(nonUsRefunded.automation?.refund.status, "SUCCEEDED");
+assert.equal(countsAsVerifiedFirstSale(nonUsRefunded), false);
+assert.equal(nonUsRefunded.receipts.filter((receipt) => receipt.kind === "ORDER_TERMINAL").length, 1);
+assert.ok(verifyReceiptChain(nonUsRefunded));
+
 console.log(
-  "OPS_DRAG_REPORT_WEBHOOK_ORCHESTRATION_PASS lazy_preflight=PASS bounded_receipts=PASS refund_required=PASS duplicate_send=PASS redaction=PASS"
+  "OPS_DRAG_REPORT_WEBHOOK_ORCHESTRATION_PASS lazy_preflight=PASS bounded_receipts=PASS refund_required=PASS duplicate_send=PASS redaction=PASS paid_non_us_refund=PASS"
 );

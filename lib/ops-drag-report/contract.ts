@@ -36,6 +36,15 @@ export type FulfillmentDecision =
       paidAt: string;
       snapshotDigest: string;
     }
+  | {
+      state: "refund_required";
+      reason: "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT";
+      submissionId: string;
+      customerEmail: string;
+      paymentReferenceId: string;
+      paidAt: string;
+      snapshotDigest: string;
+    }
   | { state: "pending"; reason: "payment_not_paid" }
   | { state: "reject"; reason: string };
 
@@ -117,12 +126,9 @@ export function buildCheckoutSessionParams(
   };
 }
 
-function readCustomerCountry(session: Stripe.Checkout.Session): string | null {
-  const billingCountry = session.customer_details?.address?.country;
-  if (billingCountry) return billingCountry.toUpperCase();
-
-  const shippingCountry = session.collected_information?.shipping_details?.address?.country;
-  return shippingCountry ? shippingCountry.toUpperCase() : null;
+function readBillingCountry(session: Stripe.Checkout.Session): string | null {
+  const country = session.customer_details?.address?.country?.trim().toUpperCase() ?? "";
+  return /^[A-Z]{2}$/.test(country) ? country : null;
 }
 
 function readPaymentReference(session: Stripe.Checkout.Session): string | null {
@@ -179,23 +185,32 @@ export function evaluateFulfillmentSession(
     return { state: "reject", reason: "customer_email_mismatch" };
   }
 
-  if (readCustomerCountry(session) !== "US") {
-    return { state: "reject", reason: "customer_country_not_us" };
-  }
-
   const paymentReferenceId = readPaymentReference(session);
   if (!paymentReferenceId) return { state: "reject", reason: "payment_reference_missing" };
   if (typeof session.created !== "number" || !Number.isFinite(session.created)) {
     return { state: "reject", reason: "paid_timestamp_missing" };
   }
+  const billingCountry = readBillingCountry(session);
+  if (!billingCountry) return { state: "reject", reason: "customer_billing_country_unverified" };
 
-  return {
-    state: "fulfill",
+  const paidBinding = {
     submissionId: expected.submissionId,
     customerEmail,
     paymentReferenceId,
     paidAt: new Date(session.created * 1_000).toISOString(),
     snapshotDigest: expected.snapshotDigest,
+  };
+  if (billingCountry !== "US") {
+    return {
+      state: "refund_required",
+      reason: "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT",
+      ...paidBinding,
+    };
+  }
+
+  return {
+    state: "fulfill",
+    ...paidBinding,
   };
 }
 

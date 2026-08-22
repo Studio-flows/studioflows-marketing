@@ -8,6 +8,10 @@ import {
   type OpsDragOrder,
   type OpsDragPaymentAdmission,
 } from "@/lib/ops-drag-report/order-foundation";
+import {
+  claimRefundAttempt,
+  type RefundOwnershipResult,
+} from "@/lib/ops-drag-report/delivery-refund-state-machine";
 
 const ORDER_METADATA_KEY = "ops_drag_report_order";
 const MAX_CAS_ATTEMPTS = 5;
@@ -127,4 +131,38 @@ export async function transitionOpsDragOrder(
     if (await compareAndSwapOrder(supabase, row, next)) return next;
   }
   throw new Error("Ops Drag Report state transition lost its atomic update budget");
+}
+
+export async function listOpsDragOrdersForWorker(
+  supabase: SupabaseClient,
+  limit: number
+): Promise<OpsDragOrder[]> {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error("Worker order limit is invalid");
+  const { data, error } = await supabase
+    .from("custom_ops_hub_leads")
+    .select("id, metadata")
+    .not("metadata->ops_drag_report_order", "is", null)
+    .limit(limit);
+  if (error) throw new Error(error.message || "Unable to list Ops Drag Report worker orders");
+  return (data ?? []).map((row) => {
+    const order = readOrder(readMetadata(row.metadata));
+    if (!order) throw new Error("Worker query returned a row without an Ops Drag Report order");
+    return order;
+  });
+}
+
+export async function claimOpsDragRefund(
+  supabase: SupabaseClient,
+  submissionId: string,
+  recordedAt: string
+): Promise<RefundOwnershipResult> {
+  for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
+    const row = await loadMetadataRow(supabase, submissionId);
+    const current = readOrder(row.metadata);
+    if (!current) throw new Error("Ops Drag Report order has not been admitted");
+    const transition = claimRefundAttempt(current, recordedAt);
+    if (transition.order === current) return transition;
+    if (await compareAndSwapOrder(supabase, row, transition.order)) return transition;
+  }
+  throw new Error("Ops Drag Report refund lease lost its atomic update budget");
 }

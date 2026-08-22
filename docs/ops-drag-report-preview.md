@@ -20,6 +20,12 @@ Do not set either switch in Production during preview. Do not expose or link `/o
 - `STRIPE_OPS_DRAG_REPORT_WEBHOOK_SECRET`: signing secret for the exact webhook endpoint.
 - `RESEND_API_KEY`: existing transactional email key.
 - `OPS_DRAG_REPORT_EMAIL_FROM` or `RESEND_FROM_EMAIL`: verified sender.
+- `RESEND_OPS_DRAG_REPORT_WEBHOOK_SECRET`: signature secret for the Resend delivery-event endpoint.
+- `OPS_DRAG_REPORT_PROVIDER_MODE`: explicit `test` or `live` provider boundary.
+- `OPS_DRAG_REPORT_PROVIDER_TEST_ENABLED`: must be exactly `true` before test-provider execution.
+- `OPS_DRAG_REPORT_PROVIDER_LIVE_ENABLED`: must be exactly `true`, together with `OPS_DRAG_REPORT_LIVE_ENABLED=true`, before live-provider execution.
+- `OPS_DRAG_REPORT_PROVIDER_WORKER_ENABLED`: must be exactly `true` before the bounded worker can run.
+- `OPS_DRAG_REPORT_WORKER_SECRET`: minimum 32-character bearer secret used by the scheduler request.
 - Existing Supabase server configuration used by `custom_ops_hub_leads`.
 
 The Stripe restricted key should grant only the minimum permissions required to create and read Checkout Sessions for this flow. Secrets stay in Vercel environment storage and are never written to the repository or receipts.
@@ -39,7 +45,7 @@ The Stripe restricted key should grant only the minimum permissions required to 
 11. Signed, expiring, single-use tokens bind results, redelivery, or refund requests to one order and one action. Token IDs are stored only for replay prevention and are hashed in receipts.
 12. Attempt, delivery, refund, token, and terminal evidence extends the existing redacted hash chain. Exactly one terminal outcome is allowed, and only `DELIVERED` qualifies as a verified first sale.
 
-This preview contains provider adapter contracts only. It does not call an email or refund provider, send a message, issue a refund, or expose a report URL.
+This preview contains fail-closed Resend and Stripe refund adapters, verified webhook entrypoints, and a bounded one-pass SLA/refund worker. All provider and worker gates remain disabled. The retained proof uses injected fixture transports only; it does not call an email or refund provider, send a message, issue a refund, or expose a report URL.
 
 ## Rollback
 

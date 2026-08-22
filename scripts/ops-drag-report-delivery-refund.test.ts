@@ -14,6 +14,7 @@ import {
   OPS_DRAG_REPORT_SCHEMA_VERSION,
   OPS_DRAG_REPORT_TEMPLATE_VERSION,
   recordGenerationFailure,
+  recordRefundRequestFailure,
   startDeliveryAttempt,
   startGenerationAttempt,
   validateGeneratedReport,
@@ -422,6 +423,24 @@ assert.equal(refundFailure.automation?.blocker_code, "DELIVERY_FAILED_REFUND_FAI
 assert.equal(refundFailure.workflow_status, "BLOCKED");
 assert.equal(refundFailure.automation?.terminal_disposition, null);
 assert.throws(() => claimRefundAttempt(refundFailure, "2026-08-22T21:10:00.000Z"), /retry budget exhausted/);
+
+let refundRequestFailure = expireDeliverySla(
+  makeSubmittedOrder("msg_refund_request_failure"),
+  "2026-08-22T21:00:00.000Z"
+);
+for (let attempt = 1; attempt <= 3; attempt += 1) {
+  const ownership = claimRefundAttempt(refundRequestFailure, `2026-08-22T21:1${attempt}:00.000Z`);
+  assert.equal(ownership.disposition, "acquired");
+  refundRequestFailure = recordRefundRequestFailure(
+    ownership.order,
+    "REFUND_PROVIDER_REQUEST_FAILED",
+    `2026-08-22T21:1${attempt}:01.000Z`
+  );
+}
+assert.equal(refundRequestFailure.automation?.refund.status, "FAILED");
+assert.equal(refundRequestFailure.automation?.refund.attempts, 3);
+assert.equal(refundRequestFailure.workflow_status, "BLOCKED");
+assert.ok(verifyReceiptChain(refundRequestFailure));
 
 const tokenSecret = "fixture-order-token-secret-at-least-32-bytes";
 const token = createOrderToken(

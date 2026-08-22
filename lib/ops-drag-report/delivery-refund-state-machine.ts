@@ -49,9 +49,12 @@ export type ReportGenerationAdapter = {
 export type EmailProviderAdapter = {
   submit(input: {
     orderId: string;
+    submissionId: string;
     deliveryEmail: string;
     reportSha256: string;
     pdfSha256: string;
+    pdfBytes: Uint8Array;
+    filename: string;
     attemptNumber: number;
   }): Promise<{ providerMessageId: string }>;
 };
@@ -60,7 +63,7 @@ export type RefundProviderAdapter = {
   requestFullRefund(input: {
     checkoutSessionId: string;
     paymentReferenceId: string;
-    amount: 2900;
+    remainingRefundableAmount: number;
     currency: "usd";
     idempotencyKey: string;
   }): Promise<{ providerRefundId: string }>;
@@ -158,7 +161,7 @@ export const EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX: Record<
 export type RefundProviderEvent = {
   eventId: string;
   providerRefundId: string;
-  type: "refund.created" | "refund.succeeded" | "refund.failed";
+  type: "refund.created" | "refund.pending" | "refund.succeeded" | "refund.failed";
 };
 
 export type RefundOwnershipResult =
@@ -659,8 +662,13 @@ export function applyRefundProviderEvent(
   }
   next.automation.refund.provider_refund_id = event.providerRefundId;
   next.automation.processed_provider_event_ids.push(event.eventId);
-  next.automation.refund.status =
-    event.type === "refund.created" ? "CREATED" : event.type === "refund.succeeded" ? "SUCCEEDED" : "RETRYABLE";
+  next.automation.refund.status = event.type === "refund.created"
+    ? "CREATED"
+    : event.type === "refund.succeeded"
+      ? "SUCCEEDED"
+      : event.type === "refund.failed"
+        ? "RETRYABLE"
+        : next.automation.refund.status;
   let updated = appendAutomationReceipt(next.order, "REFUND_PROVIDER_EVENT_RECORDED", recordedAt, {
     provider_event_id: event.eventId,
     provider_refund_id: event.providerRefundId,
@@ -689,6 +697,32 @@ export function applyRefundProviderEvent(
     updated = failed.order;
   }
   return updated;
+}
+
+export function recordRefundRequestFailure(
+  order: OpsDragOrder,
+  failureCode: string,
+  recordedAt: string
+): OpsDragOrder {
+  const next = cloneWithAutomation(order);
+  if (next.automation.refund.status !== "OWNED" || next.automation.refund.attempts === 0) {
+    throw new Error("Refund request failure requires an owned attempt");
+  }
+  const exhausted = next.automation.refund.attempts >= next.automation.refund.max_attempts;
+  next.automation.refund.status = exhausted ? "FAILED" : "RETRYABLE";
+  next.automation.blocker_code = exhausted ? "DELIVERY_FAILED_REFUND_FAILED" : null;
+  next.order.workflow_status = exhausted ? "BLOCKED" : "IN_PROGRESS";
+  next.automation.attempts.push(
+    createAttempt(order, "REFUND", next.automation.refund.attempts, "FAILED", recordedAt, failureCode)
+  );
+  return appendAutomationReceipt(next.order, "REFUND_PROVIDER_EVENT_RECORDED", recordedAt, {
+    provider_event_id: null,
+    provider_refund_id: null,
+    provider_state: "request_failed",
+    provider_confirmed_refunded: false,
+    failure_code: failureCode,
+    attempt_number: next.automation.refund.attempts,
+  });
 }
 
 export function countsAsVerifiedFirstSale(order: OpsDragOrder): boolean {

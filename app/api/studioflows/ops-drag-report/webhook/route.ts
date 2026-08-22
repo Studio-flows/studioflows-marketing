@@ -6,6 +6,9 @@ import {
   readFulfillmentSubmissionId,
 } from "@/lib/ops-drag-report/contract";
 import { claimOpsDragFulfillment, loadOpsDragOrder } from "@/lib/ops-drag-report/order-store";
+import { transitionOpsDragOrder } from "@/lib/ops-drag-report/order-store";
+import { applyRefundProviderEvent } from "@/lib/ops-drag-report/delivery-refund-state-machine";
+import { mapStripeRefundWebhook } from "@/lib/ops-drag-report/provider-webhooks";
 import { createOpsDragStripeClient, readWebhookSecret } from "@/lib/ops-drag-report/stripe-server";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -44,12 +47,31 @@ export async function POST(req: Request) {
   }
 
   try {
+    if (event.livemode !== (mode === "live")) throw new Error("Stripe mode mismatch");
+    if (new Set(["refund.created", "refund.updated", "refund.failed"]).has(event.type)) {
+      const bound = mapStripeRefundWebhook(event);
+      const supabase = createMarketingSupabaseServerClient();
+      if (!supabase) throw new Error("Ops Check order storage is not configured");
+      const current = await loadOpsDragOrder(supabase, bound.submissionId);
+      if (current.order_id !== bound.orderId || current.payment?.checkoutSessionId !== bound.checkoutSessionId) {
+        throw new Error("Refund checkout binding mismatch");
+      }
+      const order = await transitionOpsDragOrder(supabase, bound.submissionId, (stored) =>
+        applyRefundProviderEvent(stored, bound.event, bound.recordedAt)
+      );
+      return Response.json({
+        received: true,
+        state: order.automation?.terminal_disposition === "REFUNDED" ? "refunded" : "refund_nonterminal",
+        order_id: order.order_id,
+        receipt: order.receipts.at(-1) ?? null,
+      });
+    }
+
     if (!FULFILLMENT_EVENTS.has(event.type)) {
       return Response.json({ received: true, state: "ignored", event_type: event.type });
     }
 
     const session = event.data.object as Stripe.Checkout.Session;
-    if (session.livemode !== (mode === "live")) throw new Error("Stripe mode mismatch");
     const supabase = createMarketingSupabaseServerClient();
     if (!supabase) throw new Error("Ops Check order storage is not configured");
     const submissionId = readFulfillmentSubmissionId(session);

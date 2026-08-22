@@ -13,6 +13,7 @@ import {
   type RefundOwnershipResult,
 } from "@/lib/ops-drag-report/delivery-refund-state-machine";
 import { isOpsDragOrderWorkerEligibleDue } from "@/lib/ops-drag-report/worker-selection";
+import { createOpsDragRetentionLifecycleUpdate } from "@/lib/ops-drag-report/retention-order-lifecycle";
 
 const ORDER_METADATA_KEY = "ops_drag_report_order";
 const MAX_CAS_ATTEMPTS = 5;
@@ -59,9 +60,10 @@ async function compareAndSwapOrder(
   legitimateActivityAt?: string
 ): Promise<boolean> {
   const nextMetadata = { ...row.metadata, [ORDER_METADATA_KEY]: order };
-  const update = legitimateActivityAt
-    ? { metadata: nextMetadata, ops_drag_last_legitimate_activity_at: legitimateActivityAt }
-    : { metadata: nextMetadata };
+  const update = {
+    metadata: nextMetadata,
+    ...createOpsDragRetentionLifecycleUpdate(order, legitimateActivityAt),
+  };
   const { data, error } = await supabase
     .from("custom_ops_hub_leads")
     .update(update)
@@ -84,7 +86,8 @@ export async function admitOpsDragOrder(
       if (current.snapshot.digest !== snapshot.digest) {
         throw new Error("The admitted Ops Check snapshot is immutable and does not match this submission");
       }
-      return current;
+      if (await compareAndSwapOrder(supabase, row, current, snapshot.admitted_at)) return current;
+      continue;
     }
 
     const order = createAdmittedOrder(snapshot);
@@ -115,8 +118,7 @@ export async function claimOpsDragFulfillment(
     if (!current) throw new Error("Ops Drag Report order has not been admitted");
 
     const transition = claimFulfillmentOwnership(current, payment, recordedAt);
-    if (transition.order === current) return transition;
-    if (await compareAndSwapOrder(supabase, row, transition.order)) return transition;
+    if (await compareAndSwapOrder(supabase, row, transition.order, recordedAt)) return transition;
   }
   throw new Error("Ops Drag Report fulfillment lease lost its atomic update budget");
 }

@@ -6,6 +6,7 @@ import type { JsonValue } from "./order-foundation.ts";
 import {
   calculateRetentionDueAt,
   createRetentionMutationAdapter,
+  REDUCED_TRANSACTION_ALLOWLIST,
   runRetentionCleanupWorker,
   type RetentionDataClass,
   type RetentionRecord,
@@ -252,6 +253,17 @@ function redactSupport(record: RetentionRecord): RetentionRuntimePatch {
 }
 
 function reduceLedger(record: RetentionRecord, reduced: Record<string, JsonValue>): RetentionRuntimePatch {
+  const keys = Object.keys(reduced);
+  const allowedKeys = new Set<string>(REDUCED_TRANSACTION_ALLOWLIST);
+  if (keys.some((key) => !allowedKeys.has(key))) {
+    throw new Error("Reduced transaction record contains an unapproved field");
+  }
+  if (keys.some((key) => {
+    const value = reduced[key];
+    return value !== null && typeof value === "object";
+  })) {
+    throw new Error("Reduced transaction record fields must be scalar values");
+  }
   if (typeof reduced.order_reference !== "string" || !/^[0-9a-f]{64}$/.test(reduced.order_reference)) {
     throw new Error("Reduced transaction record requires a hashed order reference");
   }
@@ -266,13 +278,13 @@ function reduceLedger(record: RetentionRecord, reduced: Record<string, JsonValue
   if (typeof reduced.receipt_hash !== "string" || !/^[0-9a-f]{64}$/.test(reduced.receipt_hash)) {
     throw new Error("Reduced transaction record requires the terminal receipt hash");
   }
-  const row = runtimeRow(record);
-  const metadata = structuredClone(row.metadata);
-  delete metadata.ops_drag_report_order;
-  delete metadata.ops_drag_email_order_mapping;
-  stripRawAttribution(metadata);
-  stripSupport(metadata);
-  metadata.ops_drag_reduced_transaction_record = structuredClone(reduced);
+  for (const optional of ["tax_config_reference", "terminal_disposition", "refund_dispute_status"] as const) {
+    if (reduced[optional] !== undefined && reduced[optional] !== null && typeof reduced[optional] !== "string") {
+      throw new Error(`Reduced transaction record ${optional} must be a string or null`);
+    }
+  }
+  runtimeRow(record);
+  const metadata = { ops_drag_reduced_transaction_record: structuredClone(reduced) };
   const transactionAt = typeof reduced.transaction_at === "string" ? reduced.transaction_at : record.transaction_at;
   const finalDueAt = calculateRetentionDueAt({
     ...record,

@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
-import type { JsonValue } from "../lib/ops-drag-report/order-foundation.ts";
+import {
+  createAdmittedOrder,
+  type JsonValue,
+  type OpsDragAdmittedSnapshot,
+} from "../lib/ops-drag-report/order-foundation.ts";
+import { createOpsDragRetentionLifecycleUpdate } from "../lib/ops-drag-report/retention-order-lifecycle.ts";
 import {
   calculateRetentionDueAt,
   createRetentionMutationAdapter,
@@ -142,6 +147,47 @@ function applyColumns(row: Record<string, JsonValue>, columns: Record<string, Js
   return { ...structuredClone(row), ...structuredClone(columns) };
 }
 
+const admittedSnapshot = {
+  version: "v1",
+  submission_id: "10000000-0000-4000-8000-000000000001",
+  admitted_at: "2024-02-01T12:00:00.000Z",
+  delivery_email: "buyer@business.example",
+  digest: "a".repeat(64),
+  report_input: { leadId: "fixture", quizPayload: {}, preQual: null, qualificationScore: null },
+} satisfies OpsDragAdmittedSnapshot;
+const unpaidLifecycle = createOpsDragRetentionLifecycleUpdate(
+  createAdmittedOrder(admittedSnapshot),
+  "2024-02-02T12:00:00.000Z",
+);
+assert.deepEqual(unpaidLifecycle, {
+  ops_drag_last_legitimate_activity_at: "2024-02-02T12:00:00.000Z",
+  ops_drag_retention_stage: "UNPAID_SUBMISSION",
+  ops_drag_retention_due_at: "2024-02-09T12:00:00.000Z",
+  ops_drag_retention_lease_owner: null,
+  ops_drag_retention_lease_acquired_at: null,
+  ops_drag_retention_attempts: 0,
+  ops_drag_retention_last_blocker_code: null,
+});
+const paidAwaitingOrder = createAdmittedOrder(admittedSnapshot);
+paidAwaitingOrder.payment = {
+  checkoutSessionId: "cs_fixture",
+  paymentReferenceId: "pi_fixture",
+  webhookEventId: "evt_fixture",
+  paidAt: "2024-02-03T12:00:00.000Z",
+  amountTotal: 2900,
+  currency: "usd",
+  customerEmailSha256: "b".repeat(64),
+  snapshotDigest: admittedSnapshot.digest,
+};
+assert.deepEqual(createOpsDragRetentionLifecycleUpdate(paidAwaitingOrder), {
+  ops_drag_retention_stage: "AWAITING_TERMINAL",
+  ops_drag_retention_due_at: null,
+  ops_drag_retention_lease_owner: null,
+  ops_drag_retention_lease_acquired_at: null,
+  ops_drag_retention_attempts: 0,
+  ops_drag_retention_last_blocker_code: null,
+});
+
 assert.equal(calculateRetentionDueAt(record("UNPAID_SUBMISSION")), "2024-02-08T12:00:00.000Z");
 assert.equal(calculateRetentionDueAt(record("RAW_PAID_SUBMISSION")), "2024-03-30T12:00:00.000Z");
 assert.equal(calculateRetentionDueAt(record("EMAIL_ORDER_MAPPING")), "2024-05-29T12:00:00.000Z");
@@ -250,6 +296,26 @@ assert.equal(ledgerPatch.next_due_at, "2032-01-01T00:00:00.000Z");
 const reducedSerialized = JSON.stringify(ledgerPatch.columns);
 assert.doesNotMatch(reducedSerialized, /ops_drag_report_order|buyer@business\.example|private-pdf-body|raw_secret_answer/);
 assert.match(reducedSerialized, /ops_drag_reduced_transaction_record/);
+assert.deepEqual(Object.keys(ledgerPatch.columns), ["metadata"]);
+assert.deepEqual(
+  Object.keys(ledgerPatch.columns.metadata as Record<string, JsonValue>),
+  ["ops_drag_reduced_transaction_record"],
+  "reduction must replace metadata with one approved container",
+);
+assert.throws(
+  () => createRetentionRuntimePatch(ledgerRecord, "REDUCE", {
+    ...reduced,
+    unknown_nested: { email: "buyer@business.example", report_body: "private-pdf-body" },
+  }),
+  /unapproved field/,
+);
+assert.throws(
+  () => createRetentionRuntimePatch(ledgerRecord, "REDUCE", {
+    ...reduced,
+    tax_config_reference: { credential: "sk_test_forbidden" },
+  }),
+  /scalar values/,
+);
 assert.equal(createRetentionRuntimePatch(record("REDUCED_TRANSACTION_RECORD"), "DELETE").delete_row, true);
 
 const heldRecord = record("RAW_PAID_SUBMISSION", runtimeRow(), {
@@ -510,6 +576,7 @@ const migration = readFileSync("supabase/migrations/20260822104931_ops_drag_rete
 const rollback = readFileSync("supabase/rollbacks/20260822104931_ops_drag_retention_runtime.rollback.sql", "utf8");
 const route = readFileSync("app/api/studioflows/ops-drag-report/cleanup/route.ts", "utf8");
 const orderStore = readFileSync("lib/ops-drag-report/order-store.ts", "utf8");
+const orderLifecycle = readFileSync("lib/ops-drag-report/retention-order-lifecycle.ts", "utf8");
 const ingestLeadRoute = readFileSync("app/api/studioflows/ingest-lead/route.ts", "utf8");
 for (const contract of [
   /limit p_limit\s+for update skip locked/i,
@@ -528,6 +595,10 @@ for (const contract of [
   /create or replace function public\.ops_drag_retention_dispute_state/,
   /RETENTION_DISPUTE_UNRESOLVED/,
   /RETENTION_DISPUTE_TIMESTAMP_INVALID/,
+  /create or replace function public\.ops_drag_retention_order_lifecycle/,
+  /v_stage in \('UNINITIALIZED', 'AWAITING_TERMINAL', 'UNPAID_SUBMISSION'\)/,
+  /RETENTION_RECLASSIFIED_PAID/,
+  /create or replace function public\.ops_drag_retention_reduced_metadata_valid/,
 ]) assert.match(migration, contract);
 const applyFunction = migration.slice(
   migration.indexOf("create or replace function public.apply_ops_drag_retention_action"),
@@ -552,13 +623,16 @@ assert.match(rollback, /drop function if exists public\.claim_ops_drag_retention
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_hold_covers\(jsonb, text\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_detailed_due_at\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_dispute_state\(jsonb\)/);
+assert.match(rollback, /drop function if exists public\.ops_drag_retention_order_lifecycle\(jsonb\)/);
+assert.match(rollback, /drop function if exists public\.ops_drag_retention_reduced_metadata_valid\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.defer_ops_drag_retention_claim/);
 assert.match(rollback, /drop table if exists public\.ops_drag_retention_receipts/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_SECRET/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_ENABLED/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_MUTATION_ENABLED/);
 assert.doesNotMatch(route, /RESEND|STRIPE|PROVIDER_WORKER/);
-assert.match(orderStore, /ops_drag_last_legitimate_activity_at:\s*legitimateActivityAt/);
+assert.match(orderStore, /createOpsDragRetentionLifecycleUpdate\(order, legitimateActivityAt\)/);
+assert.match(orderLifecycle, /ops_drag_retention_stage:\s*"AWAITING_TERMINAL"/);
 assert.match(orderStore, /retention_redacted === true/);
 for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION).filter((key) => key !== "pre_qual")) {
   assert.match(ingestLeadRoute, new RegExp(`${key}:`), `${key} fixture must remain bound to the actual intake shape`);

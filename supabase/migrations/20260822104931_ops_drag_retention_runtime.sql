@@ -122,6 +122,38 @@ as $$
    where receipt.value ->> 'kind' = 'ORDER_TERMINAL';
 $$;
 
+create or replace function public.ops_drag_retention_order_lifecycle(p_metadata jsonb)
+returns text
+language sql
+immutable
+set search_path = ''
+as $$
+  select case
+    when jsonb_typeof(p_metadata #> '{ops_drag_report_order,payment}') = 'object'
+      and coalesce(p_metadata #>> '{ops_drag_report_order,automation,terminal_disposition}', '') <> ''
+      then 'RAW_PAID_SUBMISSION'
+    when jsonb_typeof(p_metadata #> '{ops_drag_report_order,payment}') = 'object'
+      then 'AWAITING_TERMINAL'
+    else 'UNPAID_SUBMISSION'
+  end;
+$$;
+
+create or replace function public.ops_drag_retention_order_due_at(
+  p_metadata jsonb,
+  p_last_legitimate_activity_at timestamptz
+)
+returns timestamptz
+language sql
+immutable
+set search_path = ''
+as $$
+  select case public.ops_drag_retention_order_lifecycle(p_metadata)
+    when 'UNPAID_SUBMISSION' then p_last_legitimate_activity_at + interval '7 days'
+    when 'RAW_PAID_SUBMISSION' then public.ops_drag_retention_terminal_at(p_metadata) + interval '30 days'
+    else null
+  end;
+$$;
+
 create or replace function public.ops_drag_try_integer(p_value text)
 returns integer
 language plpgsql
@@ -213,18 +245,79 @@ as $$
   from basis;
 $$;
 
+create or replace function public.ops_drag_retention_reduced_metadata_valid(p_metadata jsonb)
+returns boolean
+language plpgsql
+immutable
+set search_path = ''
+as $$
+declare
+  v_reduced jsonb;
+begin
+  if jsonb_typeof(p_metadata) is distinct from 'object'
+     or not (p_metadata ? 'ops_drag_reduced_transaction_record')
+     or (select count(*) from jsonb_object_keys(p_metadata)) <> 1 then
+    return false;
+  end if;
+  v_reduced := p_metadata -> 'ops_drag_reduced_transaction_record';
+  if jsonb_typeof(v_reduced) is distinct from 'object' then
+    return false;
+  end if;
+  if exists (
+    select 1 from jsonb_object_keys(v_reduced) as key(value)
+     where key.value not in (
+       'order_reference', 'amount', 'currency', 'tax_config_reference',
+       'terminal_disposition', 'refund_dispute_status', 'transaction_at',
+       'terminal_at', 'receipt_hash'
+     )
+  ) then
+    return false;
+  end if;
+  if jsonb_typeof(v_reduced -> 'order_reference') is distinct from 'string'
+     or (v_reduced ->> 'order_reference') !~ '^[0-9a-f]{64}$'
+     or jsonb_typeof(v_reduced -> 'amount') is distinct from 'number'
+     or (v_reduced ->> 'amount') !~ '^[0-9]+$'
+     or (v_reduced ->> 'amount')::numeric < 0
+     or jsonb_typeof(v_reduced -> 'currency') is distinct from 'string'
+     or (v_reduced ->> 'currency') !~ '^[a-z]{3}$'
+     or public.ops_drag_try_timestamptz(v_reduced ->> 'transaction_at') is null
+     or public.ops_drag_try_timestamptz(v_reduced ->> 'terminal_at') is null
+     or jsonb_typeof(v_reduced -> 'receipt_hash') is distinct from 'string'
+     or (v_reduced ->> 'receipt_hash') !~ '^[0-9a-f]{64}$' then
+    return false;
+  end if;
+  if exists (
+    select 1
+      from jsonb_each(v_reduced) as entry(key, value)
+     where entry.key in ('tax_config_reference', 'terminal_disposition', 'refund_dispute_status')
+       and jsonb_typeof(entry.value) not in ('string', 'null')
+  ) then
+    return false;
+  end if;
+  return true;
+exception when others then
+  return false;
+end;
+$$;
+
 revoke all on function public.ops_drag_try_timestamptz(text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_terminal_at(jsonb) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_order_lifecycle(jsonb) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_order_due_at(jsonb, timestamptz) from public, anon, authenticated;
 revoke all on function public.ops_drag_try_integer(text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_hold_covers(jsonb, text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_dispute_state(jsonb) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_detailed_due_at(jsonb) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_reduced_metadata_valid(jsonb) from public, anon, authenticated;
 grant execute on function public.ops_drag_try_timestamptz(text) to service_role;
 grant execute on function public.ops_drag_retention_terminal_at(jsonb) to service_role;
+grant execute on function public.ops_drag_retention_order_lifecycle(jsonb) to service_role;
+grant execute on function public.ops_drag_retention_order_due_at(jsonb, timestamptz) to service_role;
 grant execute on function public.ops_drag_try_integer(text) to service_role;
 grant execute on function public.ops_drag_retention_hold_covers(jsonb, text) to service_role;
 grant execute on function public.ops_drag_retention_dispute_state(jsonb) to service_role;
 grant execute on function public.ops_drag_retention_detailed_due_at(jsonb) to service_role;
+grant execute on function public.ops_drag_retention_reduced_metadata_valid(jsonb) to service_role;
 
 create or replace function public.claim_ops_drag_retention_batch(
   p_recorded_at timestamptz,
@@ -265,6 +358,8 @@ declare
   v_transaction_at timestamptz;
   v_hold jsonb;
   v_record_hash text;
+  v_current_lifecycle text;
+  v_current_order_due_at timestamptz;
 begin
   if p_limit < 1 or p_limit > 10 then
     raise exception 'retention batch limit must be between 1 and 10';
@@ -330,33 +425,33 @@ begin
       v_lead.metadata #>> '{ops_drag_report_order,payment,paidAt}'
     );
 
-    if v_stage in ('UNINITIALIZED', 'AWAITING_TERMINAL') then
-      if jsonb_typeof(v_lead.metadata #> '{ops_drag_report_order,payment}') = 'object' then
-        if coalesce(v_lead.metadata #>> '{ops_drag_report_order,automation,terminal_disposition}', '') <> '' then
-          if v_terminal_at is null then
-            v_stage := 'RAW_PAID_SUBMISSION';
-            v_due_at := p_recorded_at;
-            update public.custom_ops_hub_leads
-               set ops_drag_retention_stage = v_stage,
-                   ops_drag_retention_due_at = v_due_at,
-                   ops_drag_retention_last_blocker_code = 'RETENTION_TERMINAL_TIMESTAMP_INVALID'
-             where id = v_lead.id;
-          else
-            v_stage := 'RAW_PAID_SUBMISSION';
-            v_due_at := v_terminal_at + interval '30 days';
-          end if;
-        else
-          v_stage := 'AWAITING_TERMINAL';
-          v_due_at := null;
-        end if;
-      else
-        v_stage := 'UNPAID_SUBMISSION';
-        v_due_at := v_lead.ops_drag_last_legitimate_activity_at + interval '7 days';
+    if v_stage in ('UNINITIALIZED', 'AWAITING_TERMINAL', 'UNPAID_SUBMISSION') then
+      v_current_lifecycle := public.ops_drag_retention_order_lifecycle(v_lead.metadata);
+      v_current_order_due_at := public.ops_drag_retention_order_due_at(
+        v_lead.metadata,
+        v_lead.ops_drag_last_legitimate_activity_at
+      );
+      if v_stage is distinct from v_current_lifecycle
+         or v_due_at is distinct from v_current_order_due_at then
+        update public.custom_ops_hub_leads
+           set ops_drag_retention_stage = v_current_lifecycle,
+               ops_drag_retention_due_at = v_current_order_due_at,
+               ops_drag_retention_lease_owner = null,
+               ops_drag_retention_lease_acquired_at = null,
+               ops_drag_retention_attempts = case
+                 when ops_drag_retention_lease_owner is null then ops_drag_retention_attempts
+                 else greatest(ops_drag_retention_attempts - 1, 0)
+               end,
+               ops_drag_retention_last_blocker_code = case
+                 when v_current_lifecycle = 'RAW_PAID_SUBMISSION' and v_current_order_due_at is null
+                   then 'RETENTION_TERMINAL_TIMESTAMP_INVALID'
+                 else null
+               end
+         where id = v_lead.id
+         returning * into v_lead;
       end if;
-      update public.custom_ops_hub_leads
-         set ops_drag_retention_stage = v_stage,
-             ops_drag_retention_due_at = v_due_at
-       where id = v_lead.id;
+      v_stage := v_current_lifecycle;
+      v_due_at := v_current_order_due_at;
     elsif v_stage = 'DETAILED_RECEIPT_LEDGER' then
       v_due_at := public.ops_drag_retention_detailed_due_at(v_lead.metadata);
       update public.custom_ops_hub_leads
@@ -494,6 +589,7 @@ declare
   v_applied_at timestamptz;
   v_dispute_state text;
   v_delete boolean;
+  v_current_lifecycle text;
 begin
   select * into v_lead
     from public.custom_ops_hub_leads
@@ -509,6 +605,42 @@ begin
   v_expected_stage := p_patch ->> 'expected_stage';
   if v_expected_stage is distinct from v_lead.ops_drag_retention_stage then
     raise exception 'retention stage changed before action';
+  end if;
+  if v_expected_stage = 'UNPAID_SUBMISSION' then
+    v_current_lifecycle := public.ops_drag_retention_order_lifecycle(v_lead.metadata);
+    v_current_due_at := public.ops_drag_retention_order_due_at(
+      v_lead.metadata,
+      v_lead.ops_drag_last_legitimate_activity_at
+    );
+    v_applied_at := public.ops_drag_try_timestamptz(p_receipt ->> 'applied_at');
+    if v_current_lifecycle is distinct from 'UNPAID_SUBMISSION' then
+      update public.custom_ops_hub_leads
+         set ops_drag_retention_stage = v_current_lifecycle,
+             ops_drag_retention_due_at = v_current_due_at,
+             ops_drag_retention_lease_owner = null,
+             ops_drag_retention_lease_acquired_at = null,
+             ops_drag_retention_attempts = greatest(ops_drag_retention_attempts - 1, 0),
+             ops_drag_retention_last_blocker_code = case
+               when v_current_lifecycle = 'RAW_PAID_SUBMISSION' and v_current_due_at is null
+                 then 'RETENTION_TERMINAL_TIMESTAMP_INVALID'
+               else 'RETENTION_RECLASSIFIED_PAID'
+             end
+       where id = p_record_id;
+      return 'DEFERRED';
+    end if;
+    if v_current_due_at is null
+       or v_applied_at is null
+       or v_applied_at < v_current_due_at
+       or public.ops_drag_try_timestamptz(p_receipt ->> 'due_at') is distinct from v_current_due_at then
+      update public.custom_ops_hub_leads
+         set ops_drag_retention_due_at = v_current_due_at,
+             ops_drag_retention_lease_owner = null,
+             ops_drag_retention_lease_acquired_at = null,
+             ops_drag_retention_attempts = greatest(ops_drag_retention_attempts - 1, 0),
+             ops_drag_retention_last_blocker_code = 'RETENTION_DUE_REBASED'
+       where id = p_record_id;
+      return 'DEFERRED';
+    end if;
   end if;
   if public.ops_drag_retention_hold_covers(
     v_lead.metadata -> 'ops_drag_retention_legal_hold',
@@ -574,6 +706,14 @@ begin
      )
   ) then
     raise exception 'retention patch contains a forbidden column';
+  end if;
+  if v_expected_stage = 'DETAILED_RECEIPT_LEDGER'
+     and (
+       not (v_columns ? 'metadata')
+       or (select count(*) from jsonb_object_keys(v_columns)) <> 1
+       or not public.ops_drag_retention_reduced_metadata_valid(v_columns -> 'metadata')
+     ) then
+    raise exception 'retention reduced metadata is not the exact approved record';
   end if;
 
   v_record_hash := encode(extensions.digest(p_record_id::text, 'sha256'), 'hex');

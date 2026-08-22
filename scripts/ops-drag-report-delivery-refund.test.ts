@@ -10,6 +10,7 @@ import {
   createOrderToken,
   createRefundIdempotencyKey,
   expireDeliverySla,
+  EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX,
   OPS_DRAG_REPORT_SCHEMA_VERSION,
   OPS_DRAG_REPORT_TEMPLATE_VERSION,
   recordGenerationFailure,
@@ -127,6 +128,8 @@ for (let attempt = 1; attempt <= 3; attempt += 1) {
 assert.equal(deliveryFailure.automation?.delivery.attempts, 3);
 assert.equal(deliveryFailure.automation?.delivery.status, "FAILED");
 assert.equal(deliveryFailure.automation?.refund.status, "REQUIRED");
+assert.equal(EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX.SUBMITTED.delivered, "APPLY");
+assert.equal(EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX.HARD_BOUNCE.delivered, "EVIDENCE_ONLY");
 
 let delivered = makeSubmittedOrder();
 delivered = applyEmailProviderEvent(
@@ -263,6 +266,146 @@ await Promise.all(Array.from({ length: 32 }, () => providerHarness.deliver()));
 assert.equal(providerHarness.writes, 1, "duplicate provider events must create one state write");
 assert.equal(providerHarness.read().receipts.filter((receipt) => receipt.kind === "ORDER_TERMINAL").length, 1);
 
+class AtomicTransitionHarness {
+  private order: OpsDragOrder;
+  private revision = 0;
+
+  constructor(order: OpsDragOrder) {
+    this.order = structuredClone(order);
+  }
+
+  async apply(transition: (order: OpsDragOrder) => OpsDragOrder): Promise<OpsDragOrder> {
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      const revision = this.revision;
+      const observed = structuredClone(this.order);
+      const next = transition(observed);
+      await Promise.resolve();
+      if (next === observed) return next;
+      if (revision !== this.revision) continue;
+      this.order = structuredClone(next);
+      this.revision += 1;
+      return structuredClone(next);
+    }
+    throw new Error("Cross-race fixture exhausted its compare-and-swap budget");
+  }
+
+  read(): OpsDragOrder {
+    return structuredClone(this.order);
+  }
+}
+
+let vessaCrossRace = makeSubmittedOrder("msg_vessa_cross_race");
+vessaCrossRace = applyEmailProviderEvent(
+  vessaCrossRace,
+  { eventId: "vessa_bounce", providerMessageId: "msg_vessa_cross_race", type: "hard_bounce" },
+  "2026-08-22T20:12:00.000Z"
+);
+const vessaRefundOwner = claimRefundAttempt(vessaCrossRace, "2026-08-22T20:12:01.000Z");
+assert.equal(vessaRefundOwner.disposition, "acquired");
+vessaCrossRace = applyRefundProviderEvent(
+  vessaRefundOwner.order,
+  { eventId: "vessa_refund_created", providerRefundId: "re_vessa_cross_race", type: "refund.created" },
+  "2026-08-22T20:12:02.000Z"
+);
+const crossRaceHarness = new AtomicTransitionHarness(vessaCrossRace);
+await Promise.all([
+  crossRaceHarness.apply((order) => applyEmailProviderEvent(
+    order,
+    { eventId: "vessa_late_delivered", providerMessageId: "msg_vessa_cross_race", type: "delivered" },
+    "2026-08-22T20:12:03.000Z"
+  )),
+  crossRaceHarness.apply((order) => applyRefundProviderEvent(
+    order,
+    { eventId: "vessa_refund_succeeded", providerRefundId: "re_vessa_cross_race", type: "refund.succeeded" },
+    "2026-08-22T20:12:03.000Z"
+  )),
+]);
+const vessaCrossRaceResult = crossRaceHarness.read();
+assert.equal(vessaCrossRaceResult.automation?.terminal_disposition, "REFUNDED");
+assert.equal(vessaCrossRaceResult.automation?.delivery.status, "HARD_BOUNCE");
+assert.equal(countsAsVerifiedFirstSale(vessaCrossRaceResult), false);
+assert.equal(vessaCrossRaceResult.receipts.filter((receipt) => receipt.kind === "ORDER_TERMINAL").length, 1);
+assert.equal(vessaCrossRaceResult.receipts.filter((receipt) => receipt.kind === "REFUND_ATTEMPT_OWNED").length, 1);
+const vessaLateDeliveryReceipt = vessaCrossRaceResult.receipts.find(
+  (receipt) => receipt.evidence.provider_event_id === "vessa_late_delivered"
+);
+assert.equal(vessaLateDeliveryReceipt?.evidence.transition_disposition, "EVIDENCE_ONLY");
+assert.equal(vessaLateDeliveryReceipt?.evidence.delivery_terminal_eligible, false);
+assert.ok(verifyReceiptChain(vessaCrossRaceResult));
+
+let veloContradictory = expireDeliverySla(
+  makeSubmittedOrder("msg_velo_contradictory"),
+  "2026-08-22T21:00:00.000Z"
+);
+veloContradictory = applyEmailProviderEvent(
+  veloContradictory,
+  { eventId: "velo_late_required", providerMessageId: "msg_velo_contradictory", type: "delivered" },
+  "2026-08-22T21:00:01.000Z"
+);
+assert.equal(veloContradictory.automation?.refund.status, "REQUIRED");
+assert.equal(veloContradictory.automation?.terminal_disposition, null);
+assert.equal(countsAsVerifiedFirstSale(veloContradictory), false);
+const veloRefundOwner = claimRefundAttempt(veloContradictory, "2026-08-22T21:00:02.000Z");
+assert.equal(veloRefundOwner.disposition, "acquired");
+veloContradictory = applyEmailProviderEvent(
+  veloRefundOwner.order,
+  { eventId: "velo_late_owned", providerMessageId: "msg_velo_contradictory", type: "delivered" },
+  "2026-08-22T21:00:03.000Z"
+);
+assert.equal(veloContradictory.automation?.refund.status, "OWNED");
+veloContradictory = applyRefundProviderEvent(
+  veloContradictory,
+  { eventId: "velo_refund_created", providerRefundId: "re_velo_contradictory", type: "refund.created" },
+  "2026-08-22T21:00:04.000Z"
+);
+veloContradictory = applyEmailProviderEvent(
+  veloContradictory,
+  { eventId: "velo_late_created", providerMessageId: "msg_velo_contradictory", type: "delivered" },
+  "2026-08-22T21:00:05.000Z"
+);
+const receiptsBeforeDuplicate = veloContradictory.receipts.length;
+veloContradictory = applyEmailProviderEvent(
+  veloContradictory,
+  { eventId: "velo_late_created", providerMessageId: "msg_velo_contradictory", type: "delivered" },
+  "2026-08-22T21:00:06.000Z"
+);
+assert.equal(veloContradictory.receipts.length, receiptsBeforeDuplicate, "duplicate event IDs must be exact no-ops");
+veloContradictory = applyEmailProviderEvent(
+  veloContradictory,
+  { eventId: "velo_distinct_conflict", providerMessageId: "msg_velo_contradictory", type: "delivered" },
+  "2026-08-22T21:00:07.000Z"
+);
+assert.equal(veloContradictory.automation?.terminal_disposition, null);
+assert.equal(veloContradictory.automation?.refund.status, "CREATED");
+assert.equal(countsAsVerifiedFirstSale(veloContradictory), false);
+veloContradictory = applyRefundProviderEvent(
+  veloContradictory,
+  { eventId: "velo_refund_succeeded", providerRefundId: "re_velo_contradictory", type: "refund.succeeded" },
+  "2026-08-22T21:00:08.000Z"
+);
+assert.equal(veloContradictory.automation?.terminal_disposition, "REFUNDED");
+assert.equal(countsAsVerifiedFirstSale(veloContradictory), false);
+assert.equal(veloContradictory.receipts.filter((receipt) => receipt.kind === "ORDER_TERMINAL").length, 1);
+assert.equal(veloContradictory.receipts.filter((receipt) => receipt.kind === "REFUND_ATTEMPT_OWNED").length, 1);
+assert.ok(verifyReceiptChain(veloContradictory));
+
+let terminalThenBounce = makeSubmittedOrder("msg_terminal_then_bounce");
+terminalThenBounce = applyEmailProviderEvent(
+  terminalThenBounce,
+  { eventId: "terminal_delivered", providerMessageId: "msg_terminal_then_bounce", type: "delivered" },
+  "2026-08-22T20:12:00.000Z"
+);
+const terminalReceiptCount = terminalThenBounce.receipts.filter((receipt) => receipt.kind === "ORDER_TERMINAL").length;
+terminalThenBounce = applyEmailProviderEvent(
+  terminalThenBounce,
+  { eventId: "terminal_late_bounce", providerMessageId: "msg_terminal_then_bounce", type: "hard_bounce" },
+  "2026-08-22T20:12:01.000Z"
+);
+assert.equal(terminalThenBounce.automation?.terminal_disposition, "DELIVERED");
+assert.equal(terminalThenBounce.automation?.refund.status, "NOT_REQUIRED");
+assert.equal(terminalThenBounce.receipts.filter((receipt) => receipt.kind === "ORDER_TERMINAL").length, terminalReceiptCount);
+assert.ok(verifyReceiptChain(terminalThenBounce));
+
 let refundFailure = expireDeliverySla(makeSubmittedOrder("msg_refund_failure"), "2026-08-22T21:00:00.000Z");
 for (let attempt = 1; attempt <= 3; attempt += 1) {
   const ownership = claimRefundAttempt(refundFailure, `2026-08-22T21:0${attempt}:00.000Z`);
@@ -325,5 +468,5 @@ assert.ok(verifyReceiptChain(tokenOrder));
 assert.ok(!JSON.stringify(delivered.receipts).includes("owner@example.com"));
 
 console.log(
-  "OPS_DRAG_REPORT_DELIVERY_REFUND_PASS delivered=1 refunded=1 refund_owners=1 duplicate_provider_writes=1"
+  "OPS_DRAG_REPORT_DELIVERY_REFUND_PASS delivered=1 refunded=1 refund_owners=1 duplicate_provider_writes=1 cross_race=PASS contradictory_sequence=PASS"
 );

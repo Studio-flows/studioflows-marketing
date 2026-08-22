@@ -72,6 +72,89 @@ export type EmailProviderEvent = {
   type: "accepted" | "queued" | "sent" | "delivered" | "hard_bounce" | "failed";
 };
 
+export type ProviderEventTransition = "APPLY" | "EVIDENCE_ONLY";
+
+type DeliveryStatus = OpsDragAutomationState["delivery"]["status"];
+type EmailProviderEventType = EmailProviderEvent["type"];
+
+export const EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX: Record<
+  DeliveryStatus,
+  Record<EmailProviderEventType, ProviderEventTransition>
+> = {
+  PENDING: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "EVIDENCE_ONLY",
+    hard_bounce: "EVIDENCE_ONLY",
+    failed: "EVIDENCE_ONLY",
+  },
+  SUBMITTED: {
+    accepted: "APPLY",
+    queued: "APPLY",
+    sent: "APPLY",
+    delivered: "APPLY",
+    hard_bounce: "APPLY",
+    failed: "APPLY",
+  },
+  ACCEPTED: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "APPLY",
+    sent: "APPLY",
+    delivered: "APPLY",
+    hard_bounce: "APPLY",
+    failed: "APPLY",
+  },
+  QUEUED: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "APPLY",
+    delivered: "APPLY",
+    hard_bounce: "APPLY",
+    failed: "APPLY",
+  },
+  SENT: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "APPLY",
+    hard_bounce: "APPLY",
+    failed: "APPLY",
+  },
+  DELIVERED: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "EVIDENCE_ONLY",
+    hard_bounce: "EVIDENCE_ONLY",
+    failed: "EVIDENCE_ONLY",
+  },
+  HARD_BOUNCE: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "EVIDENCE_ONLY",
+    hard_bounce: "EVIDENCE_ONLY",
+    failed: "EVIDENCE_ONLY",
+  },
+  RETRYABLE: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "APPLY",
+    hard_bounce: "APPLY",
+    failed: "APPLY",
+  },
+  FAILED: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "EVIDENCE_ONLY",
+    hard_bounce: "EVIDENCE_ONLY",
+    failed: "EVIDENCE_ONLY",
+  },
+};
+
 export type RefundProviderEvent = {
   eventId: string;
   providerRefundId: string;
@@ -411,6 +494,23 @@ function requireRefund(order: OpsDragOrder, reason: string, recordedAt: string):
   });
 }
 
+function classifyEmailProviderEvent(
+  automation: OpsDragAutomationState,
+  eventType: EmailProviderEventType
+): { transition: ProviderEventTransition; reason: string | null } {
+  if (automation.terminal_disposition) {
+    return { transition: "EVIDENCE_ONLY", reason: `ORDER_TERMINAL_${automation.terminal_disposition}` };
+  }
+  if (automation.refund.status !== "NOT_REQUIRED") {
+    return { transition: "EVIDENCE_ONLY", reason: `REFUND_PATH_${automation.refund.status}` };
+  }
+  const transition = EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX[automation.delivery.status][eventType];
+  return {
+    transition,
+    reason: transition === "EVIDENCE_ONLY" ? `DELIVERY_STATE_${automation.delivery.status}` : null,
+  };
+}
+
 export function applyEmailProviderEvent(
   order: OpsDragOrder,
   event: EmailProviderEvent,
@@ -418,14 +518,26 @@ export function applyEmailProviderEvent(
 ): OpsDragOrder {
   const next = cloneWithAutomation(order);
   if (next.automation.processed_provider_event_ids.includes(event.eventId)) return order;
-  if (next.automation.terminal_disposition === "DELIVERED") return order;
-  if (next.automation.terminal_disposition === "REFUNDED") {
-    throw new Error("Refunded orders cannot accept delivery events");
-  }
   if (next.automation.delivery.provider_message_id !== event.providerMessageId) {
     throw new Error("Email provider event message binding mismatch");
   }
+  const priorDeliveryStatus = next.automation.delivery.status;
+  const priorRefundStatus = next.automation.refund.status;
+  const classification = classifyEmailProviderEvent(next.automation, event.type);
   next.automation.processed_provider_event_ids.push(event.eventId);
+  if (classification.transition === "EVIDENCE_ONLY") {
+    return appendAutomationReceipt(next.order, "DELIVERY_PROVIDER_EVENT_RECORDED", recordedAt, {
+      provider_event_id: event.eventId,
+      provider_message_id: event.providerMessageId,
+      provider_state: event.type,
+      provider_confirmed_delivered: event.type === "delivered",
+      transition_disposition: classification.transition,
+      contradiction_reason: classification.reason,
+      prior_delivery_state: priorDeliveryStatus,
+      refund_state: priorRefundStatus,
+      delivery_terminal_eligible: false,
+    });
+  }
   const state = event.type === "hard_bounce" ? "HARD_BOUNCE" : event.type.toUpperCase();
   next.automation.delivery.status = state as OpsDragAutomationState["delivery"]["status"];
   let updated = appendAutomationReceipt(next.order, "DELIVERY_PROVIDER_EVENT_RECORDED", recordedAt, {
@@ -433,6 +545,11 @@ export function applyEmailProviderEvent(
     provider_message_id: event.providerMessageId,
     provider_state: event.type,
     provider_confirmed_delivered: event.type === "delivered",
+    transition_disposition: classification.transition,
+    contradiction_reason: null,
+    prior_delivery_state: priorDeliveryStatus,
+    refund_state: priorRefundStatus,
+    delivery_terminal_eligible: event.type === "delivered",
   });
   if (event.type === "delivered") {
     const delivered = cloneWithAutomation(updated);
@@ -577,7 +694,9 @@ export function applyRefundProviderEvent(
 export function countsAsVerifiedFirstSale(order: OpsDragOrder): boolean {
   return order.automation?.terminal_disposition === "DELIVERED" &&
     order.automation.delivery.status === "DELIVERED" &&
-    Boolean(order.automation.delivery.delivered_at);
+    Boolean(order.automation.delivery.delivered_at) &&
+    order.automation.refund.status === "NOT_REQUIRED" &&
+    order.automation.refund.lease_owner === null;
 }
 
 function signTokenPayload(payload: string, secret: string): string {

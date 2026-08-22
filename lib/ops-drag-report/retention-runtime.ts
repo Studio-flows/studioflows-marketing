@@ -3,6 +3,7 @@ import { randomUUID, timingSafeEqual } from "node:crypto";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import type { JsonValue } from "./order-foundation.ts";
+import { OPS_DRAG_REPORT_TAX_CODE } from "./contract.ts";
 import {
   calculateRetentionDueAt,
   createRetentionMutationAdapter,
@@ -44,6 +45,21 @@ const DATA_CLASSES = new Set<RetentionDataClass>([
   "ATTRIBUTION_AGGREGATE",
   "DETAILED_RECEIPT_LEDGER",
   "REDUCED_TRANSACTION_RECORD",
+]);
+const REDUCED_TERMINAL_DISPOSITIONS = new Set(["DELIVERED", "REFUNDED"]);
+const REDUCED_REFUND_DISPUTE_STATUSES = new Set([
+  "NOT_REQUIRED",
+  "REQUIRED",
+  "OWNED",
+  "CREATED",
+  "RETRYABLE",
+  "SUCCEEDED",
+  "FAILED",
+  "RESOLVED",
+  "WON",
+  "LOST",
+  "CLOSED",
+  "WARNING_CLOSED",
 ]);
 
 type RuntimeRow = {
@@ -278,10 +294,19 @@ function reduceLedger(record: RetentionRecord, reduced: Record<string, JsonValue
   if (typeof reduced.receipt_hash !== "string" || !/^[0-9a-f]{64}$/.test(reduced.receipt_hash)) {
     throw new Error("Reduced transaction record requires the terminal receipt hash");
   }
-  for (const optional of ["tax_config_reference", "terminal_disposition", "refund_dispute_status"] as const) {
-    if (reduced[optional] !== undefined && reduced[optional] !== null && typeof reduced[optional] !== "string") {
-      throw new Error(`Reduced transaction record ${optional} must be a string or null`);
-    }
+  if (reduced.tax_config_reference !== undefined && reduced.tax_config_reference !== null &&
+      reduced.tax_config_reference !== OPS_DRAG_REPORT_TAX_CODE) {
+    throw new Error("Reduced transaction record tax_config_reference is not the approved tax code");
+  }
+  if (reduced.terminal_disposition !== undefined && reduced.terminal_disposition !== null &&
+      (typeof reduced.terminal_disposition !== "string" ||
+       !REDUCED_TERMINAL_DISPOSITIONS.has(reduced.terminal_disposition))) {
+    throw new Error("Reduced transaction record terminal_disposition is invalid");
+  }
+  if (reduced.refund_dispute_status !== undefined && reduced.refund_dispute_status !== null &&
+      (typeof reduced.refund_dispute_status !== "string" ||
+       !REDUCED_REFUND_DISPUTE_STATUSES.has(reduced.refund_dispute_status))) {
+    throw new Error("Reduced transaction record refund_dispute_status is invalid");
   }
   runtimeRow(record);
   const metadata = { ops_drag_reduced_transaction_record: structuredClone(reduced) };

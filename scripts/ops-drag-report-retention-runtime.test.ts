@@ -133,6 +133,7 @@ function record(
       order_reference: "f".repeat(64),
       amount: 2900,
       currency: "usd",
+      tax_config_reference: "txcd_10701410",
       terminal_disposition: "DELIVERED",
       refund_dispute_status: "NOT_REQUIRED",
       transaction_at: "2024-02-01T12:00:00.000Z",
@@ -316,6 +317,40 @@ assert.throws(
   }),
   /scalar values/,
 );
+const forbiddenReducedStrings = [
+  "buyer@business.example",
+  `Bearer ${"a".repeat(48)}`,
+  "This report contains private operational findings and a detailed customer narrative.",
+  "x".repeat(4096),
+];
+for (const field of ["tax_config_reference", "terminal_disposition", "refund_dispute_status"] as const) {
+  for (const value of forbiddenReducedStrings) {
+    assert.throws(
+      () => createRetentionRuntimePatch(ledgerRecord, "REDUCE", { ...reduced, [field]: value }),
+      new RegExp(field),
+      `${field} must reject raw or unbounded string content`,
+    );
+  }
+}
+for (const terminal_disposition of ["DELIVERED", "REFUNDED"]) {
+  assert.doesNotThrow(() => createRetentionRuntimePatch(ledgerRecord, "REDUCE", {
+    ...reduced,
+    terminal_disposition,
+  }));
+}
+for (const refund_dispute_status of [
+  "NOT_REQUIRED", "REQUIRED", "OWNED", "CREATED", "RETRYABLE", "SUCCEEDED", "FAILED",
+  "RESOLVED", "WON", "LOST", "CLOSED", "WARNING_CLOSED",
+]) {
+  assert.doesNotThrow(() => createRetentionRuntimePatch(ledgerRecord, "REDUCE", {
+    ...reduced,
+    refund_dispute_status,
+  }));
+}
+assert.doesNotThrow(() => createRetentionRuntimePatch(ledgerRecord, "REDUCE", {
+  ...reduced,
+  tax_config_reference: "txcd_10701410",
+}));
 assert.equal(createRetentionRuntimePatch(record("REDUCED_TRANSACTION_RECORD"), "DELETE").delete_row, true);
 
 const heldRecord = record("RAW_PAID_SUBMISSION", runtimeRow(), {
@@ -599,6 +634,9 @@ for (const contract of [
   /v_stage in \('UNINITIALIZED', 'AWAITING_TERMINAL', 'UNPAID_SUBMISSION'\)/,
   /RETENTION_RECLASSIFIED_PAID/,
   /create or replace function public\.ops_drag_retention_reduced_metadata_valid/,
+  /v_reduced ->> 'tax_config_reference' <> 'txcd_10701410'/,
+  /v_reduced ->> 'terminal_disposition' not in \('DELIVERED', 'REFUNDED'\)/,
+  /'WARNING_CLOSED'/,
 ]) assert.match(migration, contract);
 const applyFunction = migration.slice(
   migration.indexOf("create or replace function public.apply_ops_drag_retention_action"),

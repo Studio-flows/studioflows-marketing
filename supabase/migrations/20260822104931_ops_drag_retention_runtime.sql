@@ -286,12 +286,31 @@ begin
      or (v_reduced ->> 'receipt_hash') !~ '^[0-9a-f]{64}$' then
     return false;
   end if;
-  if exists (
-    select 1
-      from jsonb_each(v_reduced) as entry(key, value)
-     where entry.key in ('tax_config_reference', 'terminal_disposition', 'refund_dispute_status')
-       and jsonb_typeof(entry.value) not in ('string', 'null')
-  ) then
+  if (v_reduced ? 'tax_config_reference')
+     and jsonb_typeof(v_reduced -> 'tax_config_reference') is distinct from 'null'
+     and (
+       jsonb_typeof(v_reduced -> 'tax_config_reference') is distinct from 'string'
+       or v_reduced ->> 'tax_config_reference' <> 'txcd_10701410'
+     ) then
+    return false;
+  end if;
+  if (v_reduced ? 'terminal_disposition')
+     and jsonb_typeof(v_reduced -> 'terminal_disposition') is distinct from 'null'
+     and (
+       jsonb_typeof(v_reduced -> 'terminal_disposition') is distinct from 'string'
+       or v_reduced ->> 'terminal_disposition' not in ('DELIVERED', 'REFUNDED')
+     ) then
+    return false;
+  end if;
+  if (v_reduced ? 'refund_dispute_status')
+     and jsonb_typeof(v_reduced -> 'refund_dispute_status') is distinct from 'null'
+     and (
+       jsonb_typeof(v_reduced -> 'refund_dispute_status') is distinct from 'string'
+       or v_reduced ->> 'refund_dispute_status' not in (
+         'NOT_REQUIRED', 'REQUIRED', 'OWNED', 'CREATED', 'RETRYABLE', 'SUCCEEDED', 'FAILED',
+         'RESOLVED', 'WON', 'LOST', 'CLOSED', 'WARNING_CLOSED'
+       )
+     ) then
     return false;
   end if;
   return true;

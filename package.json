@@ -6,7 +6,7 @@
     "start": "next start",
     "dev": "next dev",
     "dev:fresh": "node scripts/dev-fresh.mjs",
-    "test:ops-drag-report": "node --experimental-strip-types scripts/ops-drag-report-contract.test.ts && node --experimental-strip-types scripts/ops-drag-report-concurrency.test.ts && node --experimental-strip-types scripts/ops-drag-report-delivery-refund.test.ts && node --experimental-strip-types scripts/ops-drag-report-provider-wiring.test.ts && node --experimental-strip-types scripts/ops-drag-report-customer-controls.test.ts && node --experimental-strip-types scripts/ops-drag-report-paid-fulfillment.test.ts && node --experimental-strip-types scripts/ops-drag-report-worker-isolation.test.ts"
+    "test:ops-drag-report": "node --experimental-strip-types scripts/ops-drag-report-contract.test.ts && node --experimental-strip-types scripts/ops-drag-report-concurrency.test.ts && node --experimental-strip-types scripts/ops-drag-report-delivery-refund.test.ts && node --experimental-strip-types scripts/ops-drag-report-provider-wiring.test.ts && node --experimental-strip-types scripts/ops-drag-report-customer-controls.test.ts && node --experimental-strip-types scripts/ops-drag-report-paid-fulfillment.test.ts && node --experimental-strip-types scripts/ops-drag-report-worker-isolation.test.ts && node --experimental-strip-types scripts/ops-drag-report-webhook-orchestration.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.8",

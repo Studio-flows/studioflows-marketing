@@ -109,17 +109,16 @@ export async function POST(req: Request) {
       },
       new Date(event.created * 1_000).toISOString()
     );
-    const emailAdapter = preflightResendDeliveryWorker({
-      environment: process.env,
-      createTransport: createResendTransport,
-    });
     const orchestration = await orchestratePaidOpsDragFulfillment({
       store: {
         load: () => loadOpsDragOrder(supabase, decision.submissionId),
         transition: (apply) => transitionOpsDragOrder(supabase, decision.submissionId, apply),
       },
       generationAdapter: createDeterministicReportGenerationAdapter(),
-      emailAdapter,
+      createEmailAdapter: () => preflightResendDeliveryWorker({
+        environment: process.env,
+        createTransport: createResendTransport,
+      }),
       recordedAt: new Date().toISOString(),
     });
     return Response.json({

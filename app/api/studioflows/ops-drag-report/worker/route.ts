@@ -31,7 +31,7 @@ export async function GET(req: Request) {
     if (!supabase) throw new Error("Ops Drag Report order storage is not configured");
     const now = new Date().toISOString();
     const result = await runBoundedProviderWorker({
-      loadBatch: (limit) => listOpsDragOrdersForWorker(supabase, limit),
+      loadBatch: (limit) => listOpsDragOrdersForWorker(supabase, limit, now),
       process(observed) {
         const store = {
           load: () => loadOpsDragOrder(supabase, observed.submission_id),

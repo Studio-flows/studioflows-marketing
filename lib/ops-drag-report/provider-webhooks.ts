@@ -22,6 +22,7 @@ type VerifiedStripeRefundPayload = {
 
 export type BoundEmailProviderEvent = {
   event: EmailProviderEvent;
+  orderId: string;
   submissionId: string;
   recordedAt: string;
 };
@@ -80,6 +81,7 @@ export function mapResendWebhook(payload: VerifiedResendPayload, eventId: string
   const mapped = typeMap[payload.type];
   if (!mapped) throw new Error("Resend event type is not allowlisted");
   return {
+    orderId: requireString(payload.data.tags?.order_id, "order_id tag"),
     submissionId: requireString(payload.data.tags?.submission_id, "submission_id tag"),
     recordedAt: new Date(requireString(payload.created_at, "created_at")).toISOString(),
     event: {

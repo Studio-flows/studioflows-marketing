@@ -4,6 +4,7 @@ import {
   applyEmailProviderEvent,
   admitGeneratedReport,
   claimDeliverySubmissionAttempt,
+  EmailSubmissionOutcomeUnknownError,
   expireDeliverySla,
   readPersistedReportArtifact,
   startGenerationAttempt,
@@ -118,6 +119,35 @@ class IdempotentEmailFixture implements EmailProviderAdapter {
   }
 }
 
+class AmbiguousEmailFixture implements EmailProviderAdapter {
+  calls = 0;
+  acceptedSends = 0;
+  ambiguousResponsesRemaining: number;
+  readonly idempotencyKeys: string[] = [];
+  private readonly messages = new Map<string, string>();
+
+  constructor(ambiguousResponses: number) {
+    this.ambiguousResponsesRemaining = ambiguousResponses;
+  }
+
+  async submit(input: Parameters<EmailProviderAdapter["submit"]>[0]): Promise<{ providerMessageId: string }> {
+    this.calls += 1;
+    const key = createDeliveryIdempotencyKey(input.orderId, input.attemptNumber);
+    this.idempotencyKeys.push(key);
+    let messageId = this.messages.get(key);
+    if (!messageId) {
+      messageId = `msg_ambiguous_${input.attemptNumber}`;
+      this.messages.set(key, messageId);
+      this.acceptedSends += 1;
+    }
+    if (this.ambiguousResponsesRemaining > 0) {
+      this.ambiguousResponsesRemaining -= 1;
+      throw new EmailSubmissionOutcomeUnknownError();
+    }
+    return { providerMessageId: messageId };
+  }
+}
+
 const deterministic = createDeterministicReportGenerationAdapter();
 const deterministicOrder = createPaidOrder();
 const generationInput = {
@@ -214,6 +244,80 @@ const crashResume = await orchestratePaidOpsDragFulfillment({
 assert.equal(crashResume.disposition, "DELIVERY_SUBMITTED");
 assert.equal(crashAfterProviderEmail.calls, 2);
 assert.equal(crashAfterProviderEmail.acceptedSends, 1, "crash retry must reuse the provider idempotency key");
+
+const ambiguousResumeStore = new AtomicOrderStore(validatedCrashOrder);
+const ambiguousResumeEmail = new AmbiguousEmailFixture(1);
+const ambiguousFirst = await orchestratePaidOpsDragFulfillment({
+  store: ambiguousResumeStore,
+  generationAdapter: deterministic,
+  emailAdapter: ambiguousResumeEmail,
+  recordedAt: "2026-08-22T20:01:05.000Z",
+});
+assert.equal(ambiguousFirst.disposition, "DELIVERY_OUTCOME_UNKNOWN");
+assert.equal(ambiguousFirst.order.automation?.delivery.status, "SUBMITTING");
+assert.equal(ambiguousFirst.order.automation?.delivery.attempts, 1);
+const ambiguousSecond = await orchestratePaidOpsDragFulfillment({
+  store: ambiguousResumeStore,
+  generationAdapter: deterministic,
+  emailAdapter: ambiguousResumeEmail,
+  recordedAt: "2026-08-22T20:01:06.000Z",
+});
+assert.equal(ambiguousSecond.disposition, "DELIVERY_SUBMITTED");
+assert.equal(ambiguousResumeEmail.acceptedSends, 1);
+assert.equal(new Set(ambiguousResumeEmail.idempotencyKeys).size, 1);
+
+const webhookReconcileStore = new AtomicOrderStore(validatedCrashOrder);
+await webhookReconcileStore.transition((order) => claimDeliverySubmissionAttempt(order, RUN_AT).order);
+const webhookReconciled = await webhookReconcileStore.transition((order) => applyEmailProviderEvent(order, {
+  eventId: "evt_resend_ambiguous_delivered",
+  providerMessageId: "msg_resend_ambiguous",
+  type: "delivered",
+}, "2026-08-22T20:02:00.000Z"));
+assert.equal(webhookReconciled.automation?.delivery.provider_message_id, "msg_resend_ambiguous");
+assert.equal(webhookReconciled.automation?.terminal_disposition, "DELIVERED");
+
+const ambiguousExhaustedStore = new AtomicOrderStore(validatedCrashOrder);
+const ambiguousExhaustedEmail = new AmbiguousEmailFixture(3);
+for (let retry = 0; retry < 3; retry += 1) {
+  const ambiguous = await orchestratePaidOpsDragFulfillment({
+    store: ambiguousExhaustedStore,
+    generationAdapter: deterministic,
+    emailAdapter: ambiguousExhaustedEmail,
+    recordedAt: `2026-08-22T20:0${retry + 2}:00.000Z`,
+  });
+  assert.equal(ambiguous.disposition, "DELIVERY_OUTCOME_UNKNOWN");
+}
+const ambiguityHeld = await orchestratePaidOpsDragFulfillment({
+  store: ambiguousExhaustedStore,
+  generationAdapter: deterministic,
+  emailAdapter: ambiguousExhaustedEmail,
+  recordedAt: "2026-08-22T20:06:00.000Z",
+});
+assert.equal(ambiguityHeld.disposition, "DELIVERY_OUTCOME_UNKNOWN_HELD");
+assert.equal(ambiguousExhaustedEmail.calls, 3);
+assert.equal(ambiguousExhaustedEmail.acceptedSends, 1);
+assert.equal(new Set(ambiguousExhaustedEmail.idempotencyKeys).size, 1);
+assert.equal(ambiguityHeld.order.automation?.delivery.attempts, 1);
+assert.equal(ambiguityHeld.order.automation?.delivery.submission_outcome_unknown_count, 3);
+const ambiguityRefund = await orchestratePaidOpsDragFulfillment({
+  store: ambiguousExhaustedStore,
+  generationAdapter: deterministic,
+  emailAdapter: ambiguousExhaustedEmail,
+  recordedAt: "2026-08-22T21:00:00.000Z",
+});
+assert.equal(ambiguityRefund.disposition, "REFUND_PATH_HELD");
+assert.equal(ambiguityRefund.order.automation?.refund.status, "REQUIRED");
+assert.equal(ambiguousExhaustedEmail.calls, 3);
+const lateDeliveryEvidence = applyEmailProviderEvent(ambiguityRefund.order, {
+  eventId: "evt_late_delivery_after_ambiguity_refund",
+  providerMessageId: "msg_ambiguous_1",
+  type: "delivered",
+}, "2026-08-22T21:00:01.000Z");
+assert.equal(lateDeliveryEvidence.automation?.terminal_disposition, null);
+assert.equal(lateDeliveryEvidence.automation?.refund.status, "REQUIRED");
+assert.equal(lateDeliveryEvidence.receipts.at(-1)?.evidence.transition_disposition, "EVIDENCE_ONLY");
+const receiptJson = JSON.stringify(lateDeliveryEvidence.receipts);
+assert.doesNotMatch(receiptJson, /owner@example\.com|delivery coordination|handoffs between intake/);
 
 const malformedOrder = createPaidOrder({
   primaryPainArea: ["rk", "live", "123456789012345678901234"].join("_"),
@@ -331,10 +435,10 @@ const deliveryWinner = await orchestratePaidOpsDragFulfillment({
   emailAdapter: deliveryWinnerEmail,
   recordedAt: "2026-08-22T21:00:01.000Z",
 });
-assert.equal(deliveryWinner.disposition, "DELIVERY_SUBMITTED");
-assert.equal(deliveryWinner.order.automation?.refund.status, "NOT_REQUIRED");
-assert.equal(deliveryWinnerEmail.acceptedSends, 1, "a delivery lease winner must remain resumable");
+assert.equal(deliveryWinner.disposition, "REFUND_PATH_HELD");
+assert.equal(deliveryWinner.order.automation?.refund.status, "REQUIRED");
+assert.equal(deliveryWinnerEmail.acceptedSends, 0, "the SLA refund must be able to win an unresolved submission");
 
 console.log(
-  "OPS_DRAG_REPORT_PAID_FULFILLMENT_PASS deterministic_pdf=PASS webhook_worker_dedup=PASS crash_resume=PASS claim_scan=PASS provider_retry=PASS refund_wins=PASS"
+  "OPS_DRAG_REPORT_PAID_FULFILLMENT_PASS deterministic_pdf=PASS webhook_worker_dedup=PASS crash_resume=PASS ambiguous_same_key=PASS ambiguous_event_reconcile=PASS claim_scan=PASS provider_retry=PASS refund_wins=PASS"
 );

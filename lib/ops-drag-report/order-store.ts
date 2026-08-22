@@ -12,6 +12,7 @@ import {
   claimRefundAttempt,
   type RefundOwnershipResult,
 } from "@/lib/ops-drag-report/delivery-refund-state-machine";
+import { isOpsDragOrderWorkerEligibleDue } from "@/lib/ops-drag-report/worker-selection";
 
 const ORDER_METADATA_KEY = "ops_drag_report_order";
 const MAX_CAS_ATTEMPTS = 5;
@@ -135,20 +136,21 @@ export async function transitionOpsDragOrder(
 
 export async function listOpsDragOrdersForWorker(
   supabase: SupabaseClient,
-  limit: number
+  limit: number,
+  recordedAt: string
 ): Promise<OpsDragOrder[]> {
   if (!Number.isInteger(limit) || limit < 1 || limit > 10) throw new Error("Worker order limit is invalid");
-  const { data, error } = await supabase
-    .from("custom_ops_hub_leads")
-    .select("id, metadata")
-    .not("metadata->ops_drag_report_order", "is", null)
-    .limit(limit);
+  if (!Number.isFinite(Date.parse(recordedAt))) throw new Error("Worker recordedAt is invalid");
+  const { data, error } = await supabase.rpc("claim_ops_drag_report_worker_batch", {
+    p_recorded_at: recordedAt,
+    p_limit: limit,
+  });
   if (error) throw new Error(error.message || "Unable to list Ops Drag Report worker orders");
-  return (data ?? []).map((row) => {
+  return ((data ?? []) as LeadMetadataRow[]).map((row) => {
     const order = readOrder(readMetadata(row.metadata));
     if (!order) throw new Error("Worker query returned a row without an Ops Drag Report order");
     return order;
-  });
+  }).filter((order) => isOpsDragOrderWorkerEligibleDue(order, recordedAt)).slice(0, limit);
 }
 
 export async function claimOpsDragRefund(

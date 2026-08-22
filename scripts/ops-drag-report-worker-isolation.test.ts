@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 
 import {
   expireDeliverySla,
@@ -19,6 +20,7 @@ import {
   type OpsDragOrder,
 } from "../lib/ops-drag-report/order-foundation.ts";
 import { runBoundedProviderWorker } from "../lib/ops-drag-report/provider-worker.ts";
+import { selectBoundedWorkerPage } from "../lib/ops-drag-report/worker-selection.ts";
 
 const PAID_AT = "2026-08-22T20:00:00.000Z";
 const DELIVERY_AT = "2026-08-22T20:01:00.000Z";
@@ -201,6 +203,68 @@ const batchResult = await runBoundedProviderWorker({
 });
 assert.deepEqual(batchResult, { scanned: 3, processed: 1, noop: 0, blocked: 2 });
 
+const terminalRows = Array.from({ length: 10 }, (_, index) => {
+  const order = expireDeliverySla(createPaidOrder(`terminal-${index + 1}`), REFUND_AT);
+  order.automation!.terminal_disposition = "REFUNDED";
+  order.workflow_status = "DONE";
+  return { cursorId: `${index + 1}`.padStart(3, "0"), order };
+});
+const eligibleEleventh = createPaidOrder("eligible-eleventh");
+const rotationRows = [...terminalRows, { cursorId: "011", order: eligibleEleventh }];
+const firstWake = selectBoundedWorkerPage({
+  rows: rotationRows,
+  afterCursor: null,
+  recordedAt: DELIVERY_AT,
+  limit: 10,
+});
+assert.equal(firstWake.scanned, 10);
+assert.deepEqual(firstWake.orders, []);
+assert.equal(firstWake.nextCursor, "010");
+const secondWake = selectBoundedWorkerPage({
+  rows: rotationRows,
+  afterCursor: firstWake.nextCursor,
+  recordedAt: DELIVERY_AT,
+  limit: 10,
+});
+assert.deepEqual(secondWake.orders.map((order) => order.submission_id), ["eligible-eleventh"]);
+assert.equal(secondWake.nextCursor, "011");
+
+const submittedNotDue = await deliveryStore.load();
+const dueRows = [
+  { cursorId: "001", order: submittedNotDue },
+  { cursorId: "002", order: createPaidOrder("generation-behind-not-due") },
+];
+const notDueWake = selectBoundedWorkerPage({
+  rows: dueRows,
+  afterCursor: null,
+  recordedAt: DELIVERY_AT,
+  limit: 1,
+});
+assert.deepEqual(notDueWake.orders, []);
+const generationWake = selectBoundedWorkerPage({
+  rows: dueRows,
+  afterCursor: notDueWake.nextCursor,
+  recordedAt: DELIVERY_AT,
+  limit: 1,
+});
+assert.deepEqual(generationWake.orders.map((order) => order.submission_id), ["generation-behind-not-due"]);
+const submittedDueWake = selectBoundedWorkerPage({
+  rows: dueRows,
+  afterCursor: null,
+  recordedAt: REFUND_AT,
+  limit: 1,
+});
+assert.deepEqual(submittedDueWake.orders.map((order) => order.submission_id), ["delivery-path"]);
+const workerMigration = readFileSync(
+  new URL("../supabase/migrations/20260822_add_ops_drag_worker_cursor.sql", import.meta.url),
+  "utf8"
+);
+assert.match(workerMigration, /for update/i);
+assert.match(workerMigration, /order by lead\.id asc[\s\S]*limit p_limit/i);
+assert.match(workerMigration, /after_id = v_last_id/i);
+assert.match(workerMigration, /grant execute[\s\S]*to service_role/i);
+assert.doesNotMatch(workerMigration, /grant execute[\s\S]*to (?:anon|authenticated)/i);
+
 console.log(
-  "OPS_DRAG_REPORT_WORKER_ISOLATION_PASS delivery_without_refund_config=PASS refund_without_email_config=PASS bounded_config_receipts=PASS batch_continues=PASS"
+  "OPS_DRAG_REPORT_WORKER_ISOLATION_PASS delivery_without_refund_config=PASS refund_without_email_config=PASS bounded_config_receipts=PASS batch_continues=PASS durable_rotation_reference=PASS due_selection=PASS"
 );

@@ -5,6 +5,7 @@ import type {
   EmailProviderAdapter,
   RefundProviderAdapter,
 } from "./delivery-refund-state-machine.ts";
+import { EmailSubmissionOutcomeUnknownError } from "./delivery-refund-state-machine.ts";
 
 export type ProviderMode = "test" | "live";
 
@@ -91,19 +92,25 @@ export function createResendEmailAdapter(input: {
         throw new Error("Attachment-only delivery input is invalid");
       }
       const idempotencyKey = createDeliveryIdempotencyKey(request.orderId, request.attemptNumber);
-      const result = await input.transport.send({
-        from,
-        to: request.deliveryEmail,
-        subject: "Your StudioFlows Ops Drag Report",
-        text: "Your purchased StudioFlows Ops Drag Report is attached. No public report link was created.",
-        attachments: [{ filename: request.filename, content: Buffer.from(request.pdfBytes) }],
-        tags: [
-          { name: "order_id", value: request.orderId },
-          { name: "submission_id", value: request.submissionId },
-        ],
-        idempotencyKey,
-      });
-      if (result.error || !result.id) throw new Error(result.error || "Resend did not return a message ID");
+      let result: Awaited<ReturnType<ResendTransport["send"]>>;
+      try {
+        result = await input.transport.send({
+          from,
+          to: request.deliveryEmail,
+          subject: "Your StudioFlows Ops Drag Report",
+          text: "Your purchased StudioFlows Ops Drag Report is attached. No public report link was created.",
+          attachments: [{ filename: request.filename, content: Buffer.from(request.pdfBytes) }],
+          tags: [
+            { name: "order_id", value: request.orderId },
+            { name: "submission_id", value: request.submissionId },
+          ],
+          idempotencyKey,
+        });
+      } catch {
+        throw new EmailSubmissionOutcomeUnknownError();
+      }
+      if (result.error) throw new Error(result.error);
+      if (!result.id) throw new EmailSubmissionOutcomeUnknownError();
       return { providerMessageId: result.id };
     },
   };

@@ -17,6 +17,7 @@ export const OPS_DRAG_REPORT_PDF_FILENAME = "studioflows-ops-drag-report.pdf" as
 export const OPS_DRAG_REPORT_MAX_PDF_BYTES = 512_000 as const;
 export const OPS_DRAG_REPORT_GENERATION_MAX_ATTEMPTS = 3 as const;
 export const OPS_DRAG_REPORT_DELIVERY_MAX_ATTEMPTS = 3 as const;
+export const OPS_DRAG_REPORT_SUBMISSION_OUTCOME_UNKNOWN_MAX_RETRIES = 3 as const;
 export const OPS_DRAG_REPORT_REFUND_MAX_ATTEMPTS = 3 as const;
 
 export type OpsDragReportDocument = {
@@ -70,6 +71,15 @@ export type EmailProviderAdapter = {
   }): Promise<{ providerMessageId: string }>;
 };
 
+export class EmailSubmissionOutcomeUnknownError extends Error {
+  readonly code = "SUBMISSION_OUTCOME_UNKNOWN";
+
+  constructor() {
+    super("Email provider submission outcome is unknown");
+    this.name = "EmailSubmissionOutcomeUnknownError";
+  }
+}
+
 export type RefundProviderAdapter = {
   requestFullRefund(input: {
     checkoutSessionId: string;
@@ -104,12 +114,12 @@ export const EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX: Record<
     failed: "EVIDENCE_ONLY",
   },
   SUBMITTING: {
-    accepted: "EVIDENCE_ONLY",
-    queued: "EVIDENCE_ONLY",
-    sent: "EVIDENCE_ONLY",
-    delivered: "EVIDENCE_ONLY",
-    hard_bounce: "EVIDENCE_ONLY",
-    failed: "EVIDENCE_ONLY",
+    accepted: "APPLY",
+    queued: "APPLY",
+    sent: "APPLY",
+    delivered: "APPLY",
+    hard_bounce: "APPLY",
+    failed: "APPLY",
   },
   SUBMITTED: {
     accepted: "APPLY",
@@ -283,7 +293,19 @@ function createAttempt(
 
 function initializeAutomation(order: OpsDragOrder): OpsDragAutomationState {
   requirePaidOrder(order);
-  if (order.automation) return order.automation;
+  if (order.automation) {
+    return {
+      ...order.automation,
+      delivery: {
+        ...order.automation.delivery,
+        submission_outcome_unknown_count:
+          order.automation.delivery.submission_outcome_unknown_count ?? 0,
+        max_submission_outcome_unknown_count:
+          order.automation.delivery.max_submission_outcome_unknown_count ??
+          OPS_DRAG_REPORT_SUBMISSION_OUTCOME_UNKNOWN_MAX_RETRIES,
+      },
+    };
+  }
   const paidAt = order.payment!.paidAt;
   return {
     version: "v1",
@@ -306,6 +328,8 @@ function initializeAutomation(order: OpsDragOrder): OpsDragAutomationState {
       provider_message_id: null,
       submission_lease_owner: null,
       submission_idempotency_key: null,
+      submission_outcome_unknown_count: 0,
+      max_submission_outcome_unknown_count: OPS_DRAG_REPORT_SUBMISSION_OUTCOME_UNKNOWN_MAX_RETRIES,
       delivered_at: null,
     },
     refund: {
@@ -599,6 +623,7 @@ export function claimDeliverySubmissionAttempt(
   next.automation.delivery.attempts = attemptNumber;
   next.automation.delivery.submission_lease_owner = leaseOwner;
   next.automation.delivery.submission_idempotency_key = idempotencyKey;
+  next.automation.delivery.submission_outcome_unknown_count = 0;
   next.automation.attempts.push(createAttempt(order, "DELIVERY", attemptNumber, "STARTED", recordedAt, null));
   const updated = appendAutomationReceipt(next.order, "DELIVERY_ATTEMPT_RECORDED", recordedAt, {
     attempt_number: attemptNumber,
@@ -649,6 +674,40 @@ export function recordDeliverySubmissionFailure(
   return updated;
 }
 
+export function recordDeliverySubmissionOutcomeUnknown(
+  order: OpsDragOrder,
+  attemptNumber: number,
+  recordedAt: string
+): OpsDragOrder {
+  const next = cloneWithAutomation(order);
+  if (next.automation.terminal_disposition || next.automation.refund.status !== "NOT_REQUIRED") return order;
+  if (
+    next.automation.delivery.status !== "SUBMITTING" ||
+    next.automation.delivery.attempts !== attemptNumber ||
+    !next.automation.delivery.submission_lease_owner ||
+    !next.automation.delivery.submission_idempotency_key
+  ) {
+    throw new Error("Unknown delivery outcome requires the active submission lease");
+  }
+  if (
+    next.automation.delivery.submission_outcome_unknown_count >=
+    next.automation.delivery.max_submission_outcome_unknown_count
+  ) {
+    return order;
+  }
+  next.automation.delivery.submission_outcome_unknown_count += 1;
+  return appendAutomationReceipt(next.order, "DELIVERY_ATTEMPT_RECORDED", recordedAt, {
+    attempt_number: attemptNumber,
+    state: "SUBMISSION_OUTCOME_UNKNOWN",
+    delivery_lease_owner: next.automation.delivery.submission_lease_owner,
+    delivery_idempotency_key: next.automation.delivery.submission_idempotency_key,
+    transport_retry_count: next.automation.delivery.submission_outcome_unknown_count,
+    max_transport_retries: next.automation.delivery.max_submission_outcome_unknown_count,
+    provider_message_id: null,
+    failure_code: "SUBMISSION_OUTCOME_UNKNOWN",
+  });
+}
+
 function setTerminal(
   order: OpsDragOrder,
   disposition: OpsDragTerminalDisposition,
@@ -673,7 +732,10 @@ function requireRefund(order: OpsDragOrder, reason: string, recordedAt: string):
   if (next.automation.terminal_disposition === "DELIVERED") throw new Error("Delivered orders cannot require refunds");
   if (next.automation.terminal_disposition === "REFUNDED") return order;
   if (next.automation.refund.status !== "NOT_REQUIRED") return order;
-  if (next.automation.delivery.status === "SUBMITTING") return order;
+  if (
+    next.automation.delivery.status === "SUBMITTING" &&
+    reason !== "DELIVERY_CONFIRMATION_SLA_EXPIRED"
+  ) return order;
   next.automation.refund.status = "REQUIRED";
   return appendAutomationReceipt(next.order, "REFUND_REQUIRED", recordedAt, {
     reason,
@@ -706,8 +768,23 @@ export function applyEmailProviderEvent(
 ): OpsDragOrder {
   const next = cloneWithAutomation(order);
   if (next.automation.processed_provider_event_ids.includes(event.eventId)) return order;
-  if (next.automation.delivery.provider_message_id !== event.providerMessageId) {
+  const isUnboundSubmittingEvent =
+    next.automation.delivery.status === "SUBMITTING" &&
+    next.automation.delivery.provider_message_id === null &&
+    Boolean(next.automation.delivery.submission_lease_owner) &&
+    Boolean(next.automation.delivery.submission_idempotency_key);
+  const canReconcileSubmittingMessage =
+    isUnboundSubmittingEvent &&
+    next.automation.refund.status === "NOT_REQUIRED" &&
+    !next.automation.terminal_disposition;
+  if (
+    next.automation.delivery.provider_message_id !== event.providerMessageId &&
+    !isUnboundSubmittingEvent
+  ) {
     throw new Error("Email provider event message binding mismatch");
+  }
+  if (canReconcileSubmittingMessage) {
+    next.automation.delivery.provider_message_id = event.providerMessageId;
   }
   const priorDeliveryStatus = next.automation.delivery.status;
   const priorRefundStatus = next.automation.refund.status;

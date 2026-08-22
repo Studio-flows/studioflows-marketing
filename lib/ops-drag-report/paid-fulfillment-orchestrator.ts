@@ -2,8 +2,10 @@ import {
   admitGeneratedReport,
   claimDeliverySubmissionAttempt,
   expireDeliverySla,
+  EmailSubmissionOutcomeUnknownError,
   readPersistedReportArtifact,
   recordDeliverySubmissionFailure,
+  recordDeliverySubmissionOutcomeUnknown,
   recordGenerationFailure,
   startDeliveryAttempt,
   startGenerationAttempt,
@@ -23,6 +25,8 @@ export type PaidFulfillmentDisposition =
   | "GENERATION_FAILED"
   | "DELIVERY_RETRYABLE"
   | "DELIVERY_FAILED"
+  | "DELIVERY_OUTCOME_UNKNOWN"
+  | "DELIVERY_OUTCOME_UNKNOWN_HELD"
   | "ALREADY_SUBMITTED"
   | "REFUND_PATH_HELD"
   | "TERMINAL_NOOP";
@@ -147,6 +151,12 @@ export async function orchestratePaidOpsDragFulfillment(input: {
   if (order.automation!.delivery.submission_idempotency_key !== expectedIdempotencyKey) {
     throw new Error("Delivery submission idempotency binding mismatch");
   }
+  if (
+    order.automation!.delivery.submission_outcome_unknown_count >=
+    order.automation!.delivery.max_submission_outcome_unknown_count
+  ) {
+    return { disposition: "DELIVERY_OUTCOME_UNKNOWN_HELD", order };
+  }
   let providerMessageId: string;
   let emailAdapter: EmailProviderAdapter;
   try {
@@ -177,7 +187,13 @@ export async function orchestratePaidOpsDragFulfillment(input: {
       attemptNumber,
     });
     providerMessageId = result.providerMessageId;
-  } catch {
+  } catch (error) {
+    if (error instanceof EmailSubmissionOutcomeUnknownError) {
+      order = await input.store.transition((current) =>
+        recordDeliverySubmissionOutcomeUnknown(current, attemptNumber, input.recordedAt)
+      );
+      return { disposition: "DELIVERY_OUTCOME_UNKNOWN", order };
+    }
     order = await input.store.transition((current) =>
       recordDeliverySubmissionFailure(
         current,

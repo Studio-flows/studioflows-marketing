@@ -81,6 +81,8 @@ export type OpsDragAutomationState = {
     provider_message_id: string | null;
     submission_lease_owner: string | null;
     submission_idempotency_key: string | null;
+    submission_outcome_unknown_count: number;
+    max_submission_outcome_unknown_count: 3;
     delivered_at: string | null;
   };
   refund: {

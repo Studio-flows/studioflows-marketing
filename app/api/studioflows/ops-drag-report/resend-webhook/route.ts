@@ -24,9 +24,12 @@ export async function POST(req: Request) {
     const bound = mapResendWebhook(payload, req.headers.get("svix-id") ?? "");
     const supabase = createMarketingSupabaseServerClient();
     if (!supabase) throw new Error("Ops Drag Report order storage is not configured");
-    const order = await transitionOpsDragOrder(supabase, bound.submissionId, (current) =>
-      applyEmailProviderEvent(current, bound.event, bound.recordedAt)
-    );
+    const order = await transitionOpsDragOrder(supabase, bound.submissionId, (current) => {
+      if (current.order_id !== bound.orderId || current.submission_id !== bound.submissionId) {
+        throw new Error("Resend event order and submission tags do not match the stored order");
+      }
+      return applyEmailProviderEvent(current, bound.event, bound.recordedAt);
+    });
     return Response.json({
       received: true,
       order_id: order.order_id,

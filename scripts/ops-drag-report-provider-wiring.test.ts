@@ -24,7 +24,10 @@ import {
   preflightStripeRefundWorker,
   runBoundedProviderWorker,
 } from "../lib/ops-drag-report/provider-worker.ts";
-import { expireDeliverySla } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
+import {
+  EmailSubmissionOutcomeUnknownError,
+  expireDeliverySla,
+} from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
 import {
   claimFulfillmentOwnership,
   createAdmittedOrder,
@@ -170,6 +173,23 @@ assert.deepEqual(emailRequest?.tags, [
   { name: "submission_id", value: "sub_fixture" },
 ]);
 assert.equal(createDeliveryIdempotencyKey("odr_fixture", 3), "ops-drag:odr_fixture:delivery:3:v1");
+const unknownOutcomeAdapter = createResendEmailAdapter({
+  environment: testEnvironment,
+  transport: { async send() { throw new Error("transport connection reset after write"); } },
+});
+await assert.rejects(
+  () => unknownOutcomeAdapter.submit({
+    orderId: "odr_fixture",
+    submissionId: "sub_fixture",
+    deliveryEmail: "owner@example.com",
+    reportSha256: "a".repeat(64),
+    pdfSha256: "b".repeat(64),
+    pdfBytes: new TextEncoder().encode("%PDF-1.7 provider fixture"),
+    filename: "studioflows-ops-drag-report.pdf",
+    attemptNumber: 1,
+  }),
+  (error) => error instanceof EmailSubmissionOutcomeUnknownError
+);
 
 let refundRequest: Parameters<StripeRefundTransport["create"]>[0] | null = null;
 let refundOptions: Parameters<StripeRefundTransport["create"]>[1] | null = null;
@@ -230,7 +250,14 @@ const resendPayload = verifyResendWebhook({
 });
 const mappedResend = mapResendWebhook(resendPayload, svixId);
 assert.equal(mappedResend.event.type, "delivered");
+assert.equal(mappedResend.orderId, "odr_fixture");
 assert.equal(mappedResend.submissionId, "sub_fixture");
+const missingOrderTag = structuredClone(resendPayload);
+delete missingOrderTag.data.tags?.order_id;
+assert.throws(() => mapResendWebhook(missingOrderTag, svixId), /order_id tag/);
+const missingSubmissionTag = structuredClone(resendPayload);
+delete missingSubmissionTag.data.tags?.submission_id;
+assert.throws(() => mapResendWebhook(missingSubmissionTag, svixId), /submission_id tag/);
 assert.throws(() => verifyResendWebhook({
   rawBody: `${resendRawBody} `,
   webhookSecret: resendSecret,

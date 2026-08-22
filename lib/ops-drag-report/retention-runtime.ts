@@ -18,6 +18,21 @@ export const RETENTION_REDACTED_EMAIL = "redacted@retained.invalid" as const;
 export const RETENTION_LEASE_STALE_MINUTES = 15 as const;
 
 const RUNTIME_ROW_KEY = "runtime_row";
+const RAW_ATTRIBUTION_METADATA_KEYS = [
+  "src",
+  "pq_session_id",
+  "pq_score",
+  "pq_qualified",
+  "pq_band",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_term",
+  "utm_content",
+  "referrer",
+  "landing_path",
+  "pre_qual",
+] as const;
 const DATA_CLASSES = new Set<RetentionDataClass>([
   "UNPAID_SUBMISSION",
   "RAW_PAID_SUBMISSION",
@@ -118,6 +133,12 @@ function stripSupport(metadata: Record<string, JsonValue>): void {
   delete metadata.support_transcript;
 }
 
+function stripRawAttribution(metadata: Record<string, JsonValue>): void {
+  delete metadata.ops_drag_raw_attribution;
+  delete metadata.raw_attribution;
+  for (const key of RAW_ATTRIBUTION_METADATA_KEYS) delete metadata[key];
+}
+
 function redactRawPaid(record: RetentionRecord): RetentionRuntimePatch {
   const row = runtimeRow(record);
   const metadata = structuredClone(row.metadata);
@@ -182,8 +203,7 @@ function redactMapping(record: RetentionRecord): RetentionRuntimePatch {
   order.retention_mapping_redacted = true;
   metadata.ops_drag_report_order = order;
   delete metadata.ops_drag_email_order_mapping;
-  delete metadata.ops_drag_raw_attribution;
-  delete metadata.raw_attribution;
+  stripRawAttribution(metadata);
 
   const hasSupport = "ops_drag_support_transcript" in metadata ||
     "ops_drag_report_support" in metadata ||
@@ -250,8 +270,7 @@ function reduceLedger(record: RetentionRecord, reduced: Record<string, JsonValue
   const metadata = structuredClone(row.metadata);
   delete metadata.ops_drag_report_order;
   delete metadata.ops_drag_email_order_mapping;
-  delete metadata.ops_drag_raw_attribution;
-  delete metadata.raw_attribution;
+  stripRawAttribution(metadata);
   stripSupport(metadata);
   metadata.ops_drag_reduced_transaction_record = structuredClone(reduced);
   const transactionAt = typeof reduced.transaction_at === "string" ? reduced.transaction_at : record.transaction_at;

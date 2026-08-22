@@ -24,6 +24,24 @@ import {
 
 const TERMINAL_AT = "2024-02-29T12:00:00.000Z";
 const OWNER = "retention-owner-fixture-0001";
+const PRODUCTION_RAW_ATTRIBUTION = {
+  src: "homepage-diagnosis",
+  pq_session_id: "pq-session-raw-123",
+  pq_score: "83",
+  pq_qualified: "true",
+  pq_band: "high",
+  utm_source: "raw-search-source",
+  utm_medium: "raw-cpc-medium",
+  utm_campaign: "raw-campaign-name",
+  utm_term: "raw-search-term",
+  utm_content: "raw-ad-content",
+  referrer: "https://raw-referrer.example/private-path",
+  landing_path: "/raw-private-landing",
+  pre_qual: {
+    session_id: "nested-pq-session-raw-456",
+    source: "nested-raw-source",
+  },
+} satisfies Record<string, JsonValue>;
 
 function runtimeRow(metadataOverrides: Record<string, JsonValue> = {}): Record<string, JsonValue> {
   return {
@@ -162,6 +180,47 @@ const mappingSerialized = JSON.stringify(mappingPatch.columns);
 assert.doesNotMatch(mappingSerialized, /buyer@business\.example|must-disappear-at-90d/);
 assert.match(mappingSerialized, /retention_mapping_redacted/);
 
+const productionShapeOriginal = runtimeRow(PRODUCTION_RAW_ATTRIBUTION);
+const productionShapeRawPatch = createRetentionRuntimePatch(
+  record("RAW_PAID_SUBMISSION", productionShapeOriginal),
+  "DELETE",
+);
+const productionShapeAfterRaw = applyColumns(productionShapeOriginal, productionShapeRawPatch.columns);
+const afterRawMetadata = productionShapeAfterRaw.metadata as Record<string, JsonValue>;
+for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION)) {
+  assert.equal(key in afterRawMetadata, true, `${key} must remain only until the 90-day boundary`);
+}
+const productionShapeMappingPatch = createRetentionRuntimePatch(
+  record("EMAIL_ORDER_MAPPING", productionShapeAfterRaw),
+  "DELETE",
+);
+const productionShapeAfterMapping = applyColumns(
+  productionShapeAfterRaw,
+  productionShapeMappingPatch.columns,
+);
+const afterMappingMetadata = productionShapeAfterMapping.metadata as Record<string, JsonValue>;
+for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION)) {
+  assert.equal(key in afterMappingMetadata, false, `${key} must be absent after the 90-day patch`);
+}
+assert.doesNotMatch(
+  JSON.stringify(productionShapeAfterMapping),
+  /pq-session-raw-123|raw-search-source|raw-cpc-medium|raw-campaign-name|raw-search-term|raw-ad-content|raw-referrer|raw-private-landing|nested-pq-session-raw-456|nested-raw-source/,
+);
+const productionLedgerRecord = record("DETAILED_RECEIPT_LEDGER", productionShapeAfterMapping);
+const productionReducedPatch = createRetentionRuntimePatch(
+  productionLedgerRecord,
+  "REDUCE",
+  reduceDetailedLedger(productionLedgerRecord.payload),
+);
+const productionReducedSerialized = JSON.stringify(productionReducedPatch.columns);
+for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION)) {
+  assert.doesNotMatch(productionReducedSerialized, new RegExp(`"${key}"`));
+}
+assert.doesNotMatch(
+  productionReducedSerialized,
+  /pq-session-raw-123|raw-search-source|raw-search-term|raw-referrer|raw-private-landing|nested-pq-session-raw-456/,
+);
+
 const supportOriginalRow = runtimeRow({
   ops_drag_support_transcript: { closed_at: "2024-12-31T12:00:00.000Z", body: "private support body" },
 });
@@ -290,6 +349,7 @@ const migration = readFileSync("supabase/migrations/20260822104931_ops_drag_rete
 const rollback = readFileSync("supabase/rollbacks/20260822104931_ops_drag_retention_runtime.rollback.sql", "utf8");
 const route = readFileSync("app/api/studioflows/ops-drag-report/cleanup/route.ts", "utf8");
 const orderStore = readFileSync("lib/ops-drag-report/order-store.ts", "utf8");
+const ingestLeadRoute = readFileSync("app/api/studioflows/ingest-lead/route.ts", "utf8");
 for (const contract of [
   /limit p_limit\s+for update skip locked/i,
   /ops_drag_retention_cursor/,
@@ -308,7 +368,11 @@ assert.match(route, /OPS_DRAG_REPORT_RETENTION_MUTATION_ENABLED/);
 assert.doesNotMatch(route, /RESEND|STRIPE|PROVIDER_WORKER/);
 assert.match(orderStore, /ops_drag_last_legitimate_activity_at:\s*legitimateActivityAt/);
 assert.match(orderStore, /retention_redacted === true/);
+for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION).filter((key) => key !== "pre_qual")) {
+  assert.match(ingestLeadRoute, new RegExp(`${key}:`), `${key} fixture must remain bound to the actual intake shape`);
+}
+assert.match(ingestLeadRoute, /preQual \? \{ pre_qual: preQual \}/);
 
 console.log(
-  "OPS_DRAG_REPORT_RETENTION_RUNTIME_PASS boundaries=PASS redaction=PASS legal_hold=PASS receipt_chain=PASS malformed=PASS scheduler_isolation=PASS row11=PASS migration_contract=PASS"
+  "OPS_DRAG_REPORT_RETENTION_RUNTIME_PASS boundaries=PASS redaction=PASS production_attribution=PASS legal_hold=PASS receipt_chain=PASS malformed=PASS scheduler_isolation=PASS row11=PASS migration_contract=PASS"
 );

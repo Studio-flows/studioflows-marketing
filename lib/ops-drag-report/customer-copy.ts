@@ -1,0 +1,5 @@
+export const OPS_DRAG_PRIVACY_DISCLOSURE =
+  "StudioFlows uses your business email and Ops Check answers only to generate, deliver, support, and verify this automated report. Payment and billing information are handled by Stripe/Link through hosted checkout. Do not submit credentials, payment-card information, regulated data, employee or customer personal data, or confidential raw exports. Unpaid submissions are deleted within 7 days; report inputs and reports within 30 days after delivery or refund; email/order mappings and support messages within 90 days. Minimal transaction and audit records may be retained longer where legally required. Ops Check answers are not used for marketing without separate permission. Contact support@studioflows.co for privacy requests.";
+
+export const OPS_DRAG_BUSINESS_USE_ACKNOWLEDGMENT =
+  "I confirm this is a business-use submission and that I have not included credentials, payment-card information, regulated data, employee or customer personal data, or confidential raw exports.";

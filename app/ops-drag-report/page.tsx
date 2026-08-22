@@ -1,5 +1,11 @@
 import Link from "next/link";
 
+import {
+  OPS_DRAG_CUSTOMER_CONTRACT,
+  OPS_DRAG_PRIVACY_DISCLOSURE,
+  resolveCustomerContractRuntime,
+} from "@/lib/ops-drag-report/accepted-contract";
+
 import OpsDragReportCheckout from "./OpsDragReportCheckout";
 
 export const metadata = {
@@ -13,26 +19,79 @@ export default function OpsDragReportPage({
   searchParams?: { lead_id?: string };
 }) {
   const leadId = searchParams?.lead_id?.trim() ?? "";
-  const enabled = process.env.OPS_DRAG_REPORT_CHECKOUT_ENABLED === "true";
+  const runtime = resolveCustomerContractRuntime({
+    checkoutAccepted: false,
+    deliveryAccepted: false,
+    supportRefundAccepted: false,
+  });
 
   return (
     <main className="min-h-screen bg-stone-100 px-5 py-16">
-      <div className="mx-auto max-w-3xl">
+      <div className="mx-auto max-w-4xl">
         <p className="text-sm font-semibold uppercase tracking-[0.18em] text-amber-800">Operations Orchestrated</p>
-        <h1 className="mt-4 text-4xl font-semibold tracking-tight text-stone-950">Turn your Ops Check into a practical drag report.</h1>
+        <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight text-stone-950 sm:text-5xl">
+          {OPS_DRAG_CUSTOMER_CONTRACT.hero}
+        </h1>
         <p className="mt-5 max-w-2xl text-base leading-8 text-stone-700">
-          The report organizes the bottlenecks, handoffs, and ownership gaps already captured in your StudioFlows Ops Check.
+          {OPS_DRAG_CUSTOMER_CONTRACT.introduction}
         </p>
+        <p className="mt-5 text-lg font-semibold text-stone-950">{OPS_DRAG_CUSTOMER_CONTRACT.price}</p>
+        <p className="mt-2 text-sm font-medium text-amber-900">{OPS_DRAG_CUSTOMER_CONTRACT.geography}</p>
+        <p className="mt-4 max-w-2xl text-sm leading-7 text-stone-700">{OPS_DRAG_CUSTOMER_CONTRACT.supportLine}</p>
+
         {leadId ? (
-          <OpsDragReportCheckout leadId={leadId} enabled={enabled} />
+          <OpsDragReportCheckout leadId={leadId} enabled={false} />
         ) : (
           <div className="mt-8 rounded-2xl border border-stone-300 bg-white p-6">
-            <p className="text-stone-800">Complete the Ops Check first so the report has verified inputs.</p>
+            <p className="font-semibold text-stone-900">{OPS_DRAG_CUSTOMER_CONTRACT.cta}</p>
+            <p className="mt-2 text-sm leading-7 text-stone-700">
+              Complete the Ops Check first. Checkout remains held until every accepted runtime gate is proven.
+            </p>
             <Link href="/services/custom-ops-hub" className="mt-4 inline-flex font-semibold text-amber-900 underline underline-offset-4">
               Start the Ops Check
             </Link>
           </div>
         )}
+
+        <section className="mt-12 rounded-2xl border border-stone-300 bg-white p-6 sm:p-8">
+          <h2 className="text-2xl font-semibold text-stone-950">What you receive</h2>
+          <ul className="mt-5 space-y-3 text-sm leading-7 text-stone-700">
+            {OPS_DRAG_CUSTOMER_CONTRACT.receives.map((item) => <li key={item}>• {item}</li>)}
+            {runtime.delivery ? <li>• {runtime.delivery.receives}</li> : null}
+          </ul>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-stone-300 bg-white p-6 sm:p-8">
+          <h2 className="text-2xl font-semibold text-stone-950">How it works</h2>
+          <ol className="mt-5 space-y-3 text-sm leading-7 text-stone-700">
+            <li>1. {OPS_DRAG_CUSTOMER_CONTRACT.howItWorks[0]}</li>
+            {runtime.checkout ? <li>2. {runtime.checkout}</li> : null}
+            {runtime.delivery ? <li>3. {runtime.delivery.step}</li> : null}
+          </ol>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-stone-300 bg-white p-6 sm:p-8">
+          <h2 className="text-2xl font-semibold text-stone-950">What to expect</h2>
+          <p className="mt-4 text-sm leading-7 text-stone-700">{OPS_DRAG_CUSTOMER_CONTRACT.expectation}</p>
+          {runtime.supportRefund ? <p className="mt-4 text-sm leading-7 text-stone-700">{runtime.supportRefund}</p> : null}
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-amber-800/30 bg-amber-50 p-6 sm:p-8">
+          <h2 className="text-lg font-semibold text-stone-950">Before you submit the Ops Check</h2>
+          <p className="mt-3 text-sm leading-7 text-stone-700">{OPS_DRAG_PRIVACY_DISCLOSURE}</p>
+        </section>
+
+        <section className="mt-8 rounded-2xl border border-stone-300 bg-white p-6 sm:p-8">
+          <h2 className="text-2xl font-semibold text-stone-950">FAQ</h2>
+          <div className="mt-5 space-y-6">
+            {OPS_DRAG_CUSTOMER_CONTRACT.faq.map((item) => (
+              <div key={item.question}>
+                <h3 className="font-semibold text-stone-950">{item.question}</h3>
+                <p className="mt-2 text-sm leading-7 text-stone-700">{item.answer}</p>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     </main>
   );

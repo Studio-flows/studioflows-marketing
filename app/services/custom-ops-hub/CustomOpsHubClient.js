@@ -19,6 +19,10 @@ import {
 import { evaluateQualification } from "../../../lib/qualify-custom-ops-hub";
 import { trackConversionEvent } from "../../../lib/analytics-events";
 import {
+  OPS_DRAG_BUSINESS_USE_ACKNOWLEDGMENT,
+  OPS_DRAG_PRIVACY_DISCLOSURE,
+} from "../../../lib/ops-drag-report/customer-copy";
+import {
   QualifierAtmosphere,
   QUALIFIER_PAGE,
   Q_BODY,
@@ -397,6 +401,7 @@ export default function CustomOpsHubClient() {
   const [submitMessage, setSubmitMessage] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [consentAccepted, setConsentAccepted] = useState(false);
+  const [businessUseAccepted, setBusinessUseAccepted] = useState(false);
   const [attribution, setAttribution] = useState(getInitialAttribution);
   const preQualBanner =
     attribution.pq_score != null
@@ -615,6 +620,10 @@ export default function CustomOpsHubClient() {
       setStepError("Please confirm consent to continue.");
       return;
     }
+    if (!businessUseAccepted) {
+      setStepError("Please confirm the business-use and input ceiling before submitting.");
+      return;
+    }
 
     setIsSubmitting(true);
 
@@ -625,6 +634,7 @@ export default function CustomOpsHubClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           consent: true,
+          business_use_input_ceiling_ack: true,
           form_payload: answers,
           from: "custom-ops-hub",
           ...attribution,
@@ -908,28 +918,46 @@ export default function CustomOpsHubClient() {
               )}
 
               {questionIndex === totalQuestions - 1 && (
-                <label className="mt-6 flex cursor-pointer items-start gap-3 rounded-xl border border-black/12 bg-white/85 px-4 py-3 text-sm leading-6 text-[#3A352C]">
-                  <input
-                    type="checkbox"
-                    checked={consentAccepted}
-                    onChange={(event) => {
-                      setConsentAccepted(event.target.checked);
-                      setStepError("");
-                    }}
-                    className="mt-1 h-4 w-4 shrink-0 rounded border-black/25 bg-white accent-[#8A6A1F]"
-                  />
-                  <span>
-                    I agree to be contacted about my request and accept the{" "}
-                    <a href="/privacy-policy" className="font-medium text-[#8A6A1F] underline underline-offset-2">
-                      Privacy Policy
-                    </a>{" "}
-                    and{" "}
-                    <a href="/terms-of-service" className="font-medium text-[#8A6A1F] underline underline-offset-2">
-                      Terms of Service
-                    </a>
-                    .
-                  </span>
-                </label>
+                <div className="mt-6 space-y-3">
+                  <div className="rounded-xl border border-[#8A6A1F]/35 bg-[#D4A853]/[0.14] px-4 py-3 text-xs leading-6 text-[#3A352C]">
+                    <p className="font-semibold text-[#0B0B0C]">Privacy and input limits</p>
+                    <p className="mt-2">{OPS_DRAG_PRIVACY_DISCLOSURE}</p>
+                  </div>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-black/12 bg-white/85 px-4 py-3 text-sm leading-6 text-[#3A352C]">
+                    <input
+                      type="checkbox"
+                      checked={businessUseAccepted}
+                      onChange={(event) => {
+                        setBusinessUseAccepted(event.target.checked);
+                        setStepError("");
+                      }}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-black/25 bg-white accent-[#8A6A1F]"
+                    />
+                    <span>{OPS_DRAG_BUSINESS_USE_ACKNOWLEDGMENT}</span>
+                  </label>
+                  <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-black/12 bg-white/85 px-4 py-3 text-sm leading-6 text-[#3A352C]">
+                    <input
+                      type="checkbox"
+                      checked={consentAccepted}
+                      onChange={(event) => {
+                        setConsentAccepted(event.target.checked);
+                        setStepError("");
+                      }}
+                      className="mt-1 h-4 w-4 shrink-0 rounded border-black/25 bg-white accent-[#8A6A1F]"
+                    />
+                    <span>
+                      I agree to be contacted about my request and accept the{" "}
+                      <a href="/privacy-policy" className="font-medium text-[#8A6A1F] underline underline-offset-2">
+                        Privacy Policy
+                      </a>{" "}
+                      and{" "}
+                      <a href="/terms-of-service" className="font-medium text-[#8A6A1F] underline underline-offset-2">
+                        Terms of Service
+                      </a>
+                      .
+                    </span>
+                  </label>
+                </div>
               )}
             </motion.div>
           </AnimatePresence>
@@ -951,7 +979,7 @@ export default function CustomOpsHubClient() {
                   isSubmitting ||
                   currentQuestionNeedsInputBlock ||
                   currentQuestionHasInvalidBusinessEmail ||
-                  (questionIndex === totalQuestions - 1 && !consentAccepted)
+                  (questionIndex === totalQuestions - 1 && (!consentAccepted || !businessUseAccepted))
                 }
                 className={Q_CTA_PRIMARY}
               >

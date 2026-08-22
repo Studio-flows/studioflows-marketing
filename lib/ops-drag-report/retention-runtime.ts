@@ -8,6 +8,7 @@ import {
   calculateRetentionDueAt,
   createRetentionMutationAdapter,
   REDUCED_TRANSACTION_ALLOWLIST,
+  RetentionOwnershipLostError,
   runRetentionCleanupWorker,
   type RetentionDataClass,
   type RetentionRecord,
@@ -434,7 +435,11 @@ export function createSupabaseRetentionRuntime(input: {
       p_patch: patch,
       p_receipt: receipt,
     });
-    if (error) throw new Error(error.message || "Unable to apply Ops Drag Report retention action");
+    if (error) {
+      const message = error.message || "Unable to apply Ops Drag Report retention action";
+      if (/retention lease owner mismatch/i.test(message)) throw new RetentionOwnershipLostError();
+      throw new Error(message);
+    }
     if (data !== "APPLIED" && data !== "HELD" && data !== "DEFERRED") {
       throw new Error("Ops Drag Report retention action returned an invalid disposition");
     }
@@ -491,7 +496,7 @@ export async function runSupabaseRetentionCleanup(input: {
   supabase: SupabaseClient;
   now: string;
   owner?: string;
-}): Promise<{ scanned: number; applied: number; held: number; skipped: number; blocked: number }> {
+}): Promise<{ scanned: number; applied: number; held: number; skipped: number; blocked: number; release_failures: number }> {
   const owner = input.owner ?? `retention-${randomUUID()}`;
   const staleBefore = retentionStaleBefore(input.now);
   const runtime = createSupabaseRetentionRuntime({

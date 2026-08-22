@@ -16,7 +16,20 @@ drop function if exists public.ops_drag_try_timestamptz(text);
 drop index if exists public.custom_ops_hub_leads_retention_due_idx;
 drop index if exists public.ops_drag_retention_receipts_record_chain_idx;
 
+update public.custom_ops_hub_leads as lead
+   set metadata = jsonb_set(
+     coalesce(lead.metadata, '{}'::jsonb),
+     '{ops_drag_retention_legal_hold}',
+     retention_hold.hold,
+     true
+   )
+  from public.ops_drag_retention_holds as retention_hold
+ where retention_hold.record_id = lead.id;
+
+drop table if exists public.ops_drag_retention_holds;
+
 alter table public.custom_ops_hub_leads
+  drop constraint if exists custom_ops_hub_leads_retention_timestamps_finite_check,
   drop constraint if exists custom_ops_hub_leads_retention_attempts_check,
   drop constraint if exists custom_ops_hub_leads_retention_stage_check,
   drop column if exists ops_drag_retention_last_blocker_code,

@@ -15,6 +15,7 @@ import {
   createRetentionMutationAdapter,
   planRetentionAction,
   reduceDetailedLedger,
+  RetentionOwnershipLostError,
   runRetentionCleanupWorker,
   verifyRetentionReceiptChain,
   type RetentionDataClass,
@@ -379,11 +380,12 @@ type AtomicHoldFixture = {
 } | null;
 
 function migrationHoldCovers(hold: AtomicHoldFixture, stage: RetentionDataClass): boolean {
-  if (!hold || typeof hold !== "object" || Array.isArray(hold)) return false;
+  if (hold === null) return false;
+  if (typeof hold !== "object" || Array.isArray(hold)) return true;
   const releasedAt = hold.released_at === null || hold.released_at === undefined
     ? ""
     : String(hold.released_at);
-  if (releasedAt !== "") return false;
+  if (releasedAt !== "") return Number.isNaN(Date.parse(releasedAt));
   if (!Array.isArray(hold.data_classes) || hold.data_classes.length === 0) return true;
   return hold.data_classes.includes("ALL") || hold.data_classes.includes(stage);
 }
@@ -515,7 +517,7 @@ const heldStatusResult = await runRetentionCleanupWorker({
   now: "2032-01-01T00:00:00.000Z",
   staleBefore: "2031-12-31T23:45:00.000Z",
 });
-assert.deepEqual(heldStatusResult, { scanned: 1, applied: 0, held: 1, skipped: 0, blocked: 0 });
+assert.deepEqual(heldStatusResult, { scanned: 1, applied: 0, held: 1, skipped: 0, blocked: 0, release_failures: 0 });
 assert.equal(heldStatusRow.private_content, "must-remain-private-after-held-disposition");
 assert.equal(heldStatusRow.lease_owner, null);
 assert.equal(heldStatusRow.lease_attempts, 0);
@@ -534,7 +536,7 @@ const rebasedDueResult = await runRetentionCleanupWorker({
   now: "2032-01-01T00:00:00.000Z",
   staleBefore: "2031-12-31T23:45:00.000Z",
 });
-assert.deepEqual(rebasedDueResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0 });
+assert.deepEqual(rebasedDueResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0, release_failures: 0 });
 assert.deepEqual(rebasedDueStore.deferrals, [{
   dueAt: "2033-01-31T00:00:00.000Z",
   reason: "RETENTION_WINDOW_ACTIVE",
@@ -560,7 +562,7 @@ const atomicDeferredResult = await runRetentionCleanupWorker({
   now: "2032-01-01T00:00:00.000Z",
   staleBefore: "2031-12-31T23:45:00.000Z",
 });
-assert.deepEqual(atomicDeferredResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0 });
+assert.deepEqual(atomicDeferredResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0, release_failures: 0 });
 assert.deepEqual(atomicDeferredStore.receipts, [], "DEFERRED must never complete a destructive receipt");
 assert.deepEqual(atomicDeferredStore.releases, [], "DEFERRED must never enter the blocker retry path");
 
@@ -596,9 +598,80 @@ const invalidatedThenAppliedResult = await runRetentionCleanupWorker({
   now: "2032-01-01T00:00:00.000Z",
   staleBefore: "2031-12-31T23:45:00.000Z",
 });
-assert.deepEqual(invalidatedThenAppliedResult, { scanned: 3, applied: 1, held: 0, skipped: 2, blocked: 0 });
+assert.deepEqual(invalidatedThenAppliedResult, { scanned: 3, applied: 1, held: 0, skipped: 2, blocked: 0, release_failures: 0 });
 assert.equal(invalidatedThenAppliedStore.receipts.length, 1, "the unrelated final row must still complete");
 assert.deepEqual(invalidatedThenAppliedStore.releases, [], "lifecycle invalidation must not enter release failure handling");
+
+const ownershipLostStore = new MultiRecordStore([
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000011",
+    last_activity_at: "2031-12-25T00:00:00.000Z",
+  }),
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000012",
+    last_activity_at: "2031-12-25T00:00:00.000Z",
+  }),
+]);
+let ownershipApplyCalls = 0;
+const ownershipLostAdapter = createRetentionMutationAdapter({
+  enabled: true,
+  async deleteRecord() {
+    ownershipApplyCalls += 1;
+    if (ownershipApplyCalls === 1) throw new RetentionOwnershipLostError();
+    return "APPLIED";
+  },
+  async reduceRecord() { throw new Error("ownership fixture must not reduce"); },
+});
+const ownershipLostResult = await runRetentionCleanupWorker({
+  store: ownershipLostStore,
+  adapter: ownershipLostAdapter,
+  owner: OWNER,
+  now: "2032-01-01T00:00:00.000Z",
+  staleBefore: "2031-12-31T23:45:00.000Z",
+});
+assert.deepEqual(ownershipLostResult, {
+  scanned: 2, applied: 1, held: 0, skipped: 1, blocked: 0, release_failures: 0,
+});
+assert.deepEqual(ownershipLostStore.releases, [], "a stale worker must never release the replacement owner's lease");
+assert.equal(ownershipLostStore.receipts.length, 1, "ownership loss must not starve the next claimed row");
+
+class ReleaseFailureStore extends MultiRecordStore {
+  override async release(recordId: string, blocker: string) {
+    this.releases.push(`${recordId}:${blocker}`);
+    throw new Error("retention claim release binding is invalid");
+  }
+}
+const releaseFailureStore = new ReleaseFailureStore([
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000021",
+    last_activity_at: "2031-12-25T00:00:00.000Z",
+  }),
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000022",
+    last_activity_at: "2031-12-25T00:00:00.000Z",
+  }),
+]);
+let releaseFailureApplyCalls = 0;
+const releaseFailureAdapter = createRetentionMutationAdapter({
+  enabled: true,
+  async deleteRecord() {
+    releaseFailureApplyCalls += 1;
+    if (releaseFailureApplyCalls === 1) throw new Error("fixture mutation failure");
+    return "APPLIED";
+  },
+  async reduceRecord() { throw new Error("release-failure fixture must not reduce"); },
+});
+const releaseFailureResult = await runRetentionCleanupWorker({
+  store: releaseFailureStore,
+  adapter: releaseFailureAdapter,
+  owner: OWNER,
+  now: "2032-01-01T00:00:00.000Z",
+  staleBefore: "2031-12-31T23:45:00.000Z",
+});
+assert.deepEqual(releaseFailureResult, {
+  scanned: 2, applied: 1, held: 0, skipped: 0, blocked: 0, release_failures: 1,
+});
+assert.equal(releaseFailureStore.receipts.length, 1, "a release failure must not starve the next claimed row");
 await runRetentionCleanupWorker({
   store: firstStore,
   adapter: captureAdapter,
@@ -670,10 +743,17 @@ for (const contract of [
   /ops_drag_last_legitimate_activity_at/,
   /ops_drag_retention_attempts between 0 and 3/,
   /RETENTION_TERMINAL_TIMESTAMP_INVALID/,
-  /ops_drag_retention_legal_hold/,
+  /create table if not exists public\.ops_drag_retention_holds/,
+  /alter table public\.ops_drag_retention_holds enable row level security/,
+  /revoke all on table public\.ops_drag_retention_holds from public, anon, authenticated/,
+  /insert into public\.ops_drag_retention_holds[\s\S]+metadata -> 'ops_drag_retention_legal_hold'/,
   /ops_drag_retention_hold_covers\(v_hold, v_stage\)/,
-  /when jsonb_typeof\(p_hold -> 'data_classes'\) is distinct from 'array' then true/,
-  /when jsonb_array_length\(p_hold -> 'data_classes'\) = 0 then true/,
+  /jsonb_typeof\(p_hold -> 'data_classes'\) is distinct from 'array'[\s\S]+return true/,
+  /jsonb_array_length\(p_hold -> 'data_classes'\) = 0[\s\S]+return true/,
+  /not isfinite\(v_parsed\)/,
+  /retention receipt timestamps are invalid/,
+  /retention defer timestamp is invalid/,
+  /retention release timestamp is invalid/,
   /revoke all on function public\.claim_ops_drag_retention_batch[\s\S]+from public, anon, authenticated/i,
   /grant execute on function public\.claim_ops_drag_retention_batch[\s\S]+to service_role/i,
   /v_stage = 'DETAILED_RECEIPT_LEDGER'[\s\S]+ops_drag_retention_detailed_due_at\(v_lead\.metadata\)/,
@@ -715,6 +795,9 @@ assert.match(rollback, /drop function if exists public\.ops_drag_retention_dispu
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_order_lifecycle\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.ops_drag_retention_reduced_metadata_valid\(jsonb\)/);
 assert.match(rollback, /drop function if exists public\.defer_ops_drag_retention_claim/);
+assert.match(rollback, /set metadata = jsonb_set[\s\S]+ops_drag_retention_legal_hold/);
+assert.match(rollback, /drop table if exists public\.ops_drag_retention_holds/);
+assert.match(rollback, /drop constraint if exists custom_ops_hub_leads_retention_timestamps_finite_check/);
 assert.match(rollback, /drop table if exists public\.ops_drag_retention_receipts/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_SECRET/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_ENABLED/);

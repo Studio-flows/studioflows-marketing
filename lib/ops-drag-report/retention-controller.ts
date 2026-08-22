@@ -3,6 +3,13 @@ import { canonicalJson, sha256, type JsonValue } from "./order-foundation.ts";
 export const RETENTION_POLICY_VERSION = "ops_drag_retention_v1" as const;
 export const RETENTION_WORKER_MAX_BATCH = 10 as const;
 export const RETENTION_WORKER_MAX_ATTEMPTS = 3 as const;
+
+export class RetentionOwnershipLostError extends Error {
+  constructor() {
+    super("Ops Drag Report retention ownership was lost before mutation");
+    this.name = "RetentionOwnershipLostError";
+  }
+}
 export const REDUCED_TRANSACTION_ALLOWLIST = [
   "order_reference",
   "amount",
@@ -214,13 +221,21 @@ export async function runRetentionCleanupWorker(input: {
   now: string;
   staleBefore: string;
   limit?: number;
-}): Promise<{ scanned: number; applied: number; held: number; skipped: number; blocked: number }> {
+}): Promise<{ scanned: number; applied: number; held: number; skipped: number; blocked: number; release_failures: number }> {
   const limit = input.limit ?? RETENTION_WORKER_MAX_BATCH;
   if (!Number.isInteger(limit) || limit < 1 || limit > RETENTION_WORKER_MAX_BATCH) {
     throw new Error("Retention worker batch limit must be between 1 and 10");
   }
   const records = (await input.store.loadBatch(limit)).slice(0, limit);
-  const result = { scanned: records.length, applied: 0, held: 0, skipped: 0, blocked: 0 };
+  const result = { scanned: records.length, applied: 0, held: 0, skipped: 0, blocked: 0, release_failures: 0 };
+  const releaseFailure = async (recordId: string, blockerCode: string): Promise<void> => {
+    try {
+      await input.store.release(recordId, blockerCode);
+      result.blocked += 1;
+    } catch {
+      result.release_failures += 1;
+    }
+  };
   for (const observed of records) {
     const preclaimed = observed.lease?.owner === input.owner && observed.lease.acquired_at === input.now
       ? observed
@@ -229,8 +244,7 @@ export async function runRetentionCleanupWorker(input: {
     try {
       action = planRetentionAction(observed, input.now);
     } catch {
-      await input.store.release(observed.record_id, "RETENTION_TIMESTAMP_INVALID");
-      result.blocked += 1;
+      await releaseFailure(observed.record_id, "RETENTION_TIMESTAMP_INVALID");
       continue;
     }
     if (action.kind === "NONE") {
@@ -249,8 +263,7 @@ export async function runRetentionCleanupWorker(input: {
       continue;
     }
     if (!claimed.lease || claimed.lease.attempts > RETENTION_WORKER_MAX_ATTEMPTS) {
-      await input.store.release(observed.record_id, "RETENTION_RETRY_BUDGET_EXHAUSTED");
-      result.blocked += 1;
+      await releaseFailure(observed.record_id, "RETENTION_RETRY_BUDGET_EXHAUSTED");
       continue;
     }
     try {
@@ -273,9 +286,12 @@ export async function runRetentionCleanupWorker(input: {
       }
       await input.store.complete(claimed.record_id, receipt);
       result.applied += 1;
-    } catch {
-      await input.store.release(observed.record_id, "RETENTION_ADAPTER_FAILED");
-      result.blocked += 1;
+    } catch (error) {
+      if (error instanceof RetentionOwnershipLostError) {
+        result.skipped += 1;
+        continue;
+      }
+      await releaseFailure(observed.record_id, "RETENTION_ADAPTER_FAILED");
     }
   }
   return result;

@@ -2,7 +2,7 @@
 create table if not exists public.ops_drag_retention_cursor (
   worker_name text primary key,
   after_id uuid,
-  updated_at timestamptz not null default now()
+  updated_at timestamptz not null default now() check (isfinite(updated_at))
 );
 
 create table if not exists public.ops_drag_retention_receipts (
@@ -11,15 +11,15 @@ create table if not exists public.ops_drag_retention_receipts (
   record_id_hash text not null check (record_id_hash ~ '^[0-9a-f]{64}$'),
   data_class text not null,
   action text not null check (action in ('DELETE', 'REDUCE', 'BLOCKED')),
-  due_at timestamptz,
-  applied_at timestamptz not null,
+  due_at timestamptz check (due_at is null or isfinite(due_at)),
+  applied_at timestamptz not null check (isfinite(applied_at)),
   lease_owner_hash text not null check (lease_owner_hash ~ '^[0-9a-f]{64}$'),
   attempt integer not null check (attempt between 1 and 3),
   evidence_hash text not null check (evidence_hash ~ '^[0-9a-f]{64}$'),
   previous_receipt_hash text check (previous_receipt_hash is null or previous_receipt_hash ~ '^[0-9a-f]{64}$'),
   receipt_hash text not null unique check (receipt_hash ~ '^[0-9a-f]{64}$'),
   blocker_code text,
-  created_at timestamptz not null default now()
+  created_at timestamptz not null default now() check (isfinite(created_at))
 );
 
 alter table public.ops_drag_retention_cursor enable row level security;
@@ -44,6 +44,28 @@ update public.custom_ops_hub_leads
 alter table public.custom_ops_hub_leads
   alter column ops_drag_last_legitimate_activity_at set default now(),
   alter column ops_drag_last_legitimate_activity_at set not null;
+
+create table if not exists public.ops_drag_retention_holds (
+  record_id uuid primary key references public.custom_ops_hub_leads(id) on delete cascade,
+  hold jsonb not null,
+  original_due_at timestamptz check (original_due_at is null or isfinite(original_due_at)),
+  created_at timestamptz not null default now() check (isfinite(created_at)),
+  updated_at timestamptz not null default now() check (isfinite(updated_at))
+);
+
+alter table public.ops_drag_retention_holds enable row level security;
+revoke all on table public.ops_drag_retention_holds from public, anon, authenticated;
+grant select, insert, update on table public.ops_drag_retention_holds to service_role;
+
+insert into public.ops_drag_retention_holds (record_id, hold, original_due_at)
+select lead.id, lead.metadata -> 'ops_drag_retention_legal_hold', lead.ops_drag_retention_due_at
+  from public.custom_ops_hub_leads as lead
+ where lead.metadata ? 'ops_drag_retention_legal_hold'
+on conflict (record_id) do nothing;
+
+update public.custom_ops_hub_leads
+   set metadata = metadata - 'ops_drag_retention_legal_hold'
+ where metadata ? 'ops_drag_retention_legal_hold';
 
 do $$
 begin
@@ -79,6 +101,19 @@ begin
       add constraint custom_ops_hub_leads_retention_attempts_check
       check (ops_drag_retention_attempts between 0 and 3);
   end if;
+  if not exists (
+    select 1
+      from pg_constraint
+     where conname = 'custom_ops_hub_leads_retention_timestamps_finite_check'
+       and conrelid = 'public.custom_ops_hub_leads'::regclass
+  ) then
+    alter table public.custom_ops_hub_leads
+      add constraint custom_ops_hub_leads_retention_timestamps_finite_check check (
+        isfinite(ops_drag_last_legitimate_activity_at)
+        and (ops_drag_retention_due_at is null or isfinite(ops_drag_retention_due_at))
+        and (ops_drag_retention_lease_acquired_at is null or isfinite(ops_drag_retention_lease_acquired_at))
+      );
+  end if;
 end $$;
 
 create index if not exists custom_ops_hub_leads_retention_due_idx
@@ -95,11 +130,19 @@ language plpgsql
 immutable
 set search_path = ''
 as $$
+declare
+  v_parsed timestamptz;
 begin
-  if p_value is null or btrim(p_value) = '' then
+  if p_value is null
+     or p_value !~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z$' then
     return null;
   end if;
-  return p_value::timestamptz;
+  v_parsed := p_value::timestamptz;
+  if not isfinite(v_parsed)
+     or to_char(v_parsed at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') <> p_value then
+    return null;
+  end if;
+  return v_parsed;
 exception when others then
   return null;
 end;
@@ -172,21 +215,35 @@ $$;
 
 create or replace function public.ops_drag_retention_hold_covers(p_hold jsonb, p_stage text)
 returns boolean
-language sql
+language plpgsql
 immutable
 set search_path = ''
 as $$
-  select coalesce(
-    jsonb_typeof(p_hold) = 'object'
-    and coalesce(p_hold ->> 'released_at', '') = ''
-    and case
-      when jsonb_typeof(p_hold -> 'data_classes') is distinct from 'array' then true
-      when jsonb_array_length(p_hold -> 'data_classes') = 0 then true
-      else (p_hold -> 'data_classes') ? 'ALL'
-        or (p_hold -> 'data_classes') ? p_stage
-    end,
-    false
-  );
+declare
+  v_released_at text;
+begin
+  if p_hold is null then
+    return false;
+  end if;
+  if jsonb_typeof(p_hold) is distinct from 'object' then
+    return true;
+  end if;
+  v_released_at := p_hold ->> 'released_at';
+  if v_released_at is not null and btrim(v_released_at) <> '' then
+    if public.ops_drag_try_timestamptz(v_released_at) is null then
+      return true;
+    end if;
+    return false;
+  end if;
+  if jsonb_typeof(p_hold -> 'data_classes') is distinct from 'array'
+     or jsonb_array_length(p_hold -> 'data_classes') = 0 then
+    return true;
+  end if;
+  return (p_hold -> 'data_classes') ? 'ALL'
+    or (p_hold -> 'data_classes') ? p_stage;
+exception when others then
+  return true;
+end;
 $$;
 
 create or replace function public.ops_drag_retention_dispute_state(p_metadata jsonb)
@@ -380,6 +437,9 @@ declare
   v_current_lifecycle text;
   v_current_order_due_at timestamptz;
 begin
+  if not isfinite(p_recorded_at) or not isfinite(p_stale_before) then
+    raise exception 'retention scheduler timestamps must be finite';
+  end if;
   if p_limit < 1 or p_limit > 10 then
     raise exception 'retention batch limit must be between 1 and 10';
   end if;
@@ -443,6 +503,10 @@ begin
     v_transaction_at := public.ops_drag_try_timestamptz(
       v_lead.metadata #>> '{ops_drag_report_order,payment,paidAt}'
     );
+    select retention_hold.hold
+      into v_hold
+      from public.ops_drag_retention_holds as retention_hold
+     where retention_hold.record_id = v_lead.id;
 
     if v_stage in ('UNINITIALIZED', 'AWAITING_TERMINAL', 'UNPAID_SUBMISSION') then
       v_current_lifecycle := public.ops_drag_retention_order_lifecycle(v_lead.metadata);
@@ -504,7 +568,6 @@ begin
       continue;
     end if;
 
-    v_hold := v_lead.metadata -> 'ops_drag_retention_legal_hold';
     if public.ops_drag_retention_hold_covers(v_hold, v_stage) then
       continue;
     end if;
@@ -609,6 +672,7 @@ declare
   v_dispute_state text;
   v_delete boolean;
   v_current_lifecycle text;
+  v_hold jsonb;
 begin
   select * into v_lead
     from public.custom_ops_hub_leads
@@ -628,13 +692,17 @@ begin
   if v_expected_stage is distinct from v_lead.ops_drag_retention_stage then
     raise exception 'retention stage changed before action';
   end if;
+  v_applied_at := public.ops_drag_try_timestamptz(p_receipt ->> 'applied_at');
+  if v_applied_at is null
+     or public.ops_drag_try_timestamptz(p_receipt ->> 'due_at') is null then
+    raise exception 'retention receipt timestamps are invalid';
+  end if;
   if v_expected_stage = 'UNPAID_SUBMISSION' then
     v_current_lifecycle := public.ops_drag_retention_order_lifecycle(v_lead.metadata);
     v_current_due_at := public.ops_drag_retention_order_due_at(
       v_lead.metadata,
       v_lead.ops_drag_last_legitimate_activity_at
     );
-    v_applied_at := public.ops_drag_try_timestamptz(p_receipt ->> 'applied_at');
     if v_current_lifecycle is distinct from 'UNPAID_SUBMISSION' then
       update public.custom_ops_hub_leads
          set ops_drag_retention_stage = v_current_lifecycle,
@@ -664,10 +732,12 @@ begin
       return 'DEFERRED';
     end if;
   end if;
-  if public.ops_drag_retention_hold_covers(
-    v_lead.metadata -> 'ops_drag_retention_legal_hold',
-    v_expected_stage
-  ) then
+  select retention_hold.hold
+    into v_hold
+    from public.ops_drag_retention_holds as retention_hold
+   where retention_hold.record_id = p_record_id
+   for update;
+  if public.ops_drag_retention_hold_covers(v_hold, v_expected_stage) then
     update public.custom_ops_hub_leads
        set ops_drag_retention_lease_owner = null,
            ops_drag_retention_lease_acquired_at = null,
@@ -680,7 +750,6 @@ begin
   if v_expected_stage = 'DETAILED_RECEIPT_LEDGER' then
     v_dispute_state := public.ops_drag_retention_dispute_state(v_lead.metadata);
     v_current_due_at := public.ops_drag_retention_detailed_due_at(v_lead.metadata);
-    v_applied_at := public.ops_drag_try_timestamptz(p_receipt ->> 'applied_at');
     if v_current_due_at is null or v_applied_at is null or v_applied_at < v_current_due_at then
       update public.custom_ops_hub_leads
          set ops_drag_retention_due_at = v_current_due_at,
@@ -770,7 +839,7 @@ begin
     p_receipt ->> 'data_class',
     p_receipt ->> 'action',
     public.ops_drag_try_timestamptz(p_receipt ->> 'due_at'),
-    (p_receipt ->> 'applied_at')::timestamptz,
+    v_applied_at,
     p_receipt ->> 'lease_owner_hash',
     (p_receipt ->> 'attempt')::integer,
     p_receipt ->> 'evidence_hash',
@@ -788,6 +857,10 @@ begin
   end if;
 
   v_next_due_at := public.ops_drag_try_timestamptz(p_patch ->> 'next_due_at');
+  if jsonb_typeof(p_patch -> 'next_due_at') is distinct from 'null'
+     and v_next_due_at is null then
+    raise exception 'retention next due timestamp is invalid';
+  end if;
   update public.custom_ops_hub_leads
      set full_name = case when v_columns ? 'full_name' then v_columns ->> 'full_name' else full_name end,
          work_email = case when v_columns ? 'work_email' then v_columns ->> 'work_email' else work_email end,
@@ -836,6 +909,9 @@ begin
   if p_reason not in ('RETENTION_WINDOW_ACTIVE', 'SCOPED_LEGAL_HOLD') then
     raise exception 'retention defer reason is invalid';
   end if;
+  if not isfinite(p_due_at) then
+    raise exception 'retention defer timestamp is invalid';
+  end if;
   select * into v_lead
     from public.custom_ops_hub_leads
    where id = p_record_id
@@ -876,6 +952,9 @@ declare
 begin
   if p_blocker_code !~ '^[A-Z0-9_: -]{1,128}$' then
     raise exception 'retention blocker code is invalid';
+  end if;
+  if not isfinite(p_recorded_at) then
+    raise exception 'retention release timestamp is invalid';
   end if;
   select * into v_lead
     from public.custom_ops_hub_leads

@@ -6,7 +6,10 @@ import {
   type JsonValue,
   type OpsDragAdmittedSnapshot,
 } from "../lib/ops-drag-report/order-foundation.ts";
-import { createOpsDragRetentionLifecycleUpdate } from "../lib/ops-drag-report/retention-order-lifecycle.ts";
+import {
+  createOpsDragOrderStoreUpdate,
+  createOpsDragRetentionLifecycleUpdate,
+} from "../lib/ops-drag-report/retention-order-lifecycle.ts";
 import {
   calculateRetentionDueAt,
   createRetentionMutationAdapter,
@@ -466,6 +469,18 @@ class SingleRecordStore implements RetentionWorkerStore {
   async release(_recordId: string, blocker: string) { this.releases.push(blocker); }
 }
 
+class MultiRecordStore implements RetentionWorkerStore {
+  records: RetentionRecord[];
+  receipts: RetentionReceipt[] = [];
+  releases: string[] = [];
+  constructor(records: RetentionRecord[]) { this.records = structuredClone(records); }
+  async loadBatch(limit: number) { return structuredClone(this.records.slice(0, limit)); }
+  async claim() { return null; }
+  async complete(_recordId: string, receipt: RetentionReceipt) { this.receipts.push(receipt); }
+  async defer() {}
+  async release(recordId: string, blocker: string) { this.releases.push(`${recordId}:${blocker}`); }
+}
+
 const firstStore = new SingleRecordStore(record("RAW_PAID_SUBMISSION"));
 const captureAdapter = createRetentionMutationAdapter({
   enabled: true,
@@ -548,6 +563,38 @@ const atomicDeferredResult = await runRetentionCleanupWorker({
 assert.deepEqual(atomicDeferredResult, { scanned: 1, applied: 0, held: 0, skipped: 1, blocked: 0 });
 assert.deepEqual(atomicDeferredStore.receipts, [], "DEFERRED must never complete a destructive receipt");
 assert.deepEqual(atomicDeferredStore.releases, [], "DEFERRED must never enter the blocker retry path");
+
+const invalidatedThenAppliedStore = new MultiRecordStore([
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000001",
+    last_activity_at: "2031-12-25T00:00:00.000Z",
+    lease: { owner: OWNER, acquired_at: "2032-01-01T00:00:00.000Z", attempts: 1 },
+  }),
+  record("UNPAID_SUBMISSION", runtimeRow(), {
+    record_id: "00000000-0000-0000-0000-000000000002",
+    last_activity_at: "2031-12-25T00:00:00.000Z",
+    lease: { owner: OWNER, acquired_at: "2032-01-01T00:00:00.000Z", attempts: 1 },
+  }),
+]);
+let invalidationApplyCalls = 0;
+const invalidatedThenAppliedAdapter = createRetentionMutationAdapter({
+  enabled: true,
+  async deleteRecord() {
+    invalidationApplyCalls += 1;
+    return invalidationApplyCalls === 1 ? "DEFERRED" : "APPLIED";
+  },
+  async reduceRecord() { throw new Error("invalidation fixture must not reduce"); },
+});
+const invalidatedThenAppliedResult = await runRetentionCleanupWorker({
+  store: invalidatedThenAppliedStore,
+  adapter: invalidatedThenAppliedAdapter,
+  owner: OWNER,
+  now: "2032-01-01T00:00:00.000Z",
+  staleBefore: "2031-12-31T23:45:00.000Z",
+});
+assert.deepEqual(invalidatedThenAppliedResult, { scanned: 2, applied: 1, held: 0, skipped: 1, blocked: 0 });
+assert.equal(invalidatedThenAppliedStore.receipts.length, 1, "the unrelated second row must still complete");
+assert.deepEqual(invalidatedThenAppliedStore.releases, [], "lifecycle invalidation must not enter release failure handling");
 await runRetentionCleanupWorker({
   store: firstStore,
   adapter: captureAdapter,
@@ -669,8 +716,19 @@ assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_SECRET/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_ENABLED/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_MUTATION_ENABLED/);
 assert.doesNotMatch(route, /RESEND|STRIPE|PROVIDER_WORKER/);
-assert.match(orderStore, /createOpsDragRetentionLifecycleUpdate\(order, legitimateActivityAt\)/);
+assert.match(orderStore, /createOpsDragOrderStoreUpdate\(row\.metadata, order, legitimateActivityAt\)/);
 assert.match(orderLifecycle, /ops_drag_retention_stage:\s*"AWAITING_TERMINAL"/);
+const lifecycleStoreUpdate = createOpsDragOrderStoreUpdate(
+  { preserved: "yes", ops_drag_retention_lease_owner: "not-metadata-authority" },
+  paidAwaitingOrder
+);
+assert.equal(lifecycleStoreUpdate.metadata.preserved, "yes");
+assert.equal(lifecycleStoreUpdate.metadata.ops_drag_report_order, paidAwaitingOrder);
+assert.equal(lifecycleStoreUpdate.ops_drag_retention_stage, "AWAITING_TERMINAL");
+assert.equal(lifecycleStoreUpdate.ops_drag_retention_lease_owner, null);
+assert.equal(lifecycleStoreUpdate.ops_drag_retention_attempts, 0);
+assert.match(applyFunction, /v_expected_stage := p_patch ->> 'expected_stage';[\s\S]+ops_drag_retention_lease_owner is distinct from p_owner/);
+assert.match(applyFunction, /ops_drag_retention_lease_owner is null[\s\S]+v_expected_stage = 'UNPAID_SUBMISSION'[\s\S]+return 'DEFERRED'/);
 assert.match(orderStore, /retention_redacted === true/);
 for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION).filter((key) => key !== "pre_qual")) {
   assert.match(ingestLeadRoute, new RegExp(`${key}:`), `${key} fixture must remain bound to the actual intake shape`);

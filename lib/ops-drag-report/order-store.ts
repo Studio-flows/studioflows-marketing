@@ -13,9 +13,11 @@ import {
   type RefundOwnershipResult,
 } from "@/lib/ops-drag-report/delivery-refund-state-machine";
 import { isOpsDragOrderWorkerEligibleDue } from "@/lib/ops-drag-report/worker-selection";
-import { createOpsDragRetentionLifecycleUpdate } from "@/lib/ops-drag-report/retention-order-lifecycle";
+import {
+  createOpsDragOrderStoreUpdate,
+  OPS_DRAG_ORDER_METADATA_KEY,
+} from "@/lib/ops-drag-report/retention-order-lifecycle";
 
-const ORDER_METADATA_KEY = "ops_drag_report_order";
 const MAX_CAS_ATTEMPTS = 5;
 
 type LeadMetadataRow = {
@@ -30,7 +32,7 @@ function readMetadata(value: unknown): Record<string, unknown> {
 }
 
 function readOrder(metadata: Record<string, unknown>): OpsDragOrder | null {
-  const value = metadata[ORDER_METADATA_KEY];
+  const value = metadata[OPS_DRAG_ORDER_METADATA_KEY];
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const order = value as Partial<OpsDragOrder>;
   if ((value as Record<string, unknown>).retention_redacted === true) {
@@ -59,11 +61,7 @@ async function compareAndSwapOrder(
   order: OpsDragOrder,
   legitimateActivityAt?: string
 ): Promise<boolean> {
-  const nextMetadata = { ...row.metadata, [ORDER_METADATA_KEY]: order };
-  const update = {
-    metadata: nextMetadata,
-    ...createOpsDragRetentionLifecycleUpdate(order, legitimateActivityAt),
-  };
+  const update = createOpsDragOrderStoreUpdate(row.metadata, order, legitimateActivityAt);
   const { data, error } = await supabase
     .from("custom_ops_hub_leads")
     .update(update)

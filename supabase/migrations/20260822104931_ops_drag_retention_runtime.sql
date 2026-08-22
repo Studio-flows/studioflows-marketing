@@ -617,11 +617,24 @@ begin
   if v_lead.id is null then
     raise exception 'retention record does not exist';
   end if;
+  v_expected_stage := p_patch ->> 'expected_stage';
   if v_lead.ops_drag_retention_lease_owner is distinct from p_owner then
+    if v_lead.ops_drag_retention_lease_owner is null
+       and v_expected_stage = 'UNPAID_SUBMISSION' then
+      v_current_lifecycle := public.ops_drag_retention_order_lifecycle(v_lead.metadata);
+      v_current_due_at := public.ops_drag_retention_order_due_at(
+        v_lead.metadata,
+        v_lead.ops_drag_last_legitimate_activity_at
+      );
+      if v_lead.ops_drag_retention_stage is distinct from v_expected_stage
+         or v_current_lifecycle is distinct from 'UNPAID_SUBMISSION'
+         or v_current_due_at is distinct from public.ops_drag_try_timestamptz(p_receipt ->> 'due_at') then
+        return 'DEFERRED';
+      end if;
+    end if;
     raise exception 'retention lease owner mismatch';
   end if;
 
-  v_expected_stage := p_patch ->> 'expected_stage';
   if v_expected_stage is distinct from v_lead.ops_drag_retention_stage then
     raise exception 'retention stage changed before action';
   end if;

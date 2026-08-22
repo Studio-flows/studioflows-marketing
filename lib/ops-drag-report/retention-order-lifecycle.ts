@@ -10,6 +10,12 @@ export type OpsDragRetentionLifecycleUpdate = {
   ops_drag_retention_last_blocker_code: null;
 };
 
+export const OPS_DRAG_ORDER_METADATA_KEY = "ops_drag_report_order";
+
+export type OpsDragOrderStoreUpdate = OpsDragRetentionLifecycleUpdate & {
+  metadata: Record<string, unknown>;
+};
+
 function plusDays(value: string, days: number): string {
   const parsed = Date.parse(value);
   if (!Number.isFinite(parsed)) throw new Error("Ops Drag Report retention lifecycle timestamp is invalid");
@@ -50,5 +56,16 @@ export function createOpsDragRetentionLifecycleUpdate(
     ops_drag_last_legitimate_activity_at: activityAt,
     ops_drag_retention_stage: "UNPAID_SUBMISSION",
     ops_drag_retention_due_at: plusDays(activityAt, 7),
+  };
+}
+
+export function createOpsDragOrderStoreUpdate(
+  currentMetadata: Record<string, unknown>,
+  order: OpsDragOrder,
+  legitimateActivityAt?: string
+): OpsDragOrderStoreUpdate {
+  return {
+    metadata: { ...currentMetadata, [OPS_DRAG_ORDER_METADATA_KEY]: order },
+    ...createOpsDragRetentionLifecycleUpdate(order, legitimateActivityAt),
   };
 }

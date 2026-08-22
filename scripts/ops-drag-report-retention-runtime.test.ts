@@ -269,6 +269,86 @@ assert.equal(planRetentionAction({
   },
 }, "2032-01-01T00:00:00.000Z").kind, "DELETE");
 
+type AtomicHoldFixture = {
+  released_at?: unknown;
+  data_classes?: unknown;
+} | null;
+
+function migrationHoldCovers(hold: AtomicHoldFixture, stage: RetentionDataClass): boolean {
+  if (!hold || typeof hold !== "object" || Array.isArray(hold)) return false;
+  const releasedAt = hold.released_at === null || hold.released_at === undefined
+    ? ""
+    : String(hold.released_at);
+  if (releasedAt !== "") return false;
+  if (!Array.isArray(hold.data_classes) || hold.data_classes.length === 0) return true;
+  return hold.data_classes.includes("ALL") || hold.data_classes.includes(stage);
+}
+
+for (const coveredHold of [
+  { released_at: null },
+  { released_at: null, data_classes: [] },
+  { released_at: null, data_classes: ["ALL"] },
+  { released_at: null, data_classes: ["RAW_PAID_SUBMISSION"] },
+] satisfies AtomicHoldFixture[]) {
+  assert.equal(migrationHoldCovers(coveredHold, "RAW_PAID_SUBMISSION"), true);
+}
+assert.equal(
+  migrationHoldCovers({ released_at: null, data_classes: ["EMAIL_ORDER_MAPPING"] }, "RAW_PAID_SUBMISSION"),
+  false,
+);
+assert.equal(
+  migrationHoldCovers({ released_at: "2031-12-31T00:00:00.000Z", data_classes: ["ALL"] }, "RAW_PAID_SUBMISSION"),
+  false,
+);
+
+type AtomicRetentionFixture = {
+  stage: RetentionDataClass | "BLOCKED";
+  due_at: string;
+  origin_at: string;
+  lease_owner: string | null;
+  lease_attempts: number;
+  blocker_code: string | null;
+  legal_hold: AtomicHoldFixture;
+  private_content: string;
+  destructive_receipts: string[];
+};
+
+function applyAtomicRetentionFixture(row: AtomicRetentionFixture): "HELD" | "APPLIED" {
+  if (migrationHoldCovers(row.legal_hold, row.stage as RetentionDataClass)) {
+    row.lease_owner = null;
+    row.lease_attempts = Math.max(row.lease_attempts - 1, 0);
+    row.blocker_code = "RETENTION_LEGAL_HOLD";
+    return "HELD";
+  }
+  row.private_content = "[REDACTED]";
+  row.destructive_receipts.push("DELETE");
+  return "APPLIED";
+}
+
+const claimHoldApplyRace: AtomicRetentionFixture = {
+  stage: "RAW_PAID_SUBMISSION",
+  due_at: "2031-12-01T00:00:00.000Z",
+  origin_at: TERMINAL_AT,
+  lease_owner: OWNER,
+  lease_attempts: 1,
+  blocker_code: null,
+  legal_hold: null,
+  private_content: "must-survive-claim-hold-apply-race",
+  destructive_receipts: [],
+};
+const dueBeforeRace = claimHoldApplyRace.due_at;
+const originBeforeRace = claimHoldApplyRace.origin_at;
+claimHoldApplyRace.legal_hold = { released_at: null, data_classes: ["RAW_PAID_SUBMISSION"] };
+assert.equal(applyAtomicRetentionFixture(claimHoldApplyRace), "HELD");
+assert.equal(claimHoldApplyRace.private_content, "must-survive-claim-hold-apply-race");
+assert.deepEqual(claimHoldApplyRace.destructive_receipts, []);
+assert.equal(claimHoldApplyRace.due_at, dueBeforeRace);
+assert.equal(claimHoldApplyRace.origin_at, originBeforeRace);
+assert.equal(claimHoldApplyRace.lease_owner, null);
+assert.equal(claimHoldApplyRace.lease_attempts, 0);
+assert.equal(claimHoldApplyRace.blocker_code, "RETENTION_LEGAL_HOLD");
+assert.notEqual(claimHoldApplyRace.stage, "BLOCKED");
+
 class SingleRecordStore implements RetentionWorkerStore {
   current: RetentionRecord;
   receipts: RetentionReceipt[] = [];
@@ -286,6 +366,41 @@ const captureAdapter = createRetentionMutationAdapter({
   async deleteRecord() {},
   async reduceRecord() {},
 });
+const heldStatusStore = new SingleRecordStore(record("RAW_PAID_SUBMISSION"));
+const heldStatusRow: AtomicRetentionFixture = {
+  stage: "RAW_PAID_SUBMISSION",
+  due_at: "2031-12-01T00:00:00.000Z",
+  origin_at: TERMINAL_AT,
+  lease_owner: OWNER,
+  lease_attempts: 1,
+  blocker_code: null,
+  legal_hold: { released_at: null, data_classes: [] },
+  private_content: "must-remain-private-after-held-disposition",
+  destructive_receipts: [],
+};
+const heldStatusAdapter = createRetentionMutationAdapter({
+  enabled: true,
+  async deleteRecord() {
+    return applyAtomicRetentionFixture(heldStatusRow) === "HELD" ? "HELD" : "APPLIED";
+  },
+  async reduceRecord() {
+    throw new Error("held race fixture must not reduce");
+  },
+});
+const heldStatusResult = await runRetentionCleanupWorker({
+  store: heldStatusStore,
+  adapter: heldStatusAdapter,
+  owner: OWNER,
+  now: "2032-01-01T00:00:00.000Z",
+  staleBefore: "2031-12-31T23:45:00.000Z",
+});
+assert.deepEqual(heldStatusResult, { scanned: 1, applied: 0, held: 1, skipped: 0, blocked: 0 });
+assert.equal(heldStatusRow.private_content, "must-remain-private-after-held-disposition");
+assert.equal(heldStatusRow.lease_owner, null);
+assert.equal(heldStatusRow.lease_attempts, 0);
+assert.deepEqual(heldStatusRow.destructive_receipts, []);
+assert.deepEqual(heldStatusStore.receipts, [], "HELD must not complete the destructive receipt");
+assert.deepEqual(heldStatusStore.releases, [], "atomic HELD disposition must not enter failure release");
 await runRetentionCleanupWorker({
   store: firstStore,
   adapter: captureAdapter,
@@ -357,10 +472,31 @@ for (const contract of [
   /ops_drag_retention_attempts between 0 and 3/,
   /RETENTION_TERMINAL_TIMESTAMP_INVALID/,
   /ops_drag_retention_legal_hold/,
+  /ops_drag_retention_hold_covers\(v_hold, v_stage\)/,
+  /when jsonb_typeof\(p_hold -> 'data_classes'\) is distinct from 'array' then true/,
+  /when jsonb_array_length\(p_hold -> 'data_classes'\) = 0 then true/,
   /revoke all on function public\.claim_ops_drag_retention_batch[\s\S]+from public, anon, authenticated/i,
   /grant execute on function public\.claim_ops_drag_retention_batch[\s\S]+to service_role/i,
 ]) assert.match(migration, contract);
+const applyFunction = migration.slice(
+  migration.indexOf("create or replace function public.apply_ops_drag_retention_action"),
+  migration.indexOf("create or replace function public.release_ops_drag_retention_claim"),
+);
+const applyLockIndex = applyFunction.indexOf("for update;");
+const applyHoldIndex = applyFunction.indexOf("public.ops_drag_retention_hold_covers(");
+const applyReceiptIndex = applyFunction.indexOf("insert into public.ops_drag_retention_receipts");
+const applyDeleteIndex = applyFunction.indexOf("delete from public.custom_ops_hub_leads");
+assert.ok(applyLockIndex >= 0 && applyLockIndex < applyHoldIndex, "hold must be revalidated after the row lock");
+assert.ok(applyHoldIndex < applyReceiptIndex, "hold must be revalidated before the destructive receipt");
+assert.ok(applyHoldIndex < applyDeleteIndex, "hold must be revalidated before deletion");
+assert.match(applyFunction, /returns text/);
+assert.match(applyFunction, /return 'HELD'/);
+assert.equal((applyFunction.match(/return 'APPLIED'/g) ?? []).length, 2);
+assert.match(applyFunction, /ops_drag_retention_attempts = greatest\(ops_drag_retention_attempts - 1, 0\)/);
+assert.match(applyFunction, /ops_drag_retention_last_blocker_code = 'RETENTION_LEGAL_HOLD'/);
+assert.match(applyFunction, /ops_drag_retention_lease_owner = null[\s\S]+ops_drag_retention_lease_acquired_at = null/);
 assert.match(rollback, /drop function if exists public\.claim_ops_drag_retention_batch/);
+assert.match(rollback, /drop function if exists public\.ops_drag_retention_hold_covers\(jsonb, text\)/);
 assert.match(rollback, /drop table if exists public\.ops_drag_retention_receipts/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_SECRET/);
 assert.match(route, /OPS_DRAG_REPORT_RETENTION_WORKER_ENABLED/);
@@ -374,5 +510,5 @@ for (const key of Object.keys(PRODUCTION_RAW_ATTRIBUTION).filter((key) => key !=
 assert.match(ingestLeadRoute, /preQual \? \{ pre_qual: preQual \}/);
 
 console.log(
-  "OPS_DRAG_REPORT_RETENTION_RUNTIME_PASS boundaries=PASS redaction=PASS production_attribution=PASS legal_hold=PASS receipt_chain=PASS malformed=PASS scheduler_isolation=PASS row11=PASS migration_contract=PASS"
+  "OPS_DRAG_REPORT_RETENTION_RUNTIME_PASS boundaries=PASS redaction=PASS production_attribution=PASS legal_hold=PASS atomic_hold_race=PASS receipt_chain=PASS malformed=PASS scheduler_isolation=PASS row11=PASS migration_contract=PASS"
 );

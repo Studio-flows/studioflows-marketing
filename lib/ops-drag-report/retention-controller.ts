@@ -155,19 +155,25 @@ export type RetentionMutationAdapter = {
     record: RetentionRecord,
     action: Extract<RetentionAction, { kind: "DELETE" | "REDUCE" }>,
     receipt: RetentionReceipt
-  ): Promise<void>;
+  ): Promise<"APPLIED" | "HELD">;
 };
 
 export function createRetentionMutationAdapter(input: {
   enabled: boolean;
-  deleteRecord(record: RetentionRecord, receipt: RetentionReceipt): Promise<void>;
-  reduceRecord(record: RetentionRecord, reduced: Record<string, JsonValue>, receipt: RetentionReceipt): Promise<void>;
+  deleteRecord(record: RetentionRecord, receipt: RetentionReceipt): Promise<"APPLIED" | "HELD" | void>;
+  reduceRecord(
+    record: RetentionRecord,
+    reduced: Record<string, JsonValue>,
+    receipt: RetentionReceipt
+  ): Promise<"APPLIED" | "HELD" | void>;
 }): RetentionMutationAdapter {
   if (!input.enabled) throw new Error("Retention mutation adapter is disabled");
   return {
     async apply(record, action, receipt) {
-      if (action.kind === "DELETE") await input.deleteRecord(record, receipt);
-      else await input.reduceRecord(record, action.reduced, receipt);
+      const disposition = action.kind === "DELETE"
+        ? await input.deleteRecord(record, receipt)
+        : await input.reduceRecord(record, action.reduced, receipt);
+      return disposition === "HELD" ? "HELD" : "APPLIED";
     },
   };
 }
@@ -252,7 +258,11 @@ export async function runRetentionCleanupWorker(input: {
         continue;
       }
       const receipt = retentionReceipt(claimed, claimedAction, input.now);
-      await input.adapter.apply(claimed, claimedAction, receipt);
+      const disposition = await input.adapter.apply(claimed, claimedAction, receipt);
+      if (disposition === "HELD") {
+        result.held += 1;
+        continue;
+      }
       await input.store.complete(claimed.record_id, receipt);
       result.applied += 1;
     } catch {

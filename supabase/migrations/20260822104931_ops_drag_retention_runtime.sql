@@ -138,12 +138,33 @@ exception when others then
 end;
 $$;
 
+create or replace function public.ops_drag_retention_hold_covers(p_hold jsonb, p_stage text)
+returns boolean
+language sql
+immutable
+set search_path = ''
+as $$
+  select coalesce(
+    jsonb_typeof(p_hold) = 'object'
+    and coalesce(p_hold ->> 'released_at', '') = ''
+    and case
+      when jsonb_typeof(p_hold -> 'data_classes') is distinct from 'array' then true
+      when jsonb_array_length(p_hold -> 'data_classes') = 0 then true
+      else (p_hold -> 'data_classes') ? 'ALL'
+        or (p_hold -> 'data_classes') ? p_stage
+    end,
+    false
+  );
+$$;
+
 revoke all on function public.ops_drag_try_timestamptz(text) from public, anon, authenticated;
 revoke all on function public.ops_drag_retention_terminal_at(jsonb) from public, anon, authenticated;
 revoke all on function public.ops_drag_try_integer(text) from public, anon, authenticated;
+revoke all on function public.ops_drag_retention_hold_covers(jsonb, text) from public, anon, authenticated;
 grant execute on function public.ops_drag_try_timestamptz(text) to service_role;
 grant execute on function public.ops_drag_retention_terminal_at(jsonb) to service_role;
 grant execute on function public.ops_drag_try_integer(text) to service_role;
+grant execute on function public.ops_drag_retention_hold_covers(jsonb, text) to service_role;
 
 create or replace function public.claim_ops_drag_retention_batch(
   p_recorded_at timestamptz,
@@ -297,13 +318,7 @@ begin
     end if;
 
     v_hold := v_lead.metadata -> 'ops_drag_retention_legal_hold';
-    if jsonb_typeof(v_hold) = 'object'
-       and coalesce(v_hold ->> 'released_at', '') = ''
-       and (
-         jsonb_typeof(v_hold -> 'data_classes') <> 'array'
-         or (v_hold -> 'data_classes') ? 'ALL'
-         or (v_hold -> 'data_classes') ? v_stage
-       ) then
+    if public.ops_drag_retention_hold_covers(v_hold, v_stage) then
       continue;
     end if;
 
@@ -389,7 +404,7 @@ create or replace function public.apply_ops_drag_retention_action(
   p_patch jsonb,
   p_receipt jsonb
 )
-returns void
+returns text
 language plpgsql
 security definer
 set search_path = ''
@@ -416,12 +431,25 @@ begin
   end if;
 
   v_expected_stage := p_patch ->> 'expected_stage';
-  v_next_stage := p_patch ->> 'next_stage';
-  v_delete := coalesce((p_patch ->> 'delete_row')::boolean, false);
-  v_columns := coalesce(p_patch -> 'columns', '{}'::jsonb);
   if v_expected_stage is distinct from v_lead.ops_drag_retention_stage then
     raise exception 'retention stage changed before action';
   end if;
+  if public.ops_drag_retention_hold_covers(
+    v_lead.metadata -> 'ops_drag_retention_legal_hold',
+    v_expected_stage
+  ) then
+    update public.custom_ops_hub_leads
+       set ops_drag_retention_lease_owner = null,
+           ops_drag_retention_lease_acquired_at = null,
+           ops_drag_retention_attempts = greatest(ops_drag_retention_attempts - 1, 0),
+           ops_drag_retention_last_blocker_code = 'RETENTION_LEGAL_HOLD'
+     where id = p_record_id;
+    return 'HELD';
+  end if;
+
+  v_next_stage := p_patch ->> 'next_stage';
+  v_delete := coalesce((p_patch ->> 'delete_row')::boolean, false);
+  v_columns := coalesce(p_patch -> 'columns', '{}'::jsonb);
   if jsonb_typeof(v_columns) <> 'object' then
     raise exception 'retention patch columns are invalid';
   end if;
@@ -459,10 +487,10 @@ begin
      or p_receipt ->> 'lease_owner_hash' is distinct from encode(extensions.digest(p_owner, 'sha256'), 'hex')
      or coalesce(p_receipt ->> 'previous_receipt_hash', '') is distinct from coalesce(v_previous, '')
      or p_receipt ->> 'data_class' is distinct from v_expected_stage
-     or p_receipt ->> 'action' is distinct from case
+     or p_receipt ->> 'action' is distinct from (case
        when v_expected_stage = 'DETAILED_RECEIPT_LEDGER' then 'REDUCE'
        else 'DELETE'
-     end
+     end)
      or (p_receipt ->> 'attempt')::integer is distinct from v_lead.ops_drag_retention_attempts
      or p_receipt ->> 'policy_version' is distinct from 'ops_drag_retention_v1'
      or p_receipt ->> 'receipt_hash' !~ '^[0-9a-f]{64}$'
@@ -493,7 +521,7 @@ begin
       raise exception 'retention deletion transition is invalid';
     end if;
     delete from public.custom_ops_hub_leads where id = p_record_id;
-    return;
+    return 'APPLIED';
   end if;
 
   v_next_due_at := public.ops_drag_try_timestamptz(p_patch ->> 'next_due_at');
@@ -524,6 +552,7 @@ begin
          ops_drag_retention_attempts = 0,
          ops_drag_retention_last_blocker_code = null
    where id = p_record_id;
+  return 'APPLIED';
 end;
 $$;
 

@@ -389,15 +389,19 @@ export function createSupabaseRetentionRuntime(input: {
     receipt: RetentionReceipt,
     action: "DELETE" | "REDUCE",
     reduced: Record<string, JsonValue> = {}
-  ): Promise<void> => {
+  ): Promise<"APPLIED" | "HELD"> => {
     const patch = createRetentionRuntimePatch(record, action, reduced);
-    const { error } = await input.supabase.rpc("apply_ops_drag_retention_action", {
+    const { data, error } = await input.supabase.rpc("apply_ops_drag_retention_action", {
       p_record_id: record.record_id,
       p_owner: input.owner,
       p_patch: patch,
       p_receipt: receipt,
     });
     if (error) throw new Error(error.message || "Unable to apply Ops Drag Report retention action");
+    if (data !== "APPLIED" && data !== "HELD") {
+      throw new Error("Ops Drag Report retention action returned an invalid disposition");
+    }
+    return data;
   };
 
   const store: RetentionWorkerStore = {

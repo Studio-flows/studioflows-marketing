@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import type Stripe from "stripe";
 
+import { OPS_DRAG_SNAPSHOT_DIGEST_VERSION } from "./order-foundation.ts";
+
 export const OPS_DRAG_REPORT_OFFER_ID = "studioflows_ops_drag_report";
 export const OPS_DRAG_REPORT_OFFER_VERSION = "v1";
 export const OPS_DRAG_REPORT_AMOUNT_CENTS = 2_900;
@@ -21,6 +23,7 @@ export type CheckoutOrderBinding = {
   orderId: string;
   submissionId: string;
   snapshotDigest: string;
+  snapshotDigestVersion: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
 };
 
 export type ExpectedFulfillmentBinding = CheckoutOrderBinding & {
@@ -35,6 +38,7 @@ export type FulfillmentDecision =
       paymentReferenceId: string;
       paidAt: string;
       snapshotDigest: string;
+      snapshotDigestVersion: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
     }
   | {
       state: "refund_required";
@@ -44,6 +48,7 @@ export type FulfillmentDecision =
       paymentReferenceId: string;
       paidAt: string;
       snapshotDigest: string;
+      snapshotDigestVersion: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
     }
   | { state: "pending"; reason: "payment_not_paid" }
   | { state: "reject"; reason: string };
@@ -86,6 +91,9 @@ export function buildCheckoutSessionParams(
   const origin = normalizeOrigin(returnOrigin);
   if (binding.submissionId !== normalized.id) throw new Error("Checkout submission binding mismatch");
   if (!/^[a-f0-9]{64}$/.test(binding.snapshotDigest)) throw new Error("Checkout snapshot digest is invalid");
+  if (binding.snapshotDigestVersion !== OPS_DRAG_SNAPSHOT_DIGEST_VERSION) {
+    throw new Error("Checkout snapshot digest version is invalid");
+  }
   if (!/^odr_[a-f0-9]{32}$/.test(binding.orderId)) throw new Error("Checkout order binding is invalid");
 
   return {
@@ -116,6 +124,7 @@ export function buildCheckoutSessionParams(
       submission_id: binding.submissionId,
       order_id: binding.orderId,
       intake_digest: binding.snapshotDigest,
+      intake_digest_version: binding.snapshotDigestVersion,
       cadence: "ONE_TIME",
       quantity: "1",
       fulfillment_contract: "ops_drag_report_email_v1",
@@ -169,6 +178,9 @@ export function evaluateFulfillmentSession(
   if (session.metadata?.intake_digest !== expected.snapshotDigest) {
     return { state: "reject", reason: "snapshot_digest_mismatch" };
   }
+  if (session.metadata?.intake_digest_version !== expected.snapshotDigestVersion) {
+    return { state: "reject", reason: "snapshot_digest_version_mismatch" };
+  }
   if (session.amount_total !== OPS_DRAG_REPORT_AMOUNT_CENTS) {
     return { state: "reject", reason: "amount_mismatch" };
   }
@@ -199,6 +211,7 @@ export function evaluateFulfillmentSession(
     paymentReferenceId,
     paidAt: new Date(session.created * 1_000).toISOString(),
     snapshotDigest: expected.snapshotDigest,
+    snapshotDigestVersion: expected.snapshotDigestVersion,
   };
   if (billingCountry !== "US") {
     return {

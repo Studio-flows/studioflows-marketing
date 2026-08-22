@@ -56,6 +56,7 @@ function paymentFor(order: OpsDragOrder, eventId: string): OpsDragPaymentAdmissi
     currency: "usd",
     customerEmailSha256: "c".repeat(64),
     snapshotDigest: order.snapshot.digest,
+    snapshotDigestVersion: order.snapshot.digest_contract_version,
   };
 }
 

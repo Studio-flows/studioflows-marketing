@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
+import { createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import {
   canonicalJson,
+  calculateOpsDragAdmittedSnapshotDigest,
   claimFulfillmentOwnership,
   createAdmittedOrder,
   createAdmittedSnapshot,
@@ -66,6 +68,7 @@ const paidOrder = claimFulfillmentOwnership(admittedOrder, {
   currency: "usd",
   customerEmailSha256: sha256(admittedEmail),
   snapshotDigest: snapshot.digest,
+  snapshotDigestVersion: snapshot.digest_contract_version,
 }, admittedAt).order;
 
 const mutablePersistedRow: Record<string, unknown> = {
@@ -133,6 +136,18 @@ function accessToken(purpose: "view" | "pdf" | "email"): string {
     expiresAt,
     secret,
   });
+}
+
+function rewriteAndSignClaim(
+  signedToken: string,
+  mutate: (claims: Record<string, unknown>) => void,
+): string {
+  const parts = signedToken.split(".");
+  const claims = JSON.parse(Buffer.from(parts[1], "base64url").toString("utf8")) as Record<string, unknown>;
+  mutate(claims);
+  const payload = Buffer.from(canonicalJson(claims), "utf8").toString("base64url");
+  const signature = createHmac("sha256", secret).update(payload).digest("base64url");
+  return `v1.${payload}.${signature}`;
 }
 
 function dependencies(
@@ -253,6 +268,94 @@ for (const forbiddenColumn of [
   assert.deepEqual(harness.counters, { clients: 1, reads: 1 });
 }
 
+for (const purpose of ["view", "pdf"] as const) {
+  const admittedAtTamper = structuredClone(paidOrder);
+  admittedAtTamper.snapshot.admitted_at = "2026-08-22T21:00:01.000Z";
+  const harness = dependencies(admittedAtTamper);
+  await assert.rejects(loadAuthorizedOpsTeardown({
+    authorization: `Bearer ${accessToken(purpose)}`,
+    purpose,
+  }, harness.value), /access denied/);
+  assert.deepEqual(harness.counters, { clients: 1, reads: 1 });
+}
+
+{
+  const admittedAtTamper = structuredClone(paidOrder);
+  admittedAtTamper.snapshot.admitted_at = "2026-08-22T21:00:01.000Z";
+  const harness = dependencies(admittedAtTamper);
+  let sends = 0;
+  await assert.rejects(sendAuthorizedOpsTeardownEmail({
+    authorization: `Bearer ${accessToken("email")}`,
+    body: {},
+    siteOrigin: "https://preview.example.com",
+  }, {
+    ...harness.value,
+    sendEmail: (async () => {
+      sends += 1;
+      return { id: "must-not-send", filename: "must-not-render.pdf" };
+    }) as OpsTeardownEmailDependencies["sendEmail"],
+  }), /access denied/);
+  assert.deepEqual(harness.counters, { clients: 1, reads: 1 });
+  assert.equal(sends, 0);
+}
+
+{
+  const reboundTamper = structuredClone(paidOrder);
+  reboundTamper.snapshot.admitted_at = "2026-08-22T21:00:01.000Z";
+  reboundTamper.snapshot.digest = calculateOpsDragAdmittedSnapshotDigest(reboundTamper.snapshot);
+  reboundTamper.payment!.snapshotDigest = reboundTamper.snapshot.digest;
+  const harness = dependencies(reboundTamper);
+  await assert.rejects(loadAuthorizedOpsTeardown({
+    authorization: `Bearer ${accessToken("view")}`,
+    purpose: "view",
+  }, harness.value), /access denied/);
+  assert.deepEqual(harness.counters, { clients: 1, reads: 1 });
+}
+
+for (const admittedAtCandidate of [
+  undefined,
+  "not-a-time",
+  "2026-08-22T17:00:00-04:00",
+  "2026-08-22T21:00:00Z",
+]) {
+  assert.throws(() => createAdmittedSnapshot(
+    admittedLead,
+    leadId,
+    admittedAtCandidate as unknown as string,
+  ), /canonical UTC ISO-8601 milliseconds/);
+}
+
+for (const mutate of [
+  (order: OpsDragOrder) => { delete (order.snapshot as Partial<typeof order.snapshot>).admitted_at; },
+  (order: OpsDragOrder) => { order.snapshot.admitted_at = "not-a-time"; },
+  (order: OpsDragOrder) => { order.snapshot.admitted_at = "2026-08-22T17:00:00-04:00"; },
+  (order: OpsDragOrder) => {
+    (order.snapshot as unknown as Record<string, unknown>).digest_contract_version = "unknown";
+  },
+  (order: OpsDragOrder) => { delete (order.snapshot as Partial<typeof order.snapshot>).digest_contract_version; },
+]) {
+  const invalidOrder = structuredClone(paidOrder);
+  mutate(invalidOrder);
+  const harness = dependencies(invalidOrder);
+  await assert.rejects(loadAuthorizedOpsTeardown({
+    authorization: `Bearer ${accessToken("view")}`,
+    purpose: "view",
+  }, harness.value), /access denied/);
+  assert.deepEqual(harness.counters, { clients: 1, reads: 1 });
+}
+
+for (const token of [
+  rewriteAndSignClaim(accessToken("view"), (claims) => { delete claims.snapshot_digest_version; }),
+  rewriteAndSignClaim(accessToken("view"), (claims) => { claims.snapshot_digest_version = "unknown"; }),
+]) {
+  const harness = dependencies();
+  await assert.rejects(loadAuthorizedOpsTeardown({
+    authorization: `Bearer ${token}`,
+    purpose: "view",
+  }, harness.value), /access denied/);
+  assert.deepEqual(harness.counters, { clients: 0, reads: 0 });
+}
+
 for (const invalid of [
   { authorization: null, purpose: "view" as const },
   { authorization: `Bearer ${accessToken("pdf")}`, purpose: "view" as const },
@@ -268,5 +371,5 @@ assert.doesNotMatch(accessSource, /mapLeadRowToTeardownInput|work_email|raw_answ
 assert.doesNotMatch(accessSource, /console\.(?:log|warn|error)/);
 
 console.log(
-  "OPS_TEARDOWN_SNAPSHOT_IMMUTABILITY_PASS view_pdf_email=SNAPSHOT_ONLY recipient=ORDER_BOUND query=ORDER_ONLY tamper=REJECTED",
+  "OPS_TEARDOWN_SNAPSHOT_IMMUTABILITY_PASS admitted_at=DIGEST_BOUND digest_version=V2 view_pdf_email=SNAPSHOT_ONLY recipient=ORDER_BOUND tamper=REJECTED",
 );

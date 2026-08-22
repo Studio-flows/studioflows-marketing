@@ -1,6 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-import { canonicalJson, sha256, type OpsDragOrder } from "../ops-drag-report/order-foundation.ts";
+import {
+  OPS_DRAG_SNAPSHOT_DIGEST_VERSION,
+  assertOpsDragAdmittedSnapshotIntegrity,
+  canonicalJson,
+  sha256,
+  type OpsDragOrder,
+} from "../ops-drag-report/order-foundation.ts";
 
 export type OpsTeardownAccessPurpose = "view" | "pdf" | "email";
 
@@ -13,6 +19,7 @@ export type OpsTeardownAccessClaims = {
   checkout_session_id: string;
   payment_reference_id: string;
   snapshot_digest: string;
+  snapshot_digest_version: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
   recipient_sha256: string;
   issued_at: string;
   expires_at: string;
@@ -28,6 +35,7 @@ const CLAIM_KEYS = [
   "purpose",
   "recipient_sha256",
   "snapshot_digest",
+  "snapshot_digest_version",
   "token_id",
   "version",
 ] as const;
@@ -58,26 +66,21 @@ function signPayload(payload: string, secret: string): string {
   return createHmac("sha256", requireSigningSecret(secret)).update(payload).digest("base64url");
 }
 
-function calculateSnapshotDigest(order: OpsDragOrder): string {
-  return sha256(canonicalJson({
-    version: order.snapshot.version,
-    submission_id: order.snapshot.submission_id,
-    delivery_email: order.snapshot.delivery_email,
-    report_input: order.snapshot.report_input,
-  }));
-}
-
 function assertPaidBinding(order: OpsDragOrder): void {
   const payment = order.payment;
   if (!payment || payment.refundReason || payment.amountTotal !== 2_900 || payment.currency !== "usd") {
     throw new Error("Ops teardown access unavailable");
   }
+  try {
+    assertOpsDragAdmittedSnapshotIntegrity(order.snapshot);
+  } catch {
+    throw new Error("Ops teardown access unavailable");
+  }
   if (
-    order.snapshot.version !== "v1" ||
     order.submission_id !== order.snapshot.submission_id ||
     order.snapshot.report_input.leadId !== order.submission_id ||
-    calculateSnapshotDigest(order) !== order.snapshot.digest ||
     order.snapshot.digest !== payment.snapshotDigest ||
+    order.snapshot.digest_contract_version !== payment.snapshotDigestVersion ||
     sha256(order.snapshot.delivery_email.trim().toLowerCase()) !== payment.customerEmailSha256
   ) {
     throw new Error("Ops teardown access unavailable");
@@ -109,6 +112,7 @@ export function createOpsTeardownAccessToken(input: {
     checkout_session_id: payment.checkoutSessionId,
     payment_reference_id: payment.paymentReferenceId,
     snapshot_digest: input.order.snapshot.digest,
+    snapshot_digest_version: input.order.snapshot.digest_contract_version,
     recipient_sha256: payment.customerEmailSha256,
     issued_at: input.issuedAt,
     expires_at: input.expiresAt,
@@ -155,6 +159,7 @@ export function verifyOpsTeardownAccessToken(input: {
     !PROVIDER_ID_PATTERN.test(claims.checkout_session_id ?? "") ||
     !PROVIDER_ID_PATTERN.test(claims.payment_reference_id ?? "") ||
     !HASH_PATTERN.test(claims.snapshot_digest ?? "") ||
+    claims.snapshot_digest_version !== OPS_DRAG_SNAPSHOT_DIGEST_VERSION ||
     !HASH_PATTERN.test(claims.recipient_sha256 ?? "")
   ) {
     throw new Error("Ops teardown access denied");
@@ -187,6 +192,7 @@ export function assertOpsTeardownOrderBinding(order: OpsDragOrder, claims: OpsTe
     payment.checkoutSessionId !== claims.checkout_session_id ||
     payment.paymentReferenceId !== claims.payment_reference_id ||
     order.snapshot.digest !== claims.snapshot_digest ||
+    order.snapshot.digest_contract_version !== claims.snapshot_digest_version ||
     payment.customerEmailSha256 !== claims.recipient_sha256 ||
     sha256(recipient) !== claims.recipient_sha256
   ) {

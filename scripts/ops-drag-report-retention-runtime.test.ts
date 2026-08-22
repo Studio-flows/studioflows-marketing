@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 
 import {
   createAdmittedOrder,
+  createAdmittedSnapshot,
   type JsonValue,
-  type OpsDragAdmittedSnapshot,
 } from "../lib/ops-drag-report/order-foundation.ts";
 import {
   createOpsDragOrderStoreUpdate,
@@ -81,6 +81,7 @@ function runtimeRow(metadataOverrides: Record<string, JsonValue> = {}): Record<s
         submission_id: "sub_raw_identifier",
         snapshot: {
           version: "v1",
+          digest_contract_version: "ops_drag_admitted_snapshot_digest_v2",
           submission_id: "sub_raw_identifier",
           admitted_at: "2024-02-01T12:00:00.000Z",
           delivery_email: "buyer@business.example",
@@ -152,14 +153,11 @@ function applyColumns(row: Record<string, JsonValue>, columns: Record<string, Js
   return { ...structuredClone(row), ...structuredClone(columns) };
 }
 
-const admittedSnapshot = {
-  version: "v1",
-  submission_id: "10000000-0000-4000-8000-000000000001",
-  admitted_at: "2024-02-01T12:00:00.000Z",
-  delivery_email: "buyer@business.example",
-  digest: "a".repeat(64),
-  report_input: { leadId: "fixture", quizPayload: {}, preQual: null, qualificationScore: null },
-} satisfies OpsDragAdmittedSnapshot;
+const admittedSnapshot = createAdmittedSnapshot(
+  { work_email: "buyer@business.example", raw_answers: {}, metadata: {} },
+  "10000000-0000-4000-8000-000000000001",
+  "2024-02-01T12:00:00.000Z",
+);
 const unpaidLifecycle = createOpsDragRetentionLifecycleUpdate(
   createAdmittedOrder(admittedSnapshot),
   "2024-02-02T12:00:00.000Z",
@@ -183,6 +181,7 @@ paidAwaitingOrder.payment = {
   currency: "usd",
   customerEmailSha256: "b".repeat(64),
   snapshotDigest: admittedSnapshot.digest,
+  snapshotDigestVersion: admittedSnapshot.digest_contract_version,
 };
 assert.deepEqual(createOpsDragRetentionLifecycleUpdate(paidAwaitingOrder), {
   ops_drag_retention_stage: "AWAITING_TERMINAL",

@@ -64,6 +64,7 @@ function createRefundRequiredOrder(): OpsDragOrder {
     currency: "usd",
     customerEmailSha256: "a".repeat(64),
     snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
   }, "2026-08-22T20:10:01.000Z").order;
   return expireDeliverySla(paid, "2026-08-22T21:00:00.000Z");
 }

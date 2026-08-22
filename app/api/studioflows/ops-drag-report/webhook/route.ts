@@ -88,6 +88,7 @@ export async function POST(req: Request) {
       orderId: order.order_id,
       submissionId: order.submission_id,
       snapshotDigest: order.snapshot.digest,
+      snapshotDigestVersion: order.snapshot.digest_contract_version,
       deliveryEmail: order.snapshot.delivery_email,
     });
     if (decision.state === "pending" || decision.state === "reject") {
@@ -112,6 +113,7 @@ export async function POST(req: Request) {
           currency: "usd",
           customerEmailSha256: hashEmail(decision.customerEmail),
           snapshotDigest: decision.snapshotDigest,
+          snapshotDigestVersion: decision.snapshotDigestVersion,
           refundReason: decision.reason,
         },
         recordedAt
@@ -138,6 +140,7 @@ export async function POST(req: Request) {
         currency: "usd",
         customerEmailSha256: hashEmail(decision.customerEmail),
         snapshotDigest: decision.snapshotDigest,
+        snapshotDigestVersion: decision.snapshotDigestVersion,
       },
       recordedAt
     );

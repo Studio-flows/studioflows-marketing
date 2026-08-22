@@ -54,14 +54,14 @@ const sourceRow = {
   metadata: { qualification_score: 12 },
 };
 const snapshot = createAdmittedSnapshot(sourceRow, submissionId, "2026-08-22T20:00:00.000Z");
-const sameSnapshot = createAdmittedSnapshot(sourceRow, submissionId, "2026-08-22T20:05:00.000Z");
+const laterSnapshot = createAdmittedSnapshot(sourceRow, submissionId, "2026-08-22T20:05:00.000Z");
 const changedSnapshot = createAdmittedSnapshot(
   { ...sourceRow, company_name: "Changed after admission" },
   submissionId,
   "2026-08-22T20:05:00.000Z"
 );
 
-assert.equal(snapshot.digest, sameSnapshot.digest, "admission time must not change the immutable snapshot digest");
+assert.notEqual(snapshot.digest, laterSnapshot.digest, "admission time must change the immutable snapshot digest");
 assert.notEqual(snapshot.digest, changedSnapshot.digest, "changed Ops Check input must change the snapshot digest");
 
 const order = createAdmittedOrder(snapshot);
@@ -75,6 +75,7 @@ const payment: OpsDragPaymentAdmission = {
   currency: "usd",
   customerEmailSha256: "a".repeat(64),
   snapshotDigest: snapshot.digest,
+  snapshotDigestVersion: snapshot.digest_contract_version,
 };
 
 const results = await Promise.all(

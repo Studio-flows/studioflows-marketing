@@ -22,6 +22,7 @@ import {
   type RefundOwnershipResult,
 } from "../lib/ops-drag-report/delivery-refund-state-machine.ts";
 import {
+  OPS_DRAG_SNAPSHOT_DIGEST_VERSION,
   claimFulfillmentOwnership,
   createAdmittedOrder,
   createAdmittedSnapshot,
@@ -40,6 +41,7 @@ const payment: OpsDragPaymentAdmission = {
   currency: "usd",
   customerEmailSha256: "a".repeat(64),
   snapshotDigest: "",
+  snapshotDigestVersion: OPS_DRAG_SNAPSHOT_DIGEST_VERSION,
 };
 
 function makePaidOrder(): OpsDragOrder {
@@ -55,7 +57,11 @@ function makePaidOrder(): OpsDragOrder {
     submissionId,
     "2026-08-22T20:00:00.000Z"
   );
-  const admission = { ...payment, snapshotDigest: snapshot.digest };
+  const admission = {
+    ...payment,
+    snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
+  };
   return claimFulfillmentOwnership(
     createAdmittedOrder(snapshot),
     admission,

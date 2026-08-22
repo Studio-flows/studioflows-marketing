@@ -49,6 +49,7 @@ function createPaidOrder(id: string): OpsDragOrder {
     currency: "usd",
     customerEmailSha256: "b".repeat(64),
     snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
   }, "2026-08-22T20:00:01.000Z").order;
 }
 

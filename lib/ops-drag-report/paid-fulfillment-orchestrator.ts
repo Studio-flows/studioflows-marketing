@@ -13,6 +13,7 @@ import {
   type ReportGenerationAdapter,
 } from "./delivery-refund-state-machine.ts";
 import type { OpsDragOrder } from "./order-foundation.ts";
+import { assertOpsDragAdmittedSnapshotIntegrity } from "./order-foundation.ts";
 
 export type PaidFulfillmentOrderStore = {
   load(): Promise<OpsDragOrder>;
@@ -50,6 +51,10 @@ function requireOwnedPaidOrder(order: OpsDragOrder): void {
   if (order.payment.snapshotDigest !== order.snapshot.digest) {
     throw new Error("Paid fulfillment orchestration snapshot binding mismatch");
   }
+  if (order.payment.snapshotDigestVersion !== order.snapshot.digest_contract_version) {
+    throw new Error("Paid fulfillment orchestration snapshot digest version mismatch");
+  }
+  assertOpsDragAdmittedSnapshotIntegrity(order.snapshot);
 }
 
 function refundEligibleAt(order: OpsDragOrder): string {

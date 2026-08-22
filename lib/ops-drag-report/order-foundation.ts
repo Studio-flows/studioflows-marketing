@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+export const OPS_DRAG_SNAPSHOT_DIGEST_VERSION = "ops_drag_admitted_snapshot_digest_v2" as const;
+
 export type JsonPrimitive = boolean | number | string | null;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
 
@@ -12,6 +14,7 @@ export type OpsDragReportInput = {
 
 export type OpsDragAdmittedSnapshot = {
   version: "v1";
+  digest_contract_version: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
   submission_id: string;
   admitted_at: string;
   delivery_email: string;
@@ -130,6 +133,7 @@ export type OpsDragPaymentAdmission = {
   currency: "usd";
   customerEmailSha256: string;
   snapshotDigest: string;
+  snapshotDigestVersion: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
   refundReason?: "CUSTOMER_COUNTRY_NOT_US_AFTER_PAYMENT";
 };
 
@@ -205,6 +209,70 @@ export function sha256(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
+const CANONICAL_UTC_MILLISECOND_PATTERN = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+const SNAPSHOT_KEYS = [
+  "admitted_at",
+  "delivery_email",
+  "digest",
+  "digest_contract_version",
+  "report_input",
+  "submission_id",
+  "version",
+] as const;
+
+export function requireCanonicalUtcTimestamp(value: unknown, label: string): string {
+  if (typeof value !== "string" || !CANONICAL_UTC_MILLISECOND_PATTERN.test(value)) {
+    throw new Error(`${label} must use canonical UTC ISO-8601 milliseconds`);
+  }
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed) || new Date(parsed).toISOString() !== value) {
+    throw new Error(`${label} must use canonical UTC ISO-8601 milliseconds`);
+  }
+  return value;
+}
+
+export function calculateOpsDragAdmittedSnapshotDigest(
+  snapshot: Omit<OpsDragAdmittedSnapshot, "digest"> | OpsDragAdmittedSnapshot,
+): string {
+  if (snapshot.version !== "v1" || snapshot.digest_contract_version !== OPS_DRAG_SNAPSHOT_DIGEST_VERSION) {
+    throw new Error("Admitted snapshot digest contract version is invalid");
+  }
+  const admittedAt = requireCanonicalUtcTimestamp(snapshot.admitted_at, "Admitted snapshot timestamp");
+  const deliveryEmail = typeof snapshot.delivery_email === "string"
+    ? snapshot.delivery_email.trim().toLowerCase()
+    : "";
+  if (deliveryEmail !== snapshot.delivery_email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(deliveryEmail)) {
+    throw new Error("Admitted snapshot delivery email is invalid");
+  }
+  if (
+    !snapshot.report_input ||
+    typeof snapshot.report_input !== "object" ||
+    snapshot.report_input.leadId !== snapshot.submission_id
+  ) {
+    throw new Error("Admitted snapshot report input binding is invalid");
+  }
+  return sha256(canonicalJson({
+    digest_contract_version: OPS_DRAG_SNAPSHOT_DIGEST_VERSION,
+    version: snapshot.version,
+    submission_id: snapshot.submission_id,
+    admitted_at: admittedAt,
+    delivery_email: deliveryEmail,
+    report_input: snapshot.report_input,
+  }));
+}
+
+export function assertOpsDragAdmittedSnapshotIntegrity(snapshot: OpsDragAdmittedSnapshot): void {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    throw new Error("Admitted snapshot is invalid");
+  }
+  if (Object.keys(snapshot).sort().join("|") !== [...SNAPSHOT_KEYS].sort().join("|")) {
+    throw new Error("Admitted snapshot fields are invalid");
+  }
+  if (!/^[a-f0-9]{64}$/.test(snapshot.digest) || calculateOpsDragAdmittedSnapshotDigest(snapshot) !== snapshot.digest) {
+    throw new Error("Admitted snapshot digest is invalid");
+  }
+}
+
 function readObject(value: unknown): Record<string, unknown> {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -248,19 +316,19 @@ export function createAdmittedSnapshot(
 ): OpsDragAdmittedSnapshot {
   const deliveryEmail = readEmail(row);
   const reportInput = buildReportInput(row, submissionId);
-  const digest = sha256(canonicalJson({
+  const admitted_at = requireCanonicalUtcTimestamp(admittedAt, "Admitted snapshot timestamp");
+  const unsignedSnapshot: Omit<OpsDragAdmittedSnapshot, "digest"> = {
     version: "v1",
+    digest_contract_version: OPS_DRAG_SNAPSHOT_DIGEST_VERSION,
     submission_id: submissionId,
+    admitted_at,
     delivery_email: deliveryEmail,
     report_input: reportInput,
-  }));
+  };
+  const digest = calculateOpsDragAdmittedSnapshotDigest(unsignedSnapshot);
 
   return {
-    version: "v1",
-    submission_id: submissionId,
-    admitted_at: admittedAt,
-    delivery_email: deliveryEmail,
-    report_input: reportInput,
+    ...unsignedSnapshot,
     digest,
   };
 }
@@ -294,6 +362,7 @@ export function appendReceipt(
 }
 
 export function createAdmittedOrder(snapshot: OpsDragAdmittedSnapshot): OpsDragOrder {
+  assertOpsDragAdmittedSnapshotIntegrity(snapshot);
   const base: OpsDragOrder = {
     version: "v1",
     order_id: createOrderId(snapshot),
@@ -310,6 +379,7 @@ export function createAdmittedOrder(snapshot: OpsDragAdmittedSnapshot): OpsDragO
     ...base,
     receipts: appendReceipt(base, "SUBMISSION_ADMITTED", snapshot.admitted_at, {
       snapshot_digest: snapshot.digest,
+      snapshot_digest_version: snapshot.digest_contract_version,
       delivery_email_sha256: sha256(snapshot.delivery_email),
       report_schema_version: "v1",
     }),
@@ -330,7 +400,11 @@ function createLeaseOwner(payment: OpsDragPaymentAdmission): string {
 }
 
 function assertPaymentMatchesOrder(order: OpsDragOrder, payment: OpsDragPaymentAdmission): void {
+  assertOpsDragAdmittedSnapshotIntegrity(order.snapshot);
   if (payment.snapshotDigest !== order.snapshot.digest) throw new Error("Payment snapshot digest mismatch");
+  if (payment.snapshotDigestVersion !== order.snapshot.digest_contract_version) {
+    throw new Error("Payment snapshot digest version mismatch");
+  }
   if (payment.amountTotal !== 2_900 || payment.currency !== "usd") {
     throw new Error("Payment offer binding mismatch");
   }
@@ -397,6 +471,7 @@ export function claimFulfillmentOwnership(
       currency: payment.currency,
       paid_at: payment.paidAt,
       snapshot_digest: payment.snapshotDigest,
+      snapshot_digest_version: payment.snapshotDigestVersion,
       customer_email_sha256: payment.customerEmailSha256,
       fulfillment_lease_owner: leaseOwner,
     }
@@ -457,6 +532,7 @@ export function admitPaidNonUsRefundRequirement(
       currency: payment.currency,
       paid_at: payment.paidAt,
       snapshot_digest: payment.snapshotDigest,
+      snapshot_digest_version: payment.snapshotDigestVersion,
       customer_email_sha256: payment.customerEmailSha256,
       refund_reason: payment.refundReason,
       fulfillment_permitted: false,

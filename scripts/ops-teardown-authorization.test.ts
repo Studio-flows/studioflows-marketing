@@ -44,6 +44,7 @@ function createPaidOrder(): OpsDragOrder {
     currency: "usd",
     customerEmailSha256: sha256(email),
     snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
   }, issuedAt).order;
 }
 

@@ -1,5 +1,10 @@
 import { assertBusinessUseInputCeilingAcknowledgment } from "./accepted-contract.ts";
-import { createAdmittedSnapshot, type JsonValue, type OpsDragAdmittedSnapshot } from "./order-foundation.ts";
+import {
+  OPS_DRAG_SNAPSHOT_DIGEST_VERSION,
+  createAdmittedSnapshot,
+  type JsonValue,
+  type OpsDragAdmittedSnapshot,
+} from "./order-foundation.ts";
 
 export const OPS_DRAG_INTAKE_VERSION = "ops_drag_purpose_limited_intake_v1" as const;
 export const OPS_DRAG_ALLOWED_ANSWER_KEYS = [
@@ -83,7 +88,12 @@ export function validateOpsDragIntakeRequest(input: unknown): OpsDragIntakeReque
 export async function admitOpsDragIntake(
   rawInput: unknown,
   dependencies: OpsDragIntakeDependencies
-): Promise<{ version: typeof OPS_DRAG_INTAKE_VERSION; submission_id: string; snapshot_digest: string }> {
+): Promise<{
+  version: typeof OPS_DRAG_INTAKE_VERSION;
+  submission_id: string;
+  snapshot_digest: string;
+  snapshot_digest_version: typeof OPS_DRAG_SNAPSHOT_DIGEST_VERSION;
+}> {
   const input = validateOpsDragIntakeRequest(rawInput);
   const submissionId = dependencies.createSubmissionId();
   if (!/^sub_[a-z0-9_-]{8,64}$/.test(submissionId)) throw new Error("Submission identifier is invalid");
@@ -93,5 +103,10 @@ export async function admitOpsDragIntake(
     dependencies.now()
   );
   await dependencies.store.admit(snapshot);
-  return { version: OPS_DRAG_INTAKE_VERSION, submission_id: snapshot.submission_id, snapshot_digest: snapshot.digest };
+  return {
+    version: OPS_DRAG_INTAKE_VERSION,
+    submission_id: snapshot.submission_id,
+    snapshot_digest: snapshot.digest,
+    snapshot_digest_version: snapshot.digest_contract_version,
+  };
 }

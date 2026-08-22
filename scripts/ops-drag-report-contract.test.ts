@@ -39,6 +39,7 @@ const binding = {
   orderId: order.order_id,
   submissionId: order.submission_id,
   snapshotDigest: order.snapshot.digest,
+  snapshotDigestVersion: order.snapshot.digest_contract_version,
   deliveryEmail: order.snapshot.delivery_email,
 };
 const params = buildCheckoutSessionParams(lead, "https://preview.example.com", binding);
@@ -77,11 +78,17 @@ assert.equal(checkoutCountryGateStatus(" us ", false), null);
 assert.equal(checkoutCountryGateStatus("CA", true), null);
 assert.equal(createCheckoutIdempotencyKey(lead.id), `ops-drag:${lead.id}:checkout:v1`);
 assert.equal(params.metadata?.intake_digest, snapshot.digest);
+assert.equal(params.metadata?.intake_digest_version, snapshot.digest_contract_version);
+assert.equal(order.receipts[0].evidence.snapshot_digest_version, snapshot.digest_contract_version);
 assert.equal(params.metadata?.order_id, order.order_id);
 assert.equal(params.metadata?.cadence, "ONE_TIME");
 assert.equal(params.metadata?.quantity, "1");
 assert.ok(verifyReceiptChain(order));
 assert.ok(!JSON.stringify(order.receipts).includes(lead.workEmail));
+assert.throws(() => buildCheckoutSessionParams(lead, "https://preview.example.com", {
+  ...binding,
+  snapshotDigestVersion: "unknown" as typeof binding.snapshotDigestVersion,
+}), /digest version is invalid/);
 
 const paidSession = {
   id: "cs_test_contract",
@@ -99,6 +106,7 @@ const paidSession = {
     submission_id: lead.id,
     order_id: order.order_id,
     intake_digest: snapshot.digest,
+    intake_digest_version: snapshot.digest_contract_version,
     cadence: "ONE_TIME",
     quantity: "1",
   },
@@ -112,6 +120,7 @@ assert.deepEqual(evaluateFulfillmentSession(paidSession, binding), {
   paymentReferenceId: "pi_test_contract",
   paidAt: new Date(1_780_000_000_000).toISOString(),
   snapshotDigest: snapshot.digest,
+  snapshotDigestVersion: snapshot.digest_contract_version,
 });
 assert.deepEqual(
   evaluateFulfillmentSession({ ...paidSession, payment_status: "unpaid" } as Stripe.Checkout.Session, binding),
@@ -130,6 +139,7 @@ assert.deepEqual(
     paymentReferenceId: "pi_test_contract",
     paidAt: new Date(1_780_000_000_000).toISOString(),
     snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
   }
 );
 expectRejection(
@@ -150,6 +160,13 @@ assert.deepEqual(
     metadata: { ...paidSession.metadata, intake_digest: "0".repeat(64) },
   } as Stripe.Checkout.Session, binding),
   { state: "reject", reason: "snapshot_digest_mismatch" }
+);
+assert.deepEqual(
+  evaluateFulfillmentSession({
+    ...paidSession,
+    metadata: { ...paidSession.metadata, intake_digest_version: "unknown" },
+  } as Stripe.Checkout.Session, binding),
+  { state: "reject", reason: "snapshot_digest_version_mismatch" }
 );
 
 function expectRejection(candidate: Record<string, unknown>, reason: string): void {

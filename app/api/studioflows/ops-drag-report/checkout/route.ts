@@ -49,6 +49,7 @@ export async function POST(req: NextRequest) {
       orderId: order.order_id,
       submissionId: order.submission_id,
       snapshotDigest: order.snapshot.digest,
+      snapshotDigestVersion: order.snapshot.digest_contract_version,
     });
     const session = await client.checkout.sessions.create(params, {
       idempotencyKey: createCheckoutIdempotencyKey(order.submission_id),

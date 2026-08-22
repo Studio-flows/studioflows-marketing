@@ -5,19 +5,21 @@ import {
   type OpsDragReportDocument,
   type ReportGenerationAdapter,
 } from "./delivery-refund-state-machine.ts";
-import { canonicalJson, sha256, type OpsDragAdmittedSnapshot, type JsonValue } from "./order-foundation.ts";
+import {
+  assertOpsDragAdmittedSnapshotIntegrity,
+  type OpsDragAdmittedSnapshot,
+  type JsonValue,
+} from "./order-foundation.ts";
 
 function requireSnapshot(snapshot: OpsDragAdmittedSnapshot, submissionId: string, digest: string): void {
-  if (snapshot.version !== "v1" || snapshot.submission_id !== submissionId || snapshot.digest !== digest) {
+  try {
+    assertOpsDragAdmittedSnapshotIntegrity(snapshot);
+  } catch {
+    throw new Error("Report generation snapshot digest is invalid");
+  }
+  if (snapshot.submission_id !== submissionId || snapshot.digest !== digest) {
     throw new Error("Report generation snapshot binding mismatch");
   }
-  const expectedDigest = sha256(canonicalJson({
-    version: snapshot.version,
-    submission_id: snapshot.submission_id,
-    delivery_email: snapshot.delivery_email,
-    report_input: snapshot.report_input,
-  }));
-  if (expectedDigest !== digest) throw new Error("Report generation snapshot digest is invalid");
 }
 
 function boundedText(value: JsonValue | undefined, fallback: string): string {

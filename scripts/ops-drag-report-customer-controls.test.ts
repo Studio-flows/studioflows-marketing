@@ -661,6 +661,7 @@ function createDeliveredOrder(): OpsDragOrder {
     currency: "usd",
     customerEmailSha256: "a".repeat(64),
     snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
   }, "2026-08-22T20:01:01.000Z").order;
   order = startGenerationAttempt(order, "2026-08-22T20:01:02.000Z");
   const report: OpsDragReportDocument = {

@@ -67,6 +67,7 @@ function createPaidOrder(overrides: Record<string, unknown> = {}): OpsDragOrder 
     currency: "usd",
     customerEmailSha256: "a".repeat(64),
     snapshotDigest: snapshot.digest,
+    snapshotDigestVersion: snapshot.digest_contract_version,
   }, "2026-08-22T20:00:01.000Z").order;
 }
 

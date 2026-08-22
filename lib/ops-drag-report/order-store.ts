@@ -3,6 +3,7 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import {
   claimFulfillmentOwnership,
   createAdmittedOrder,
+  assertOpsDragAdmittedSnapshotIntegrity,
   type FulfillmentOwnershipResult,
   type OpsDragAdmittedSnapshot,
   type OpsDragOrder,
@@ -42,6 +43,16 @@ function readOrder(metadata: Record<string, unknown>): OpsDragOrder | null {
   if (order.version !== "v1" || typeof order.order_id !== "string" || typeof order.submission_id !== "string") {
     throw new Error("Stored Ops Drag Report order is malformed");
   }
+  assertOpsDragAdmittedSnapshotIntegrity((value as OpsDragOrder).snapshot);
+  if (
+    order.payment &&
+    (
+      order.payment.snapshotDigest !== (value as OpsDragOrder).snapshot.digest ||
+      order.payment.snapshotDigestVersion !== (value as OpsDragOrder).snapshot.digest_contract_version
+    )
+  ) {
+    throw new Error("Stored Ops Drag Report payment snapshot binding is malformed");
+  }
   return value as OpsDragOrder;
 }
 
@@ -78,6 +89,7 @@ export async function admitOpsDragOrder(
   supabase: SupabaseClient,
   snapshot: OpsDragAdmittedSnapshot
 ): Promise<OpsDragOrder> {
+  assertOpsDragAdmittedSnapshotIntegrity(snapshot);
   for (let attempt = 0; attempt < MAX_CAS_ATTEMPTS; attempt += 1) {
     const row = await loadMetadataRow(supabase, snapshot.submission_id);
     const current = readOrder(row.metadata);
@@ -153,6 +165,9 @@ export async function transitionOpsDragOrder(
     const next = transition(structuredClone(current));
     if (next.order_id !== current.order_id || next.submission_id !== current.submission_id) {
       throw new Error("Ops Drag Report transition changed immutable order identity");
+    }
+    if (JSON.stringify(next.snapshot) !== JSON.stringify(current.snapshot)) {
+      throw new Error("Ops Drag Report transition changed the immutable admitted snapshot");
     }
     if (JSON.stringify(next) === JSON.stringify(current)) return current;
     if (await compareAndSwapOrder(supabase, row, next)) return next;

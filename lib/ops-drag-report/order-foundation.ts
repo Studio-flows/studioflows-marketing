@@ -56,10 +56,18 @@ export type OpsDragAutomationState = {
     report_sha256: string | null;
     pdf_sha256: string | null;
     validated_at: string | null;
+    artifact: {
+      storage: "ORDER_METADATA_INLINE_V1";
+      filename: "studioflows-ops-drag-report.pdf";
+      pdf_base64: string;
+      report_sha256: string;
+      pdf_sha256: string;
+    } | null;
   };
   delivery: {
     status:
       | "PENDING"
+      | "SUBMITTING"
       | "SUBMITTED"
       | "ACCEPTED"
       | "QUEUED"
@@ -71,6 +79,8 @@ export type OpsDragAutomationState = {
     attempts: number;
     max_attempts: 3;
     provider_message_id: string | null;
+    submission_lease_owner: string | null;
+    submission_idempotency_key: string | null;
     delivered_at: string | null;
   };
   refund: {

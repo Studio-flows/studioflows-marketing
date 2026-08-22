@@ -8,6 +8,10 @@ import {
 import { claimOpsDragFulfillment, loadOpsDragOrder } from "@/lib/ops-drag-report/order-store";
 import { transitionOpsDragOrder } from "@/lib/ops-drag-report/order-store";
 import { applyRefundProviderEvent } from "@/lib/ops-drag-report/delivery-refund-state-machine";
+import { createDeterministicReportGenerationAdapter } from "@/lib/ops-drag-report/deterministic-report";
+import { orchestratePaidOpsDragFulfillment } from "@/lib/ops-drag-report/paid-fulfillment-orchestrator";
+import { createResendTransport } from "@/lib/ops-drag-report/provider-adapters";
+import { preflightResendDeliveryWorker } from "@/lib/ops-drag-report/provider-worker";
 import { mapStripeRefundWebhook } from "@/lib/ops-drag-report/provider-webhooks";
 import { createOpsDragStripeClient, readWebhookSecret } from "@/lib/ops-drag-report/stripe-server";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
@@ -105,9 +109,23 @@ export async function POST(req: Request) {
       },
       new Date(event.created * 1_000).toISOString()
     );
+    const emailAdapter = preflightResendDeliveryWorker({
+      environment: process.env,
+      createTransport: createResendTransport,
+    });
+    const orchestration = await orchestratePaidOpsDragFulfillment({
+      store: {
+        load: () => loadOpsDragOrder(supabase, decision.submissionId),
+        transition: (apply) => transitionOpsDragOrder(supabase, decision.submissionId, apply),
+      },
+      generationAdapter: createDeterministicReportGenerationAdapter(),
+      emailAdapter,
+      recordedAt: new Date().toISOString(),
+    });
     return Response.json({
       received: true,
       state: transition.disposition === "acquired" ? "fulfillment_owned" : "duplicate",
+      orchestration: orchestration.disposition,
       order_id: transition.order.order_id,
       lease_owner: transition.leaseOwner,
       receipt: transition.order.receipts.at(-1) ?? null,

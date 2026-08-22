@@ -20,6 +20,7 @@ import {
 } from "../lib/ops-drag-report/provider-webhooks.ts";
 import {
   assertSchedulerRequest,
+  preflightResendDeliveryWorker,
   preflightStripeRefundWorker,
   runBoundedProviderWorker,
 } from "../lib/ops-drag-report/provider-worker.ts";
@@ -116,6 +117,15 @@ const unusedEmailTransport: ResendTransport = {
     throw new Error("disabled adapter must not call transport");
   },
 };
+let heldEmailTransportConstructions = 0;
+assert.throws(() => preflightResendDeliveryWorker({
+  environment: disabledEnvironment,
+  createTransport: () => {
+    heldEmailTransportConstructions += 1;
+    return unusedEmailTransport;
+  },
+}), /disabled/);
+assert.equal(heldEmailTransportConstructions, 0, "held email configuration must fail before transport construction");
 assert.throws(
   () => createResendEmailAdapter({ environment: disabledEnvironment, transport: unusedEmailTransport }),
   /disabled/

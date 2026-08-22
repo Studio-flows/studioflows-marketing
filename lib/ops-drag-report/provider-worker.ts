@@ -1,12 +1,25 @@
 import {
+  createResendEmailAdapter,
   createStripeRefundAdapterFactory,
+  validateResendEmailAdapterConfiguration,
   validateStripeRefundAdapterConfiguration,
+  type ResendTransport,
   type ProviderEnvironment,
   type StripeRefundAdapterFactory,
   type StripeRefundTransport,
 } from "./provider-adapters.ts";
+import type { EmailProviderAdapter } from "./delivery-refund-state-machine.ts";
 
 export const OPS_DRAG_WORKER_MAX_BATCH = 10;
+
+export function preflightResendDeliveryWorker(input: {
+  environment: ProviderEnvironment;
+  createTransport(apiKey: string): ResendTransport;
+}): EmailProviderAdapter {
+  const configuration = validateResendEmailAdapterConfiguration(input.environment);
+  const transport = input.createTransport(configuration.apiKey);
+  return createResendEmailAdapter({ environment: input.environment, transport });
+}
 
 export function preflightStripeRefundWorker(input: {
   environment: ProviderEnvironment;

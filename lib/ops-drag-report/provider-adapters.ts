@@ -44,6 +44,12 @@ export type StripeRefundAdapterFactory = {
   forOrder(input: { orderId: string; submissionId: string }): RefundProviderAdapter;
 };
 
+export type ResendEmailAdapterConfiguration = {
+  mode: ProviderMode;
+  apiKey: string;
+  from: string;
+};
+
 function requireNonEmpty(value: string | undefined, label: string): string {
   const normalized = value?.trim() ?? "";
   if (!normalized) throw new Error(`${label} is not configured`);
@@ -77,13 +83,7 @@ export function createResendEmailAdapter(input: {
   environment: ProviderEnvironment;
   transport: ResendTransport;
 }): EmailProviderAdapter {
-  readProviderMode(input.environment);
-  const apiKey = requireNonEmpty(input.environment.RESEND_API_KEY, "Resend API key");
-  if (!apiKey.startsWith("re_")) throw new Error("Resend API key format is invalid");
-  const from = requireNonEmpty(
-    input.environment.OPS_DRAG_REPORT_EMAIL_FROM || input.environment.RESEND_FROM_EMAIL,
-    "Ops Drag Report sender"
-  );
+  const { from } = validateResendEmailAdapterConfiguration(input.environment);
 
   return {
     async submit(request) {
@@ -107,6 +107,19 @@ export function createResendEmailAdapter(input: {
       return { providerMessageId: result.id };
     },
   };
+}
+
+export function validateResendEmailAdapterConfiguration(
+  environment: ProviderEnvironment
+): ResendEmailAdapterConfiguration {
+  const mode = readProviderMode(environment);
+  const apiKey = requireNonEmpty(environment.RESEND_API_KEY, "Resend API key");
+  if (!apiKey.startsWith("re_")) throw new Error("Resend API key format is invalid");
+  const from = requireNonEmpty(
+    environment.OPS_DRAG_REPORT_EMAIL_FROM || environment.RESEND_FROM_EMAIL,
+    "Ops Drag Report sender"
+  );
+  return { mode, apiKey, from };
 }
 
 export function createResendTransport(apiKey: string): ResendTransport {

@@ -13,6 +13,8 @@ import {
 
 export const OPS_DRAG_REPORT_SCHEMA_VERSION = "ops_drag_report_v1" as const;
 export const OPS_DRAG_REPORT_TEMPLATE_VERSION = "ops_drag_report_template_v1" as const;
+export const OPS_DRAG_REPORT_PDF_FILENAME = "studioflows-ops-drag-report.pdf" as const;
+export const OPS_DRAG_REPORT_MAX_PDF_BYTES = 512_000 as const;
 export const OPS_DRAG_REPORT_GENERATION_MAX_ATTEMPTS = 3 as const;
 export const OPS_DRAG_REPORT_DELIVERY_MAX_ATTEMPTS = 3 as const;
 export const OPS_DRAG_REPORT_REFUND_MAX_ATTEMPTS = 3 as const;
@@ -37,11 +39,20 @@ export type ValidatedReport = {
   pdfSha256: string;
 };
 
+export type PersistedReportArtifact = {
+  filename: typeof OPS_DRAG_REPORT_PDF_FILENAME;
+  pdfBytes: Uint8Array;
+  reportSha256: string;
+  pdfSha256: string;
+};
+
 export type ReportGenerationAdapter = {
   generate(input: {
     orderId: string;
     submissionId: string;
     snapshotDigest: string;
+    snapshot: OpsDragOrder["snapshot"];
+    generatedAt: string;
     templateVersion: typeof OPS_DRAG_REPORT_TEMPLATE_VERSION;
   }): Promise<{ report: unknown; pdfBytes: Uint8Array }>;
 };
@@ -85,6 +96,14 @@ export const EMAIL_PROVIDER_EVENT_TRANSITION_MATRIX: Record<
   Record<EmailProviderEventType, ProviderEventTransition>
 > = {
   PENDING: {
+    accepted: "EVIDENCE_ONLY",
+    queued: "EVIDENCE_ONLY",
+    sent: "EVIDENCE_ONLY",
+    delivered: "EVIDENCE_ONLY",
+    hard_bounce: "EVIDENCE_ONLY",
+    failed: "EVIDENCE_ONLY",
+  },
+  SUBMITTING: {
     accepted: "EVIDENCE_ONLY",
     queued: "EVIDENCE_ONLY",
     sent: "EVIDENCE_ONLY",
@@ -167,6 +186,13 @@ export type RefundProviderEvent = {
 export type RefundOwnershipResult =
   | { disposition: "acquired"; order: OpsDragOrder; leaseOwner: string; idempotencyKey: string }
   | { disposition: "duplicate"; order: OpsDragOrder; leaseOwner: string; idempotencyKey: string };
+
+export type DeliverySubmissionOwnershipResult = {
+  order: OpsDragOrder;
+  attemptNumber: number;
+  leaseOwner: string;
+  idempotencyKey: string;
+};
 
 export type OrderTokenAction = "results" | "redelivery" | "refund";
 
@@ -260,12 +286,15 @@ function initializeAutomation(order: OpsDragOrder): OpsDragAutomationState {
       report_sha256: null,
       pdf_sha256: null,
       validated_at: null,
+      artifact: null,
     },
     delivery: {
       status: "PENDING",
       attempts: 0,
       max_attempts: OPS_DRAG_REPORT_DELIVERY_MAX_ATTEMPTS,
       provider_message_id: null,
+      submission_lease_owner: null,
+      submission_idempotency_key: null,
       delivered_at: null,
     },
     refund: {
@@ -340,7 +369,9 @@ export function validateGeneratedReport(
   if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
     throw new Error("Generated report must be an object");
   }
-  if (pdfBytes.byteLength === 0) throw new Error("Generated report PDF must not be empty");
+  if (pdfBytes.byteLength === 0 || pdfBytes.byteLength > OPS_DRAG_REPORT_MAX_PDF_BYTES) {
+    throw new Error("Generated report PDF size is invalid");
+  }
   const value = candidate as Record<string, unknown>;
   assertExactFields(value);
   const sevenDaySequence = requireStringArray(value.seven_day_sequence, "seven_day_sequence", 7, 7);
@@ -374,6 +405,7 @@ export function validateGeneratedReport(
 export function startGenerationAttempt(order: OpsDragOrder, recordedAt: string): OpsDragOrder {
   const next = cloneWithAutomation(order);
   if (next.automation.terminal_disposition) throw new Error("Terminal orders cannot start generation");
+  if (next.automation.refund.status !== "NOT_REQUIRED") throw new Error("Refund-path orders cannot start generation");
   if (next.automation.generation.status === "VALIDATED") return order;
   if (next.automation.generation.status !== "PENDING" && next.automation.generation.status !== "RETRYABLE") {
     throw new Error(`Generation cannot start from ${next.automation.generation.status}`);
@@ -419,6 +451,7 @@ export function admitGeneratedReport(
 ): OpsDragOrder {
   const validated = validateGeneratedReport(order, candidate, pdfBytes);
   const next = cloneWithAutomation(order);
+  if (next.automation.refund.status !== "NOT_REQUIRED") throw new Error("Refund-path orders cannot admit reports");
   if (next.automation.generation.status !== "IN_PROGRESS" || next.automation.generation.attempts === 0) {
     throw new Error("Report admission requires an active generation attempt");
   }
@@ -426,6 +459,13 @@ export function admitGeneratedReport(
   next.automation.generation.report_sha256 = validated.reportSha256;
   next.automation.generation.pdf_sha256 = validated.pdfSha256;
   next.automation.generation.validated_at = recordedAt;
+  next.automation.generation.artifact = {
+    storage: "ORDER_METADATA_INLINE_V1",
+    filename: OPS_DRAG_REPORT_PDF_FILENAME,
+    pdf_base64: Buffer.from(pdfBytes).toString("base64"),
+    report_sha256: validated.reportSha256,
+    pdf_sha256: validated.pdfSha256,
+  };
   next.automation.attempts.push(
     createAttempt(order, "GENERATION", next.automation.generation.attempts, "VALIDATED", recordedAt, null)
   );
@@ -439,6 +479,37 @@ export function admitGeneratedReport(
   });
 }
 
+export function readPersistedReportArtifact(order: OpsDragOrder): PersistedReportArtifact {
+  const automation = initializeAutomation(order);
+  const artifact = automation.generation.artifact;
+  if (automation.generation.status !== "VALIDATED" || !artifact) {
+    throw new Error("A validated persisted report artifact is required");
+  }
+  if (
+    artifact.storage !== "ORDER_METADATA_INLINE_V1" ||
+    artifact.filename !== OPS_DRAG_REPORT_PDF_FILENAME ||
+    artifact.report_sha256 !== automation.generation.report_sha256 ||
+    artifact.pdf_sha256 !== automation.generation.pdf_sha256
+  ) {
+    throw new Error("Persisted report artifact binding mismatch");
+  }
+  const pdfBytes = Buffer.from(artifact.pdf_base64, "base64");
+  if (
+    pdfBytes.byteLength === 0 ||
+    pdfBytes.byteLength > OPS_DRAG_REPORT_MAX_PDF_BYTES ||
+    pdfBytes.toString("base64") !== artifact.pdf_base64 ||
+    createHash("sha256").update(pdfBytes).digest("hex") !== artifact.pdf_sha256
+  ) {
+    throw new Error("Persisted report artifact failed integrity validation");
+  }
+  return {
+    filename: artifact.filename,
+    pdfBytes,
+    reportSha256: artifact.report_sha256,
+    pdfSha256: artifact.pdf_sha256,
+  };
+}
+
 export function startDeliveryAttempt(
   order: OpsDragOrder,
   providerMessageId: string,
@@ -446,15 +517,29 @@ export function startDeliveryAttempt(
 ): OpsDragOrder {
   const next = cloneWithAutomation(order);
   if (next.automation.terminal_disposition) throw new Error("Terminal orders cannot start delivery");
+  if (next.automation.refund.status !== "NOT_REQUIRED") throw new Error("Refund-path orders cannot start delivery");
   if (next.automation.generation.status !== "VALIDATED") throw new Error("Delivery requires a validated report");
-  if (next.automation.delivery.status !== "PENDING" && next.automation.delivery.status !== "RETRYABLE") {
+  if (
+    next.automation.delivery.status === "SUBMITTED" &&
+    next.automation.delivery.provider_message_id === providerMessageId
+  ) {
+    return order;
+  }
+  if (
+    next.automation.delivery.status !== "PENDING" &&
+    next.automation.delivery.status !== "RETRYABLE" &&
+    next.automation.delivery.status !== "SUBMITTING"
+  ) {
     throw new Error(`Delivery cannot start from ${next.automation.delivery.status}`);
   }
-  if (next.automation.delivery.attempts >= next.automation.delivery.max_attempts) {
-    throw new Error("Delivery retry budget exhausted");
+  let attemptNumber = next.automation.delivery.attempts;
+  if (next.automation.delivery.status !== "SUBMITTING") {
+    if (attemptNumber >= next.automation.delivery.max_attempts) throw new Error("Delivery retry budget exhausted");
+    attemptNumber += 1;
+    next.automation.delivery.attempts = attemptNumber;
+  } else if (!next.automation.delivery.submission_lease_owner || !next.automation.delivery.submission_idempotency_key) {
+    throw new Error("Delivery submission lease binding is missing");
   }
-  const attemptNumber = next.automation.delivery.attempts + 1;
-  next.automation.delivery.attempts = attemptNumber;
   next.automation.delivery.status = "SUBMITTED";
   next.automation.delivery.provider_message_id = requireNonEmptyString(providerMessageId, "providerMessageId");
   next.automation.attempts.push(createAttempt(order, "DELIVERY", attemptNumber, "SUBMITTED", recordedAt, null));
@@ -463,6 +548,88 @@ export function startDeliveryAttempt(
     provider_message_id: providerMessageId,
     delivery_confirmation_due_at: next.automation.sla.delivery_confirmation_due_at,
   });
+}
+
+export function claimDeliverySubmissionAttempt(
+  order: OpsDragOrder,
+  recordedAt: string
+): DeliverySubmissionOwnershipResult {
+  const next = cloneWithAutomation(order);
+  if (next.automation.terminal_disposition) throw new Error("Terminal orders cannot claim delivery submission");
+  if (next.automation.refund.status !== "NOT_REQUIRED") throw new Error("Refund-path orders cannot claim delivery submission");
+  if (next.automation.generation.status !== "VALIDATED") throw new Error("Delivery submission requires a validated report");
+  if (next.automation.delivery.status === "SUBMITTING") {
+    if (!next.automation.delivery.submission_lease_owner || !next.automation.delivery.submission_idempotency_key) {
+      throw new Error("Delivery submission lease binding is missing");
+    }
+    return {
+      order,
+      attemptNumber: next.automation.delivery.attempts,
+      leaseOwner: next.automation.delivery.submission_lease_owner,
+      idempotencyKey: next.automation.delivery.submission_idempotency_key,
+    };
+  }
+  if (next.automation.delivery.status !== "PENDING" && next.automation.delivery.status !== "RETRYABLE") {
+    throw new Error(`Delivery submission cannot be claimed from ${next.automation.delivery.status}`);
+  }
+  if (next.automation.delivery.attempts >= next.automation.delivery.max_attempts) {
+    throw new Error("Delivery retry budget exhausted");
+  }
+  const attemptNumber = next.automation.delivery.attempts + 1;
+  const idempotencyKey = `ops-drag:${order.order_id}:delivery:${attemptNumber}:v1`;
+  const leaseOwner = `del_${sha256(`${order.order_id}|${idempotencyKey}|v1`).slice(0, 32)}`;
+  next.automation.delivery.status = "SUBMITTING";
+  next.automation.delivery.attempts = attemptNumber;
+  next.automation.delivery.submission_lease_owner = leaseOwner;
+  next.automation.delivery.submission_idempotency_key = idempotencyKey;
+  next.automation.attempts.push(createAttempt(order, "DELIVERY", attemptNumber, "STARTED", recordedAt, null));
+  const updated = appendAutomationReceipt(next.order, "DELIVERY_ATTEMPT_RECORDED", recordedAt, {
+    attempt_number: attemptNumber,
+    state: "SUBMITTING",
+    delivery_lease_owner: leaseOwner,
+    delivery_idempotency_key: idempotencyKey,
+  });
+  return { order: updated, attemptNumber, leaseOwner, idempotencyKey };
+}
+
+export function recordDeliverySubmissionFailure(
+  order: OpsDragOrder,
+  attemptNumber: number,
+  failureCode: string,
+  recordedAt: string
+): OpsDragOrder {
+  const next = cloneWithAutomation(order);
+  if (next.automation.terminal_disposition || next.automation.refund.status !== "NOT_REQUIRED") return order;
+  if (
+    next.automation.delivery.status !== "PENDING" &&
+    next.automation.delivery.status !== "RETRYABLE" &&
+    next.automation.delivery.status !== "SUBMITTING"
+  ) {
+    return order;
+  }
+  if (next.automation.delivery.status === "SUBMITTING") {
+    if (next.automation.delivery.attempts !== attemptNumber) return order;
+  } else if (next.automation.delivery.attempts >= attemptNumber) return order;
+  if (
+    next.automation.delivery.status !== "SUBMITTING" &&
+    attemptNumber !== next.automation.delivery.attempts + 1
+  ) {
+    throw new Error("Delivery failure attempt binding mismatch");
+  }
+  next.automation.delivery.attempts = attemptNumber;
+  const exhausted = attemptNumber >= next.automation.delivery.max_attempts;
+  next.automation.delivery.status = exhausted ? "FAILED" : "RETRYABLE";
+  next.automation.attempts.push(
+    createAttempt(order, "DELIVERY", attemptNumber, "FAILED", recordedAt, failureCode)
+  );
+  let updated = appendAutomationReceipt(next.order, "DELIVERY_ATTEMPT_RECORDED", recordedAt, {
+    attempt_number: attemptNumber,
+    state: exhausted ? "FAILED" : "RETRYABLE",
+    provider_message_id: null,
+    failure_code: failureCode,
+  });
+  if (exhausted) updated = requireRefund(updated, "DELIVERY_RETRY_EXHAUSTED", recordedAt);
+  return updated;
 }
 
 function setTerminal(
@@ -489,6 +656,7 @@ function requireRefund(order: OpsDragOrder, reason: string, recordedAt: string):
   if (next.automation.terminal_disposition === "DELIVERED") throw new Error("Delivered orders cannot require refunds");
   if (next.automation.terminal_disposition === "REFUNDED") return order;
   if (next.automation.refund.status !== "NOT_REQUIRED") return order;
+  if (next.automation.delivery.status === "SUBMITTING") return order;
   next.automation.refund.status = "REQUIRED";
   return appendAutomationReceipt(next.order, "REFUND_REQUIRED", recordedAt, {
     reason,

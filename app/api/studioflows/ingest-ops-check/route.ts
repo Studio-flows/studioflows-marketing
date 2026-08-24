@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { resolveBookCallUrl } from "@/lib/lead-attribution";
+import { buildOpsAuditBookUrl } from "@/lib/ops-audit-handoff";
 
 function pickAttribution(body: Record<string, unknown>) {
   const pqScoreRaw = body.pq_score;
@@ -87,19 +87,18 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Unable to start booking right now" }, { status: 502 });
   }
 
-  const leadId = ingestBody.lead_id as string | undefined;
-  const bookCallUrl = resolveBookCallUrl({
-    ingestBookCallUrl: typeof ingestBody.book_call_url === "string" ? ingestBody.book_call_url : null,
+  const leadId = typeof ingestBody.lead_id === "string" ? ingestBody.lead_id.trim() : "";
+  const bookCallUrl = buildOpsAuditBookUrl({
     leadId,
     from: "homepage-ops-check-qualified",
   });
 
-  if (!bookCallUrl) {
+  if (!leadId || !bookCallUrl) {
     return NextResponse.json({ error: "Unable to start booking right now" }, { status: 502 });
   }
 
   return NextResponse.json({
-    lead_id: leadId ?? null,
+    lead_id: leadId,
     book_call_url: bookCallUrl,
   });
 }

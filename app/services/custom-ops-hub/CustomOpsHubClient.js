@@ -12,7 +12,6 @@ import {
   loadPreQualSession,
   mergeLeadAttribution,
   parseLeadAttribution,
-  resolveQualifiedOpsAuditRedirect,
   toIngestAttribution,
   toIngestPreQual,
 } from "../../../lib/lead-attribution";
@@ -646,13 +645,10 @@ export default function CustomOpsHubClient() {
           application_id: "custom_ops_hub",
           source: "/services/custom-ops-hub",
         });
-        const opsAuditBookUrl = resolveQualifiedOpsAuditRedirect(
-          result,
-          attribution,
-          answers.workEmail
-        );
-        if (opsAuditBookUrl) {
-          window.location.assign(opsAuditBookUrl);
+        const opsTeardownUrl =
+          typeof result.ops_teardown_url === "string" ? result.ops_teardown_url.trim() : "";
+        if (opsTeardownUrl) {
+          window.location.assign(opsTeardownUrl);
           return;
         }
 

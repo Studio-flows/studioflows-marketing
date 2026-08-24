@@ -9,7 +9,6 @@ import {
   splitName,
   tierFromBudget,
 } from "@/lib/qualify-custom-ops-hub";
-import { resolveBookCallUrl } from "@/lib/lead-attribution";
 import { buildOpsTeardownThankYouUrl } from "@/lib/ops-audit-handoff";
 import { createMarketingSupabaseServerClient } from "@/lib/supabase-server";
 
@@ -126,49 +125,52 @@ export async function POST(req: NextRequest) {
   const token = process.env.STUDIOFLOWS_INGEST_TOKEN;
   const apikey = process.env.STUDIOFLOWS_INGEST_APIKEY ?? process.env.SUPABASE_ANON_KEY;
 
-  let osLeadId: string | undefined;
-  let ingestBody: Record<string, unknown> = {};
-  if (ingestUrl && token && apikey) {
-    try {
-      const ingestRes = await fetch(`${ingestUrl}/consulting-ingest-lead`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          apikey,
-          "x-studioflows-tenant-slug": tenantSlug,
-          "x-studioflows-ingest-token": token,
-        },
-        body: JSON.stringify({
-          email,
-          first_name,
-          last_name,
-          source: "studioflows.co/custom-ops-hub",
-          landing_path: attribution.landing_path,
-          consent: true,
-          form_name: "custom_ops_hub_qualifier",
-          form_payload: raw,
-          metadata: {
-            path: "/services/custom-ops-hub",
-            qualification_score: score,
-            qualification_reasons: reasons,
-            qualification_version: "v1",
-            recommended_tier: tier,
-            supabase_lead_id: supabaseLeadId,
-            full_qualifier_complete: true,
-            full_qualifier_payload: raw,
-            ...attribution,
-            ...(preQual ? { pre_qual: preQual } : {}),
-          },
-        }),
-      });
+  if (!ingestUrl || !token || !apikey) {
+    return NextResponse.json({ error: "Ops booking handoff is not configured" }, { status: 503 });
+  }
 
-      ingestBody = (await ingestRes.json().catch(() => ({}))) as Record<string, unknown>;
-      if (ingestRes.ok) {
-        osLeadId = ingestBody.lead_id as string | undefined;
-      }
-    } catch {
-      // Swallow: the lead is safely stored in Supabase; OS forward is optional.
-    }
+  let ingestRes: Response;
+  try {
+    ingestRes = await fetch(`${ingestUrl}/consulting-ingest-lead`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        apikey,
+        "x-studioflows-tenant-slug": tenantSlug,
+        "x-studioflows-ingest-token": token,
+      },
+      body: JSON.stringify({
+        email,
+        first_name,
+        last_name,
+        source: "studioflows.co/custom-ops-hub",
+        landing_path: attribution.landing_path,
+        consent: true,
+        form_name: "custom_ops_hub_qualifier",
+        form_payload: raw,
+        metadata: {
+          path: "/services/custom-ops-hub",
+          qualification_score: score,
+          qualification_reasons: reasons,
+          qualification_version: "v1",
+          recommended_tier: tier,
+          supabase_lead_id: supabaseLeadId,
+          full_qualifier_complete: true,
+          full_qualifier_payload: raw,
+          ...attribution,
+          ...(preQual ? { pre_qual: preQual } : {}),
+        },
+      }),
+    });
+  } catch {
+    return NextResponse.json({ error: "Ops booking handoff is unavailable" }, { status: 502 });
+  }
+
+  const ingestBody = (await ingestRes.json().catch(() => ({}))) as Record<string, unknown>;
+  const osLeadId = typeof ingestBody.lead_id === "string" ? ingestBody.lead_id.trim() : "";
+
+  if (!ingestRes.ok || !osLeadId) {
+    return NextResponse.json({ error: "Ops booking handoff could not be proven" }, { status: 502 });
   }
 
   if (osLeadId && osLeadId !== supabaseLeadId) {
@@ -182,16 +184,8 @@ export async function POST(req: NextRequest) {
       .eq("id", supabaseLeadId);
   }
 
-  const leadId = osLeadId ?? supabaseLeadId;
-  const bookFrom = attribution.src === "homepage-diagnosis" ? "homepage-diagnosis" : handoffFrom;
-  const bookCallUrl = resolveBookCallUrl({
-    ingestBookCallUrl: typeof ingestBody.book_call_url === "string" ? ingestBody.book_call_url : null,
-    leadId,
-    email,
-    from: bookFrom,
-  });
   const opsTeardownUrl = buildOpsTeardownThankYouUrl({
-    leadId,
+    leadId: osLeadId,
     email,
     from: handoffFrom,
     siteOrigin: process.env.NEXT_PUBLIC_SITE_URL ?? "https://www.studioflows.co",
@@ -200,10 +194,9 @@ export async function POST(req: NextRequest) {
     qualified: true,
     score,
     reasons,
-    lead_id: leadId,
-    book_call_url: bookCallUrl,
+    lead_id: osLeadId,
     ops_teardown_url: opsTeardownUrl,
-    redirect_url: bookCallUrl,
+    redirect_url: opsTeardownUrl,
     recommended_tier: tier,
   });
 }

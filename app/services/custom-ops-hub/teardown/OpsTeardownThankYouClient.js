@@ -73,16 +73,7 @@ export default function OpsTeardownThankYouClient({ initialSearch = "" }) {
   }, [leadId, email]);
 
   const siteOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
-
-  const bookCallUrl = leadId
-    ? buildOpsAuditBookUrl({
-        leadId,
-        email,
-        from,
-        platformRoot:
-          process.env.NEXT_PUBLIC_STUDIOFLOWS_PLATFORM_URL ?? "https://os.studioflows.co",
-      })
-    : null;
+  const bookCallUrl = leadId ? buildOpsAuditBookUrl({ leadId, email, from }) : null;
 
   const pdfDownloadUrl =
     sheetState === "ready" && (leadId || email)

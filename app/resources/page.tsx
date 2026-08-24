@@ -43,6 +43,26 @@ const RESOURCES = [
   },
   {
     number: "03",
+    type: "Handoff guide",
+    title: "Approved Quote Handoff",
+    description:
+      "Carry accepted scope, assumptions, readiness conditions, and decision ownership from the quote into scheduling.",
+    href: "/resources/approved-quote-handoff",
+    cta: "Build the release packet",
+    featured: true,
+  },
+  {
+    number: "04",
+    type: "Change-control guide",
+    title: "Scope Change Process",
+    description:
+      "Trace an approved change through the schedule, work order, crew brief, customer notice, and billing instruction.",
+    href: "/resources/scope-change-propagation",
+    cta: "Trace the change",
+    featured: true,
+  },
+  {
+    number: "05",
     type: "Diagnostic",
     title: "Silent Collapse Diagnostic",
     description:
@@ -52,7 +72,7 @@ const RESOURCES = [
     featured: true,
   },
   {
-    number: "04",
+    number: "06",
     type: "Operating model",
     title: "Real Estate Media OS",
     description:
@@ -62,7 +82,7 @@ const RESOURCES = [
     featured: true,
   },
   {
-    number: "05",
+    number: "07",
     type: "Guided audit",
     title: "Ops Teardown",
     description:
@@ -72,7 +92,7 @@ const RESOURCES = [
     featured: false,
   },
   {
-    number: "06",
+    number: "08",
     type: "Execution system",
     title: "Vessa",
     description:
@@ -82,7 +102,7 @@ const RESOURCES = [
     featured: false,
   },
   {
-    number: "07",
+    number: "09",
     type: "Waitlist",
     title: "StudioFlows OS",
     description:
@@ -166,7 +186,7 @@ export default function ResourcesPage() {
                 Start with a diagnosis. Follow the evidence.
               </h2>
             </div>
-            <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/35">07 public resources</p>
+            <p className="font-mono text-xs uppercase tracking-[0.2em] text-white/35">09 public resources</p>
           </div>
 
           <div className="mt-12 grid gap-px overflow-hidden rounded-[1.75rem] border border-white/10 bg-white/10 lg:grid-cols-2">

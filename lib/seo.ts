@@ -42,6 +42,20 @@ export const PUBLIC_ROUTE_REGISTRY = [
     priority: 0.85,
   },
   {
+    path: "/resources/approved-quote-handoff",
+    title: "Approved Quote Handoff",
+    description: "A quote-to-job release packet for turning customer approval into ready work.",
+    changeFrequency: "monthly",
+    priority: 0.84,
+  },
+  {
+    path: "/resources/scope-change-propagation",
+    title: "Scope Change Process",
+    description: "A downstream change trace for keeping service jobs on one approved version.",
+    changeFrequency: "monthly",
+    priority: 0.83,
+  },
+  {
     path: "/",
     title: "StudioFlows",
     description: "Execution infrastructure for owner-dependent service businesses.",

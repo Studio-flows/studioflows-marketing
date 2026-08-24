@@ -19,6 +19,7 @@ import {
   toIngestPreQual,
 } from "../lib/lead-attribution.js";
 import { toCanonicalLeadAttribution } from "../lib/real-estate-media/remLeadAttribution.js";
+import { fetchLeadRow } from "../lib/ops-teardown/load-teardown-sheet.js";
 
 const LEAD_ID = "11111111-2222-4333-8444-555555555555";
 const EMAIL = "founder@acme.example";
@@ -158,13 +159,75 @@ const teardownClientSource = readFileSync(
 );
 assert.match(teardownClientSource, /buildOpsAuditBookUrl\(\{ leadId, email, from \}\)/);
 assert.doesNotMatch(teardownClientSource, /book_call_url/);
+assert.match(
+  teardownClientSource,
+  /if \(!nextSheet \|\| \(leadId && nextSheet\.lead_id !== leadId\)\)/
+);
+assert.match(
+  teardownClientSource,
+  /sheetState === "ready" && sheet && leadId && sheet\.lead_id === leadId/
+);
+
+function createLeadLookupSupabase({ byId = null, byOsLead = null, byEmail = null } = {}) {
+  const calls = [];
+  let lookup = null;
+  const query = {
+    select() {
+      return this;
+    },
+    eq(column, value) {
+      calls.push({ method: "eq", column, value });
+      lookup = column === "id" ? byId : byEmail;
+      return this;
+    },
+    filter(column, operator, value) {
+      calls.push({ method: "filter", column, operator, value });
+      lookup = byOsLead;
+      return this;
+    },
+    order() {
+      return this;
+    },
+    limit() {
+      return this;
+    },
+    async maybeSingle() {
+      return { data: lookup, error: null };
+    },
+  };
+  return {
+    calls,
+    from() {
+      return query;
+    },
+  };
+}
+
+// OT-A6: a supplied lead ID is identity-authoritative and can never fall back to email.
+const missingCanonicalLookup = createLeadLookupSupabase({ byEmail: { id: "email-row" } });
+assert.equal(await fetchLeadRow(missingCanonicalLookup, LEAD_ID, EMAIL), null);
+assert.equal(
+  missingCanonicalLookup.calls.some((call) => call.method === "eq" && call.column === "work_email"),
+  false
+);
+
+const invalidCanonicalLookup = createLeadLookupSupabase({ byEmail: { id: "email-row" } });
+assert.equal(await fetchLeadRow(invalidCanonicalLookup, "not-a-platform-lead-id", EMAIL), null);
+assert.equal(invalidCanonicalLookup.calls.length, 0);
+
+const emailOnlyLookup = createLeadLookupSupabase({ byEmail: { id: "email-row" } });
+assert.deepEqual(await fetchLeadRow(emailOnlyLookup, null, EMAIL), { id: "email-row" });
+assert.equal(
+  emailOnlyLookup.calls.some((call) => call.method === "eq" && call.column === "work_email"),
+  true
+);
 
 console.log(
   JSON.stringify(
     {
       gate: "ops_teardown_session_handoff_v1",
       state: "CODE_PASS",
-      checks_passed: 33,
+      checks_passed: 41,
       continuation_url: continuationUrl,
       thank_you_url: thankYouUrl,
       book_call_url: bookUrl,

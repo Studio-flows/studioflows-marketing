@@ -62,6 +62,9 @@ export default function OpsTeardownThankYouClient({ initialSearch = "" }) {
         return body.sheet;
       })
       .then((nextSheet) => {
+        if (!nextSheet || (leadId && nextSheet.lead_id !== leadId)) {
+          throw new Error("Unable to verify your Ops Teardown identity.");
+        }
         setSheet(nextSheet);
         setSheetState("ready");
       })
@@ -73,7 +76,10 @@ export default function OpsTeardownThankYouClient({ initialSearch = "" }) {
   }, [leadId, email]);
 
   const siteOrigin = typeof window !== "undefined" ? window.location.origin : undefined;
-  const bookCallUrl = leadId ? buildOpsAuditBookUrl({ leadId, email, from }) : null;
+  const bookCallUrl =
+    sheetState === "ready" && sheet && leadId && sheet.lead_id === leadId
+      ? buildOpsAuditBookUrl({ leadId, email, from })
+      : null;
 
   const pdfDownloadUrl =
     sheetState === "ready" && (leadId || email)

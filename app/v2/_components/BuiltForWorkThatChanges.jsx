@@ -163,7 +163,6 @@ function OperationLine({ active, reducedMotion }) {
       </motion.div>
 
       <motion.div
-        className="absolute right-[6.5%] top-[43px] translate-x-1/2"
         animate={{
           borderColor: exceptionResolved ? "rgba(68,141,101,.55)" : "rgba(255,255,255,.10)",
           backgroundColor: exceptionResolved ? "rgba(16,39,28,.96)" : "rgba(13,18,24,.96)",

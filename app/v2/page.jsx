@@ -1,4 +1,5 @@
 import Link from "next/link";
+import WhatStudioFlowsIs from "./_components/WhatStudioFlowsIs";
 import {
   ArrowRight,
   CalendarDays,
@@ -40,7 +41,7 @@ const businessExamples = [
 
 const navItems = [
   { label: "Product", href: "#product" },
-  { label: "How it works", href: "#product" },
+  { label: "How it works", href: "#what-it-is" },
   { label: "Businesses", href: "#business-types" },
 ];
 
@@ -493,6 +494,8 @@ export default function V2HomePage() {
           </div>
         </div>
       </section>
+
+      <WhatStudioFlowsIs />
 
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#07090C] to-transparent" />
     </main>

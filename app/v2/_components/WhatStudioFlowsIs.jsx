@@ -129,7 +129,14 @@ function DesktopJourney() {
 
   useMotionValueEvent(scrollYProgress, "change", (value) => {
     if (reducedMotion) return;
-    const next = Math.min(STAGES.length - 1, Math.max(0, Math.floor(value * STAGES.length)));
+
+    // Hold Intake on screen longer so the first state has time to register
+    // before the journey advances.
+    let next = 0;
+    if (value >= 0.36) next = 1;
+    if (value >= 0.59) next = 2;
+    if (value >= 0.81) next = 3;
+
     setActive((current) => (current === next ? current : next));
   });
 

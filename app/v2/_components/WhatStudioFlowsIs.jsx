@@ -23,8 +23,8 @@ const STAGES = [
   {
     label: "Intake",
     eyebrow: "New customer request",
-    title: "Water quality service",
-    meta: "Seaside Commons",
+    title: "Customer work #2048",
+    meta: "Northstar Services",
     status: "Ready to coordinate",
     icon: MessageSquareText,
     details: ["Service selected", "Preferred date", "Customer details"],
@@ -33,8 +33,8 @@ const STAGES = [
   {
     label: "Coordinate",
     eyebrow: "Work scheduled",
-    title: "Water quality service",
-    meta: "Seaside Commons",
+    title: "Customer work #2048",
+    meta: "Northstar Services",
     status: "Team confirmed",
     icon: CalendarDays,
     details: ["Owner assigned", "Time confirmed", "Missing info resolved"],
@@ -43,8 +43,8 @@ const STAGES = [
   {
     label: "Deliver",
     eyebrow: "Work in progress",
-    title: "Water quality service",
-    meta: "Seaside Commons",
+    title: "Customer work #2048",
+    meta: "Northstar Services",
     status: "In motion",
     icon: UserRoundCheck,
     details: ["Team active", "Evidence attached", "Customer updated"],
@@ -53,8 +53,8 @@ const STAGES = [
   {
     label: "Complete",
     eyebrow: "Completed",
-    title: "Water quality service",
-    meta: "Seaside Commons",
+    title: "Customer work #2048",
+    meta: "Northstar Services",
     status: "Closed out",
     icon: CheckCircle2,
     details: ["Outcome confirmed", "Closeout recorded", "History preserved"],

@@ -25,19 +25,23 @@ export const metadata = {
   },
 };
 
-const workTypes = [
-  "Projects",
-  "Jobs",
-  "Cases",
-  "Appointments",
-  "Service Requests",
-  "Fulfillment",
+const businessExamples = [
+  "general contractors",
+  "law firms",
+  "HVAC companies",
+  "managed IT providers",
+  "property managers",
+  "agencies & consultants",
+  "real estate media teams",
+  "accounting firms",
+  "photographers",
+  "cleaning companies",
 ];
 
 const navItems = [
   { label: "Product", href: "#product" },
   { label: "How it works", href: "#product" },
-  { label: "Work types", href: "#work-types" },
+  { label: "Businesses", href: "#business-types" },
 ];
 
 function BrandMark() {
@@ -325,10 +329,35 @@ export default function V2HomePage() {
           from { transform: scaleX(.72); opacity: .55; }
           to { transform: scaleX(1); opacity: 1; }
         }
+        @keyframes v2BusinessCycle {
+          0%, 7% {
+            opacity: 0;
+            transform: translateY(7px);
+            filter: blur(2px);
+          }
+          10%, 17% {
+            opacity: 1;
+            transform: translateY(0);
+            filter: blur(0);
+          }
+          20%, 100% {
+            opacity: 0;
+            transform: translateY(-7px);
+            filter: blur(2px);
+          }
+        }
         .v2-live-dot { animation: v2Pulse 2.8s ease-in-out infinite; }
         .v2-progress { transform-origin: left; animation: v2Progress 1.2s cubic-bezier(.2,.8,.2,1) both; }
+        .v2-business-example {
+          opacity: 0;
+          animation: v2BusinessCycle 24s cubic-bezier(.22,.75,.2,1) infinite;
+          animation-delay: calc(var(--business-index) * 2.4s);
+          will-change: opacity, transform, filter;
+        }
         @media (prefers-reduced-motion: reduce) {
-          .v2-live-dot, .v2-progress { animation: none; }
+          .v2-live-dot, .v2-progress, .v2-business-example { animation: none; }
+          .v2-business-example { display: none; opacity: 1; transform: none; filter: none; }
+          .v2-business-example:first-child { display: inline; }
         }
       `}</style>
 
@@ -409,17 +438,26 @@ export default function V2HomePage() {
               </Link>
             </div>
 
-            <div id="work-types" className="mt-10 border-t border-white/[0.055] pt-5">
-              <p className="mb-3 text-[9px] font-medium uppercase tracking-[0.17em] text-[#4F5965]">
-                Built for the shape of your work
+            <div id="business-types" className="mt-10 border-t border-white/[0.055] pt-5">
+              <p className="text-[9px] font-medium uppercase tracking-[0.17em] text-[#4F5965]">
+                Built for service businesses like
               </p>
-              <div className="flex max-w-[560px] flex-wrap gap-x-4 gap-y-2">
-                {workTypes.map((item) => (
-                  <span key={item} className="text-[11px] text-[#707B86]">
-                    {item}
+
+              <div className="relative mt-2.5 h-8 overflow-hidden" aria-label="Examples of service businesses StudioFlows supports">
+                {businessExamples.map((business, index) => (
+                  <span
+                    key={business}
+                    className="v2-business-example absolute left-0 top-0 text-[17px] font-medium tracking-[-0.025em] text-[#C8D2DD] sm:text-[18px]"
+                    style={{ "--business-index": index }}
+                  >
+                    {business}
                   </span>
                 ))}
               </div>
+
+              <p className="mt-2 text-[10px] leading-5 text-[#56616D]">
+                Projects · cases · appointments · work orders · service requests · fulfillment
+              </p>
             </div>
           </div>
 

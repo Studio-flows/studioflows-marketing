@@ -124,7 +124,9 @@ function DesktopJourney() {
 
   const { scrollYProgress } = useScroll({
     target: journeyRef,
-    offset: ["start 78%", "end 32%"],
+    // Do not begin advancing the journey while Section 2 is still entering.
+    // Let the visual settle near the center of the viewport first.
+    offset: ["center 55%", "end 20%"],
   });
 
   useMotionValueEvent(scrollYProgress, "change", (value) => {

@@ -110,10 +110,13 @@ function WorkRow({ icon, title, meta, status, tone = "neutral" }) {
   );
 }
 
+// Temporary illustrative product shell for the marketing preview.
+// Replace with approved real Portal V2 product media before homepage cutover.
 function ProductShell() {
   return (
     <div id="product" className="relative mx-auto w-full max-w-[820px] lg:max-w-none">
-      <div className="absolute -inset-x-10 -inset-y-14 -z-10 bg-[radial-gradient(circle_at_50%_50%,rgba(72,124,178,.13),transparent_62%)] blur-2xl" />
+      <div className="absolute -inset-x-16 -inset-y-20 -z-10 bg-[radial-gradient(circle_at_42%_38%,rgba(34,211,238,.10),transparent_36%),radial-gradient(circle_at_72%_62%,rgba(168,85,247,.11),transparent_42%),radial-gradient(circle_at_58%_50%,rgba(219,39,119,.07),transparent_55%)] blur-3xl" />
+      <div className="pointer-events-none absolute -inset-[1px] -z-[1] rounded-[27px] bg-[linear-gradient(135deg,rgba(34,211,238,.18),rgba(168,85,247,.08)_42%,rgba(219,39,119,.14)_72%,rgba(255,255,255,.04))] opacity-80 blur-[1px]" />
 
       <div className="relative overflow-hidden rounded-[26px] border border-white/[0.09] bg-[#080B0F] shadow-[0_40px_120px_rgba(0,0,0,.48),0_0_0_1px_rgba(255,255,255,.015)]">
         <div className="flex h-11 items-center justify-between border-b border-white/[0.055] bg-[#0A0D11] px-4">
@@ -329,6 +332,14 @@ export default function V2HomePage() {
           from { transform: scaleX(.72); opacity: .55; }
           to { transform: scaleX(1); opacity: 1; }
         }
+        @keyframes v2AuroraOne {
+          0%, 100% { transform: translate3d(0,0,0) scale(1); opacity: .75; }
+          50% { transform: translate3d(-28px,22px,0) scale(1.08); opacity: 1; }
+        }
+        @keyframes v2AuroraTwo {
+          0%, 100% { transform: translate3d(0,0,0) scale(1); opacity: .62; }
+          50% { transform: translate3d(32px,-18px,0) scale(1.12); opacity: .9; }
+        }
         @keyframes v2BusinessCycle {
           0%, 7% {
             opacity: 0;
@@ -346,6 +357,8 @@ export default function V2HomePage() {
             filter: blur(2px);
           }
         }
+        .v2-aurora-one { animation: v2AuroraOne 15s ease-in-out infinite; }
+        .v2-aurora-two { animation: v2AuroraTwo 19s ease-in-out infinite; }
         .v2-live-dot { animation: v2Pulse 2.8s ease-in-out infinite; }
         .v2-progress { transform-origin: left; animation: v2Progress 1.2s cubic-bezier(.2,.8,.2,1) both; }
         .v2-business-example {
@@ -355,22 +368,36 @@ export default function V2HomePage() {
           will-change: opacity, transform, filter;
         }
         @media (prefers-reduced-motion: reduce) {
-          .v2-live-dot, .v2-progress, .v2-business-example { animation: none; }
+          .v2-aurora-one, .v2-aurora-two, .v2-live-dot, .v2-progress, .v2-business-example { animation: none; }
           .v2-business-example { display: none; opacity: 1; transform: none; filter: none; }
           .v2-business-example:first-child { display: inline; }
         }
       `}</style>
 
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_76%_24%,rgba(56,100,145,.13),transparent_34%),radial-gradient(circle_at_18%_6%,rgba(255,255,255,.035),transparent_28%)]" />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_72%_18%,rgba(34,211,238,.10),transparent_27%),radial-gradient(circle_at_83%_36%,rgba(168,85,247,.10),transparent_30%),radial-gradient(circle_at_18%_5%,rgba(219,39,119,.07),transparent_24%),linear-gradient(180deg,#07090C_0%,#080A0E_45%,#07090C_100%)]" />
+
+      <div className="v2-aurora v2-aurora-one pointer-events-none absolute right-[6%] top-[11%] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle,rgba(34,211,238,.13)_0%,rgba(99,102,241,.08)_34%,transparent_68%)] blur-[46px]" />
+      <div className="v2-aurora v2-aurora-two pointer-events-none absolute left-[10%] top-[20%] h-[360px] w-[360px] rounded-full bg-[radial-gradient(circle,rgba(219,39,119,.08)_0%,rgba(168,85,247,.07)_36%,transparent_68%)] blur-[52px]" />
+
       <div
-        className="pointer-events-none absolute inset-0 opacity-[0.09]"
+        className="pointer-events-none absolute inset-0 opacity-[0.10]"
         style={{
           backgroundImage:
             "linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px)",
           backgroundSize: "68px 68px",
-          maskImage: "linear-gradient(to bottom, black, transparent 74%)",
+          maskImage: "linear-gradient(to bottom, black, transparent 76%)",
         }}
       />
+      <div
+        className="pointer-events-none absolute inset-0 opacity-[0.12]"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at center, rgba(255,255,255,.20) 0.6px, transparent 0.8px)",
+          backgroundSize: "22px 22px",
+          maskImage: "radial-gradient(circle at 70% 28%, black 0%, transparent 48%)",
+        }}
+      />
+      <div className="pointer-events-none absolute left-[8%] right-[5%] top-[115px] h-px bg-gradient-to-r from-transparent via-white/[0.08] to-transparent" />
 
       <header className="relative z-20 border-b border-white/[0.045]">
         <div className="mx-auto flex h-[72px] w-full max-w-[1480px] items-center justify-between px-5 sm:px-8 lg:px-10 xl:px-14">
@@ -407,7 +434,7 @@ export default function V2HomePage() {
 
       <section className="relative z-10">
         <div className="mx-auto grid min-h-[calc(100vh-72px)] w-full max-w-[1480px] items-center gap-12 px-5 py-14 sm:px-8 lg:grid-cols-12 lg:gap-8 lg:px-10 lg:py-16 xl:px-14">
-          <div className="lg:col-span-5 lg:pr-7 xl:pr-12">
+          <div className="lg:col-span-5 lg:-translate-y-7 lg:pr-7 xl:pr-12">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-white/[0.07] bg-white/[0.025] px-3 py-1.5 text-[9px] font-semibold uppercase tracking-[0.19em] text-[#748191]">
               <span className="h-1.5 w-1.5 rounded-full bg-[#73AEE6]" />
               Service operations
@@ -415,7 +442,7 @@ export default function V2HomePage() {
 
             <h1 className="max-w-[700px] font-sans text-[46px] font-medium leading-[0.98] tracking-[-0.055em] text-[#F4F6F8] sm:text-[58px] lg:text-[64px] xl:text-[72px]">
               Service operations,
-              <span className="block text-[#9DBDE0]">reimagined for AI.</span>
+              <span className="block bg-[linear-gradient(100deg,#67E8F9_0%,#818CF8_30%,#A855F7_54%,#DB2777_76%,#22D3EE_100%)] bg-clip-text text-transparent [text-shadow:0_0_32px_rgba(168,85,247,.10)]">reimagined for AI.</span>
             </h1>
 
             <p className="mt-7 max-w-[590px] text-[17px] leading-7 text-[#8D97A3] sm:text-[18px]">
@@ -461,7 +488,7 @@ export default function V2HomePage() {
             </div>
           </div>
 
-          <div className="lg:col-span-7 lg:translate-x-4 xl:translate-x-8">
+          <div className="lg:col-span-7 lg:-translate-y-3 lg:translate-x-7 lg:scale-[1.025] lg:origin-left xl:translate-x-10">
             <ProductShell />
           </div>
         </div>

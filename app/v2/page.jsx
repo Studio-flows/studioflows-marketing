@@ -1,6 +1,7 @@
 import Link from "next/link";
 import WhatStudioFlowsIs from "./_components/WhatStudioFlowsIs";
 import BuiltForWorkThatChanges from "./_components/BuiltForWorkThatChanges";
+import CommandReveal from "./_components/CommandReveal";
 import {
   ArrowRight,
   CalendarDays,
@@ -498,6 +499,7 @@ export default function V2HomePage() {
 
       <WhatStudioFlowsIs />
       <BuiltForWorkThatChanges />
+      <CommandReveal />
 
       <div className="pointer-events-none absolute bottom-0 left-0 right-0 h-32 bg-gradient-to-t from-[#07090C] to-transparent" />
     </main>

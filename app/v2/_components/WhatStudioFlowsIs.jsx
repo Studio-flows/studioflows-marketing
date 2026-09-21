@@ -2,284 +2,272 @@
 
 import { useRef, useState } from "react";
 import {
-  AnimatePresence,
   motion,
   useMotionValueEvent,
   useReducedMotion,
   useScroll,
 } from "framer-motion";
 import {
-  ArrowDown,
   CalendarDays,
   CheckCircle2,
-  FileCheck2,
   MessageSquareText,
-  Paperclip,
-  Route,
   UserRoundCheck,
 } from "lucide-react";
 
 const STAGES = [
   {
+    number: "01",
     label: "Intake",
-    eyebrow: "New customer request",
-    title: "Customer work #2048",
-    meta: "Northstar Services",
-    status: "Ready to coordinate",
+    title: "Bring work in.",
+    copy: "Quotes, bookings, intake forms, and requests become real work.",
+    status: "New request",
+    detail: "Customer details captured",
     icon: MessageSquareText,
-    details: ["Service selected", "Preferred date", "Customer details"],
-    note: "Quotes, bookings, intake forms, requests, and service plans become real work.",
+    image:
+      "https://images.unsplash.com/photo-1521579498714-ff08ba4836ab?auto=format&fit=crop&fm=webp&q=78&w=1200",
+    imagePosition: "center",
   },
   {
+    number: "02",
     label: "Coordinate",
-    eyebrow: "Work scheduled",
-    title: "Customer work #2048",
-    meta: "Northstar Services",
-    status: "Team confirmed",
+    title: "Get the details aligned.",
+    copy: "Schedule it, assign ownership, and resolve what is missing.",
+    status: "Owner assigned",
+    detail: "Timing + responsibility clear",
     icon: CalendarDays,
-    details: ["Owner assigned", "Time confirmed", "Missing info resolved"],
-    note: "Schedule the work, assign the right people, and resolve what is missing.",
+    image:
+      "https://images.unsplash.com/photo-1758691736872-61a1f75fe2d5?auto=format&fit=crop&fm=webp&q=78&w=1200",
+    imagePosition: "center 42%",
   },
   {
+    number: "03",
     label: "Deliver",
-    eyebrow: "Work in progress",
-    title: "Customer work #2048",
-    meta: "Northstar Services",
-    status: "In motion",
+    title: "Keep work moving.",
+    copy: "The team, customer updates, evidence, and deliverables stay connected.",
+    status: "In progress",
+    detail: "Work + context stay together",
     icon: UserRoundCheck,
-    details: ["Team active", "Evidence attached", "Customer updated"],
-    note: "Execution, communication, evidence, and deliverables stay connected.",
+    image:
+      "https://images.unsplash.com/photo-1758613655322-8dc7822353f0?auto=format&fit=crop&fm=webp&q=78&w=1200",
+    imagePosition: "center",
   },
   {
+    number: "04",
     label: "Complete",
-    eyebrow: "Completed",
-    title: "Customer work #2048",
-    meta: "Northstar Services",
-    status: "Closed out",
+    title: "Close it out.",
+    copy: "Confirm the outcome and keep the full history attached.",
+    status: "Completed",
+    detail: "Outcome + history preserved",
     icon: CheckCircle2,
-    details: ["Outcome confirmed", "Closeout recorded", "History preserved"],
-    note: "Confirm the result, finish closeout, and preserve what happened.",
+    image:
+      "https://images.unsplash.com/photo-1744858207706-dd827060504d?auto=format&fit=crop&fm=webp&q=78&w=1200",
+    imagePosition: "center",
   },
 ];
 
-function WorkCard({ stage, reducedMotion }) {
+function StageCard({ stage, active = false, desktop = false }) {
   const Icon = stage.icon;
 
   return (
-    <motion.div
-      layout
-      className="w-[248px] rounded-[20px] border border-white/[0.09] bg-[#0B1016]/96 p-4 shadow-[0_24px_75px_rgba(0,0,0,.48),0_0_0_1px_rgba(255,255,255,.015)] backdrop-blur-xl"
-      transition={
-        reducedMotion
-          ? { duration: 0 }
-          : { type: "spring", stiffness: 145, damping: 24, mass: 0.9 }
+    <motion.article
+      animate={
+        desktop
+          ? {
+              opacity: active ? 1 : 0.38,
+              scale: active ? 1 : 0.955,
+            }
+          : undefined
       }
+      transition={{ duration: 0.36, ease: [0.22, 1, 0.36, 1] }}
+      className={[
+        "relative shrink-0 snap-center overflow-hidden rounded-[24px] border border-white/[0.08] bg-[#0B0F14] shadow-[0_28px_80px_rgba(0,0,0,.28)]",
+        desktop ? "w-[520px]" : "w-[82vw] max-w-[360px]",
+      ].join(" ")}
     >
-      <div className="flex items-center justify-between gap-3">
-        <div className="grid h-9 w-9 place-items-center rounded-[11px] border border-white/[0.075] bg-white/[0.03] text-[#9FB8D0]">
-          <Icon className="h-4 w-4" />
+      <div className={desktop ? "relative h-[310px]" : "relative h-[250px]"}>
+        <img
+          src={stage.image}
+          alt=""
+          loading="lazy"
+          decoding="async"
+          className="h-full w-full object-cover"
+          style={{ objectPosition: stage.imagePosition }}
+        />
+        <div className="absolute inset-0 bg-[linear-gradient(180deg,rgba(5,7,10,.04)_0%,rgba(5,7,10,.10)_48%,rgba(7,9,12,.90)_100%)]" />
+        <div className="absolute inset-x-0 top-0 h-24 bg-gradient-to-b from-black/28 to-transparent" />
+
+        <div className="absolute left-4 top-4 flex items-center gap-2 rounded-full border border-white/[0.14] bg-[#080B0F]/72 px-2.5 py-1.5 backdrop-blur-md">
+          <span className="text-[10px] font-semibold text-white/92">{stage.number}</span>
+          <span className="text-[9px] font-medium uppercase tracking-[0.13em] text-white/62">
+            {stage.label}
+          </span>
         </div>
-        <span className="rounded-full border border-[#31506B] bg-[#101C28] px-2.5 py-1 text-[9px] font-medium text-[#A8CBEA]">
-          {stage.status}
-        </span>
+
+        <div className="absolute bottom-4 left-4 right-4 flex items-center justify-between gap-3 rounded-[14px] border border-white/[0.10] bg-[#080B0F]/78 px-3 py-2.5 backdrop-blur-md">
+          <div className="flex min-w-0 items-center gap-2.5">
+            <div className="grid h-8 w-8 shrink-0 place-items-center rounded-[9px] border border-white/[0.09] bg-white/[0.035] text-[#A8C4DC]">
+              <Icon className="h-3.5 w-3.5" />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-[10px] font-medium text-[#E5EAF0]">{stage.status}</p>
+              <p className="mt-0.5 truncate text-[8.5px] text-[#8A96A2]">{stage.detail}</p>
+            </div>
+          </div>
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[#7EB7E5] shadow-[0_0_10px_rgba(126,183,229,.45)]" />
+        </div>
       </div>
 
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={stage.label}
-          initial={reducedMotion ? false : { opacity: 0, y: 7, filter: "blur(3px)" }}
-          animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
-          exit={reducedMotion ? undefined : { opacity: 0, y: -5, filter: "blur(2px)" }}
-          transition={{ duration: reducedMotion ? 0 : 0.28, ease: [0.22, 1, 0.36, 1] }}
+      <div className={desktop ? "p-6" : "p-5"}>
+        <h3
+          className={[
+            "font-medium tracking-[-0.035em] text-[#EFF2F5]",
+            desktop ? "text-[28px]" : "text-[22px]",
+          ].join(" ")}
         >
-          <p className="mt-4 text-[9px] font-semibold uppercase tracking-[0.16em] text-[#66717D]">
-            {stage.eyebrow}
-          </p>
-          <p className="mt-1.5 text-[15px] font-medium tracking-[-0.025em] text-[#E9EDF1]">
-            {stage.title}
-          </p>
-          <p className="mt-0.5 text-[10px] text-[#6D7884]">{stage.meta}</p>
-
-          <div className="mt-4 space-y-2">
-            {stage.details.map((detail) => (
-              <div
-                key={detail}
-                className="flex items-center gap-2 rounded-[10px] border border-white/[0.045] bg-white/[0.018] px-2.5 py-2"
-              >
-                <CheckCircle2 className="h-3 w-3 text-[#6D9F84]" />
-                <span className="text-[9px] text-[#9AA5B0]">{detail}</span>
-              </div>
-            ))}
-          </div>
-        </motion.div>
-      </AnimatePresence>
-    </motion.div>
+          {stage.title}
+        </h3>
+        <p
+          className={[
+            "mt-2 text-[#7F8994]",
+            desktop ? "max-w-[430px] text-[14px] leading-6" : "text-[13px] leading-5",
+          ].join(" ")}
+        >
+          {stage.copy}
+        </p>
+      </div>
+    </motion.article>
   );
 }
 
-function DesktopJourney() {
-  const journeyRef = useRef(null);
-  const reducedMotion = useReducedMotion();
-  const [active, setActive] = useState(0);
-
-  const { scrollYProgress } = useScroll({
-    target: journeyRef,
-    // Do not begin advancing the journey while Section 2 is still entering.
-    // Let the visual settle near the center of the viewport first.
-    offset: ["center 55%", "end 20%"],
-  });
-
-  useMotionValueEvent(scrollYProgress, "change", (value) => {
-    if (reducedMotion) return;
-
-    // Hold Intake on screen longer so the first state has time to register
-    // before the journey advances.
-    let next = 0;
-    if (value >= 0.36) next = 1;
-    if (value >= 0.59) next = 2;
-    if (value >= 0.81) next = 3;
-
-    setActive((current) => (current === next ? current : next));
-  });
-
-  const activeLeft = 12.5 + active * 25;
-
+function Progress({ active }) {
   return (
-    <div ref={journeyRef} className="relative mt-14 hidden min-h-[540px] lg:block">
-      <div className="pointer-events-none absolute inset-x-[4%] top-[106px] h-[260px] rounded-[34px] border border-white/[0.045] bg-[linear-gradient(180deg,rgba(255,255,255,.018),rgba(255,255,255,.006))]" />
-      <div
-        className="pointer-events-none absolute inset-x-[4%] top-[106px] h-[260px] rounded-[34px] opacity-[0.18]"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.035) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.035) 1px, transparent 1px)",
-          backgroundSize: "42px 42px",
-          maskImage: "linear-gradient(to bottom, black, transparent)",
-        }}
-      />
-
-      <div className="relative mx-[8%] grid grid-cols-4">
-        <div className="absolute left-[12.5%] right-[12.5%] top-[31px] h-px bg-white/[0.085]" />
-        <motion.div
-          className="absolute left-[12.5%] top-[30px] h-[2px] origin-left bg-[linear-gradient(90deg,#67E8F9,#818CF8_45%,#A855F7_72%,#DB2777)] shadow-[0_0_18px_rgba(129,140,248,.20)]"
-          animate={{ width: `${active * 25}%` }}
-          transition={reducedMotion ? { duration: 0 } : { duration: 0.45, ease: [0.22, 1, 0.36, 1] }}
+    <div className="mt-5 flex items-center gap-2" aria-hidden="true">
+      {STAGES.map((stage, index) => (
+        <div
+          key={stage.number}
+          className={[
+            "h-[2px] flex-1 rounded-full transition-colors duration-300",
+            index <= active ? "bg-[#AAB9C7]" : "bg-white/[0.09]",
+          ].join(" ")}
         />
-
-        {STAGES.map((stage, index) => (
-          <div key={stage.label} className="relative z-10 flex flex-col items-center text-center">
-            <motion.div
-              className="grid h-[62px] w-[62px] place-items-center rounded-full border"
-              animate={
-                index <= active
-                  ? {
-                      borderColor: "rgba(129,140,248,.48)",
-                      backgroundColor: "rgba(24,28,40,.96)",
-                      boxShadow: "0 0 0 5px rgba(129,140,248,.035), 0 0 26px rgba(129,140,248,.10)",
-                    }
-                  : {
-                      borderColor: "rgba(255,255,255,.08)",
-                      backgroundColor: "rgba(11,14,18,.92)",
-                      boxShadow: "0 0 0 0 rgba(0,0,0,0)",
-                    }
-              }
-              transition={{ duration: reducedMotion ? 0 : 0.35 }}
-            >
-              <span
-                className={[
-                  "text-[12px] font-semibold",
-                  index <= active ? "text-[#C7D7E8]" : "text-[#5B6570]",
-                ].join(" ")}
-              >
-                0{index + 1}
-              </span>
-            </motion.div>
-            <p
-              className={[
-                "mt-3 text-[11px] font-medium transition-colors",
-                index <= active ? "text-[#D7DDE4]" : "text-[#66717C]",
-              ].join(" ")}
-            >
-              {stage.label}
-            </p>
-          </div>
-        ))}
-      </div>
-
-      <motion.div
-        className="absolute top-[164px] -translate-x-1/2"
-        animate={{ left: `${activeLeft}%` }}
-        transition={
-          reducedMotion
-            ? { duration: 0 }
-            : { type: "spring", stiffness: 125, damping: 23, mass: 0.85 }
-        }
-      >
-        <WorkCard stage={STAGES[active]} reducedMotion={reducedMotion} />
-      </motion.div>
-
-      <div className="absolute inset-x-[8%] bottom-0 grid grid-cols-4 gap-6">
-        {STAGES.map((stage, index) => (
-          <motion.p
-            key={stage.label}
-            className="mx-auto max-w-[220px] text-center text-[10px] leading-5"
-            animate={{ color: index === active ? "#9AA6B2" : "#525D68" }}
-            transition={{ duration: reducedMotion ? 0 : 0.25 }}
-          >
-            {stage.note}
-          </motion.p>
-        ))}
-      </div>
+      ))}
     </div>
   );
 }
 
 function MobileJourney() {
+  const railRef = useRef(null);
+  const [active, setActive] = useState(0);
+
+  function handleScroll() {
+    const node = railRef.current;
+    if (!node) return;
+
+    const cards = Array.from(node.querySelectorAll("[data-stage-card]"));
+    if (!cards.length) return;
+
+    const center = node.scrollLeft + node.clientWidth / 2;
+    let closest = 0;
+    let closestDistance = Number.POSITIVE_INFINITY;
+
+    cards.forEach((card, index) => {
+      const cardCenter = card.offsetLeft + card.clientWidth / 2;
+      const distance = Math.abs(center - cardCenter);
+      if (distance < closestDistance) {
+        closest = index;
+        closestDistance = distance;
+      }
+    });
+
+    setActive((current) => (current === closest ? current : closest));
+  }
+
   return (
-    <div className="relative mt-10 space-y-0 lg:hidden">
-      <div className="absolute bottom-8 left-[19px] top-8 w-px bg-white/[0.08]" />
+    <div className="mt-8 lg:hidden">
+      <div
+        ref={railRef}
+        onScroll={handleScroll}
+        className="-mx-5 flex snap-x snap-mandatory gap-3 overflow-x-auto px-5 pb-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {STAGES.map((stage, index) => (
+          <div key={stage.number} data-stage-card className="shrink-0">
+            <StageCard stage={stage} active={index === active} />
+          </div>
+        ))}
+        <div className="w-2 shrink-0" aria-hidden="true" />
+      </div>
 
-      {STAGES.map((stage, index) => {
-        const Icon = stage.icon;
-        return (
-          <motion.div
-            key={stage.label}
-            initial={{ opacity: 0, y: 18 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-12% 0px -12% 0px" }}
-            transition={{ duration: 0.42, delay: index * 0.04, ease: [0.22, 1, 0.36, 1] }}
-            className="relative grid grid-cols-[40px_1fr] gap-4 pb-8"
-          >
-            <div className="relative z-10 grid h-10 w-10 place-items-center rounded-full border border-[#35485B] bg-[#0C131A] text-[#98B4CD]">
-              <Icon className="h-4 w-4" />
+      <div className="mt-1 flex items-center justify-between">
+        <span className="text-[10px] tabular-nums text-[#6C7782]">
+          {String(active + 1).padStart(2, "0")} / 04
+        </span>
+        <span className="text-[10px] text-[#59636E]">Swipe</span>
+      </div>
+      <Progress active={active} />
+    </div>
+  );
+}
+
+function DesktopJourney() {
+  const sectionRef = useRef(null);
+  const reducedMotion = useReducedMotion();
+  const [active, setActive] = useState(0);
+
+  const { scrollYProgress } = useScroll({
+    target: sectionRef,
+    offset: ["start start", "end end"],
+  });
+
+  useMotionValueEvent(scrollYProgress, "change", (value) => {
+    if (reducedMotion) return;
+
+    let next = 0;
+    if (value >= 0.31) next = 1;
+    if (value >= 0.53) next = 2;
+    if (value >= 0.75) next = 3;
+
+    setActive((current) => (current === next ? current : next));
+  });
+
+  return (
+    <div ref={sectionRef} className="relative hidden min-h-[145vh] lg:block">
+      <div className="sticky top-0 flex h-screen items-center overflow-hidden">
+        <div className="w-full">
+          <div className="relative left-1/2 w-screen -translate-x-1/2 overflow-hidden">
+            <motion.div
+              className="flex gap-6"
+              style={{
+                paddingLeft: "calc(50vw - 260px)",
+                paddingRight: "calc(50vw - 260px)",
+              }}
+              animate={{ x: -(active * 544) }}
+              transition={
+                reducedMotion
+                  ? { duration: 0 }
+                  : { type: "spring", stiffness: 115, damping: 25, mass: 0.9 }
+              }
+            >
+              {STAGES.map((stage, index) => (
+                <StageCard
+                  key={stage.number}
+                  stage={stage}
+                  active={index === active}
+                  desktop
+                />
+              ))}
+            </motion.div>
+          </div>
+
+          <div className="mx-auto mt-7 max-w-[520px]">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] tabular-nums text-[#6D7782]">
+                {String(active + 1).padStart(2, "0")} / 04
+              </span>
+              <span className="text-[10px] text-[#59636E]">Customer work moving forward</span>
             </div>
-            <div className="rounded-[18px] border border-white/[0.065] bg-[#0B0F14]/90 p-4">
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[11px] font-medium text-[#E0E5EA]">
-                  {stage.label}
-                </p>
-                <span className="text-[9px] text-[#5F6974]">0{index + 1}</span>
-              </div>
-              <p className="mt-2 text-[13px] font-medium text-[#C7CFD7]">{stage.eyebrow}</p>
-              <p className="mt-1.5 text-[10px] leading-5 text-[#737E89]">{stage.note}</p>
-
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {stage.details.map((detail) => (
-                  <span
-                    key={detail}
-                    className="rounded-full border border-white/[0.055] bg-white/[0.02] px-2 py-1 text-[8.5px] text-[#76818C]"
-                  >
-                    {detail}
-                  </span>
-                ))}
-              </div>
-            </div>
-          </motion.div>
-        );
-      })}
-
-      <div className="ml-14 flex items-center gap-2 text-[10px] text-[#6B7681]">
-        <ArrowDown className="h-3.5 w-3.5" />
-        One continuous path forward
+            <Progress active={active} />
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -289,47 +277,30 @@ export default function WhatStudioFlowsIs() {
   return (
     <section
       id="what-it-is"
-      className="relative overflow-hidden border-t border-white/[0.045] bg-[#080A0E] py-24 sm:py-28 lg:py-32"
+      className="relative overflow-hidden border-t border-white/[0.045] bg-[#080A0E] py-20 sm:py-24 lg:pb-0 lg:pt-24"
     >
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_8%,rgba(99,102,241,.09),transparent_32%),radial-gradient(circle_at_82%_48%,rgba(34,211,238,.055),transparent_28%),radial-gradient(circle_at_12%_72%,rgba(219,39,119,.045),transparent_30%)]" />
-      <div
-        className="pointer-events-none absolute inset-0 opacity-[0.075]"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at center, rgba(255,255,255,.24) 0.55px, transparent 0.8px)",
-          backgroundSize: "24px 24px",
-        }}
-      />
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_15%_12%,rgba(99,102,241,.07),transparent_28%),radial-gradient(circle_at_85%_62%,rgba(34,211,238,.045),transparent_30%)]" />
 
       <div className="relative mx-auto w-full max-w-[1320px] px-5 sm:px-8 lg:px-10 xl:px-14">
-        <div className="mx-auto max-w-[820px] text-center">
-          <div className="mx-auto mb-5 flex w-fit items-center gap-2 rounded-full border border-white/[0.065] bg-white/[0.02] px-3 py-1.5">
-            <Route className="h-3.5 w-3.5 text-[#7EA6C8]" />
-            <span className="text-[9px] font-semibold uppercase tracking-[0.17em] text-[#697684]">
-              One continuous path
-            </span>
-          </div>
+        <div className="max-w-[760px]">
+          <p className="text-[9px] font-semibold uppercase tracking-[0.17em] text-[#64717E]">
+            How it works
+          </p>
 
-          <h2 className="font-sans text-[38px] font-medium leading-[1.02] tracking-[-0.045em] text-[#F0F3F6] sm:text-[48px] lg:text-[56px]">
+          <h2 className="mt-4 max-w-[720px] font-sans text-[38px] font-medium leading-[1.02] tracking-[-0.045em] text-[#F0F3F6] sm:text-[48px] lg:text-[56px]">
             From intake to completion,
             <span className="block text-[#AAB5C0]">in one system.</span>
           </h2>
 
-          <p className="mx-auto mt-5 max-w-[700px] text-[15px] leading-7 text-[#7E8994] sm:text-[16px]">
-            Bring customer work in, coordinate the people and details around it, and carry it through delivery and closeout with the context intact.
+          <p className="mt-4 max-w-[610px] text-[14px] leading-6 text-[#7E8994] sm:text-[15px]">
+            Customer work comes in, gets coordinated, gets delivered, and gets closed out with the context intact.
           </p>
         </div>
 
-        <DesktopJourney />
         <MobileJourney />
-
-        <div className="mx-auto mt-14 flex max-w-[760px] items-center justify-center gap-2 border-t border-white/[0.055] pt-6 text-center text-[11px] text-[#69747F] lg:mt-12">
-          <Paperclip className="h-3.5 w-3.5 text-[#72869A]" />
-          <span>
-            However your business defines the work, the context stays connected as it moves forward.
-          </span>
-        </div>
       </div>
+
+      <DesktopJourney />
     </section>
   );
 }

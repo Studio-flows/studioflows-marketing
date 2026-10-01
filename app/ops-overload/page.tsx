@@ -22,8 +22,13 @@ import {
 } from "@/components/home/InitiationHomeSections";
 
 export const metadata = {
-  alternates: {
-    canonical: "/",
+  title: "When Operations Still Depend on You",
+  description: "Find where service-business handoffs, decisions, and customer updates still depend on the owner.",
+  alternates: { canonical: "/ops-overload" },
+  openGraph: {
+    title: "When Operations Still Depend on You",
+    description: "Find the operational pressure that keeps coming back to you.",
+    url: "/ops-overload",
   },
 };
 

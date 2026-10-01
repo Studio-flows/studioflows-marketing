@@ -12,6 +12,7 @@
 
 .hero { position: relative; max-width: 1800px; margin: 0 auto; min-height: 740px; height: min(56.25vw, 980px); isolation: isolate; }
 .header { position: absolute; z-index: 5; inset: 15px 5% auto; display: flex; align-items: center; gap: 32px; }
+.header::before { content: ""; position: absolute; z-index: -1; inset: -16px -6vw -58px; pointer-events: none; background: linear-gradient(180deg,#fffffffa 12%,#ffffffd9 45%,#ffffff00); }
 .brand { width: 190px; flex-shrink: 0; }
 .brand img { display: block; width: 100%; height: auto; }
 .nav { display: flex; gap: 30px; margin-left: auto; font-size: 14px; font-weight: 500; }
@@ -50,6 +51,7 @@
 .page .flowStory p { color: #ffffffeb; font-size: 14px; font-weight: 600; letter-spacing: -.01em; }
 .flowStory p span { font-weight: 400; opacity: .72; }
 .page .flowStory h3 { color: #fff; font-size: clamp(38px,4vw,61px); font-weight: 600; line-height: 1.07; margin: 22px 0 0; text-wrap: balance; }
+.page .flowStory .flowExamples { color: #ffffffd9; font-size: 15px; font-weight: 400; line-height: 1.6; margin-top: 20px; }
 .flowBottom { position: absolute; left: 48px; right: 35px; bottom: 30px; display: flex; align-items: flex-end; justify-content: space-between; gap: 20px; color: #fff; }
 .flowCaption { display: block; color: #ffffffb5; font-size: 12px; margin-bottom: 10px; }
 .flowSteps { display: flex; flex-wrap: wrap; gap: 8px; list-style: none; margin: 0; padding: 0; }
@@ -104,6 +106,14 @@
 .finalCta { text-align: center; padding: 114px 22px 95px; }
 .finalCta h2 { margin-bottom: 33px; }
 .contactLink { display: flex; align-items: center; justify-content: center; gap: 4px; color: #686873; font-size: 14px; margin-top: 24px; }
+.startSection { padding: 100px 5% 10px; scroll-margin-top: 25px; }
+.startGrid { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 40px; list-style: none; max-width: 1100px; margin: 0 auto; padding: 0; }
+.startGrid li { position: relative; padding: 24px 0; }
+.startIcon { display: grid; place-items: center; width: 52px; height: 52px; border-radius: 16px; background: #f0edff; color: #7054d8; margin-bottom: 25px; }
+.startNumber { position: absolute; right: 12px; top: 32px; font-size: 13px; color: #86808f; }
+.startGrid h3 { margin: 0 0 13px; font-size: 25px; line-height: 1.2; letter-spacing: -.035em; }
+.startGrid p { margin: 0; font-size: 16px; line-height: 1.65; max-width: 300px; }
+.page .startNote { max-width: 670px; margin: 28px auto 0; text-align: center; font-size: 14px; line-height: 1.65; }
 .footer { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; border-top: 1px solid #eeeef0; max-width: 1280px; margin: auto; padding: 24px 20px 30px; }
 .footerBrand { width: 150px; }
 .footerBrand img { width: 100%; height: auto; }
@@ -187,6 +197,7 @@
   .flowShade { background: linear-gradient(180deg,#111c2300 23%,#111c2333 38%,#111c23ee 62%,#111c23 76%); }
   .flowStory { left: 24px; top: auto; bottom: 148px; width: calc(100% - 48px); max-width: none; }
   .page .flowStory p { font-size: 12px; } .flowStory p span { display: none; } .page .flowStory h3 { font-size: 36px; max-width: 300px; margin-top: 12px; }
+  .page .flowStory .flowExamples { font-size: 13px; margin-top: 13px; line-height: 1.5; }
   .flowBottom { left: 24px; right: 20px; bottom: 22px; gap: 15px; } .flowCaption { font-size: 11px; }
   .flowSteps { gap: 6px; row-gap: 10px; max-width: 236px; } .flowSteps li { gap: 5px; font-size: 12px; }
   .exploreButton > svg { width: 38px; height: 38px; padding: 9px; }
@@ -200,7 +211,8 @@
   .questionsSection { padding: 65px 0; } .questionsHeading { padding: 0 24px; margin-bottom: 28px; } .questionsHeading h2 { font-size: 36px; }
   .questionGrid { display: flex; overflow-x: auto; scroll-snap-type: x mandatory; padding: 8px 24px 24px; gap: 14px; scrollbar-width: thin; scrollbar-color: #cecadb transparent; }
   .questionCard { flex: 0 0 79%; max-width: 320px; min-height: 320px; padding: 28px; scroll-snap-align: center; } .questionTitle { font-size: 34px; }
-  .finalCta { padding: 75px 22px 60px; } .footer { gap: 14px; padding: 20px 24px; } .footer p { width: 100%; margin: 0; } .footer nav { gap: 13px; font-size: 11px; }
+  .startSection { padding: 65px 24px 0; } .startGrid { grid-template-columns: 1fr; gap: 0; max-width: 400px; } .startGrid li { padding: 26px 0; border-bottom: 1px solid #eeecf3; } .startGrid p { max-width: none; } .startIcon { margin-bottom: 18px; } .startNumber { top: 35px; } .page .startNote { text-align: left; }
+  .finalCta { padding: 75px 22px 60px; } .footer { gap: 14px; padding: 20px 24px; } .footer p { width: 100%; margin: 0; } .footer nav { gap: 13px; font-size: 13px; }
   .dialog { width: calc(100vw - 20px); max-height: calc(100dvh - 24px); border-radius: 20px; } .dialogInner { padding: 53px 25px 30px; } .closeButton { margin: -37px -10px 0 0; top: -37px; }
   .dialog h2 { font-size: 33px; } .modalIntro { font-size: 16px; } .examplePicker button { font-size: 12px; padding: 10px 13px; }
   .layers li { gap: 15px; } .layers h3 { font-size: 19px; } .layers li span { font-size: 14px; } .layers li > svg { width: 20px; height: 20px; }

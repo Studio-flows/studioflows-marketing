@@ -43,10 +43,17 @@ export const PUBLIC_ROUTE_REGISTRY = [
   },
   {
     path: "/",
-    title: "StudioFlows",
-    description: "Execution infrastructure for owner-dependent service businesses.",
+    title: "The AI-Native Operating System for Service Businesses",
+    description: "An operating system shaped around your service business, with connected teams, work, and AI.",
     changeFrequency: "weekly",
     priority: 0.8,
+  },
+  {
+    path: "/ops-overload",
+    title: "When Operations Still Depend on You",
+    description: "Find where service-business handoffs, decisions, and customer updates still depend on the owner.",
+    changeFrequency: "monthly",
+    priority: 0.65,
   },
   {
     path: "/real-estate-media",

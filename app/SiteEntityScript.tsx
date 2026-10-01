@@ -12,7 +12,7 @@ const siteEntityGraph = {
       name: "StudioFlows",
       url: PUBLIC_SITE_ORIGIN,
       description:
-        "StudioFlows turns scattered business signals into approved, trackable execution for service businesses.",
+        "StudioFlows is an AI-native operating system for service businesses, shaped around their teams, work, and approval rules.",
       logo: {
         "@type": "ImageObject",
         url: `${PUBLIC_SITE_ORIGIN}/StudioFlows%20logo%20%281200%20x%20675%20px%29%20%281%29.png`,

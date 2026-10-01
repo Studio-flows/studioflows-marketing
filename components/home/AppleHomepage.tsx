@@ -30,16 +30,22 @@ const QUESTIONS: readonly { id: QuestionId; first: string; accent: string; icon:
   { id: "start", first: "How do we", accent: "get started?", icon: ArrowUpRight },
 ];
 const EXAMPLE_STEPS = [
-  { label: "A request comes in", heading: "The customer needs an update.", body: "“Can you let me know what happens next?”", status: "Customer request", icon: UsersRound },
-  { label: "AI prepares a draft", heading: "A follow-up, ready to review.", body: "“Hi Alex — we’re reviewing the next steps for your project. I’ll confirm the timing with you shortly.”", status: "Draft · not sent", icon: Sparkles },
-  { label: "You review", heading: "The final word is yours.", body: "Check the details. Make a change. Decide whether the draft is ready.", status: "Waiting for your decision", icon: ShieldCheck },
+  { label: "The customer asks", heading: "“Can you take care of this next week?”", body: "Start with the customer, the work they need, and the details your team will need next.", status: "Request received", next: "Confirm the scope", icon: UsersRound },
+  { label: "Prepare the work", heading: "A quote. A plan. A clear next step.", body: "Bring the requested service, proposed price, timing, and work details together. AI can help prepare the draft.", status: "Draft · not approved", next: "Review the proposed work", icon: Sparkles },
+  { label: "You approve", heading: "Your business. Your call.", body: "Check the scope, price, and timing. Make changes before anyone commits to the customer.", status: "Waiting for approval", next: "Approve or revise", icon: ShieldCheck },
+  { label: "The team follows through", heading: "Keep the handoff with the job.", body: "The team has the agreed details. Completion notes and the customer follow-up stay connected to the same work.", status: "Illustrative completion", next: "Review completion and follow-up", icon: Network },
+] as const;
+const START_STEPS = [
+  { title: "See it in action.", body: "Explore the current demo and get a feel for the workspace.", icon: CalendarDays },
+  { title: "Bring one real job.", body: "Talk through how work moves in your business today.", icon: FolderOpen },
+  { title: "Choose your setup.", body: "Confirm the fit, available capabilities, and help you need.", icon: SlidersHorizontal },
 ] as const;
 
 export default function AppleHomepage() {
   const [activeId, setActiveId] = useState<string>("field");
   const [exampleIndex, setExampleIndex] = useState(0);
   const [detail, setDetail] = useState<Detail>(null);
-  const [exampleStep, setExampleStep] = useState<string>("1");
+  const [exampleStep, setExampleStep] = useState<string>("0");
   const [menuOpen, setMenuOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const touchRef = useRef<{ x: number; y: number } | null>(null);
@@ -89,7 +95,7 @@ export default function AppleHomepage() {
             <Image src={LOGO} alt="StudioFlows" width={1120} height={459} sizes="(max-width: 600px) 150px, 190px" priority />
           </Link>
           <nav className={styles.nav} aria-label="Primary">
-            <a href="#flows">Find your flow</a><a href="#how-it-works">How it works</a><a href="#questions">Your questions</a>
+            <a href="#flows">Find your flow</a><a href="#how-it-works">How it works</a><a href="#start">Get started</a>
           </nav>
           <div className={styles.headerActions}>
             <a className={styles.login} href={LOGIN_URL}>Log in</a>
@@ -99,13 +105,14 @@ export default function AppleHomepage() {
           {menuOpen ? <nav id="apple-mobile-nav" className={styles.mobileNav} aria-label="Mobile">
             <a href="#flows" onClick={() => setMenuOpen(false)}>Find your flow</a>
             <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
+            <a href="#start" onClick={() => setMenuOpen(false)}>Get started</a>
             <a href="#questions" onClick={() => setMenuOpen(false)}>Your questions</a>
             <a href={DEMO_URL}>See it in action</a>
           </nav> : null}
         </header>
 
         <div className={styles.heroScene}>
-          <Image src="/home/service-business-loft-v5.png" alt="A business owner smiling at his phone with two colleagues in a bright industrial loft" fill priority quality={85} sizes="(min-width: 1800px) 1800px, 100vw" className={styles.heroPhoto} />
+          <Image src="/home/service-business-loft-v5.webp" alt="A business owner smiling at his phone with two colleagues in a bright industrial loft" fill priority unoptimized sizes="(min-width: 1800px) 1800px, 100vw" className={styles.heroPhoto} />
           <div className={styles.heroFade} aria-hidden="true" />
           <svg className={styles.wire} viewBox="0 0 1672 940" fill="none" aria-hidden="true">
             <path d="M 1215 507 C 1110 471, 1006 492, 1085 577" stroke="#c0a9fc" strokeWidth="3" />
@@ -141,11 +148,12 @@ export default function AppleHomepage() {
           <div className={styles.galleryStage} onTouchStart={(event) => { touchRef.current = { x: event.touches[0].clientX, y: event.touches[0].clientY }; }} onTouchEnd={finishSwipe} onTouchCancel={() => { touchRef.current = null; }}>
             {ARCHETYPES.map((item) => (
               <Tabs.Content key={item.id} value={item.id} className={styles.flowPanel}>
-                <Image src={item.image} alt={item.imageAlt} fill sizes="(min-width: 1400px) 1280px, 94vw" quality={85} className={styles.flowPhoto} />
+                <Image src={item.image.replace(".png", ".webp")} alt={item.imageAlt} fill unoptimized sizes="(min-width: 1400px) 1280px, 94vw" className={styles.flowPhoto} />
                 <div className={styles.flowShade} aria-hidden="true" />
                 <div className={styles.flowStory}>
                   <p>{item.name} <span> / {item.label}</span></p>
                   <h3>{item.title}</h3>
+                  <p className={styles.flowExamples}>{item.examples.map(({ name }) => name).join(" · ")}</p>
                 </div>
                 <div className={styles.flowBottom}>
                   <div><span className={styles.flowCaption}>A typical flow</span>
@@ -174,8 +182,8 @@ export default function AppleHomepage() {
       <section id="how-it-works" className={styles.scenarioSection} aria-labelledby="scenario-heading">
         <div className={styles.scenarioCopy}>
           <p className={styles.eyebrow}>People and AI. Working together.</p>
-          <h2 id="scenario-heading">AI helps.<br /><span>You decide.</span></h2>
-          <p>Start with something familiar.<br />A customer needs a follow-up.</p>
+          <h2 id="scenario-heading">From the first ask.<br /><span>To a job well done.</span></h2>
+          <p>One job. The people, decisions,<br />and next steps that keep it moving.</p>
           <Tabs.Root value={exampleStep} onValueChange={setExampleStep}>
             <Tabs.List className={styles.scenarioTabs} aria-label="Follow an example request">
               {EXAMPLE_STEPS.map((step, index) => <Tabs.Trigger key={step.label} value={String(index)} aria-controls={`scenario-panel-${index}`} className={styles.scenarioTab}><span>0{index + 1}</span>{step.label}<ChevronRight size={16} aria-hidden="true" /></Tabs.Trigger>)}
@@ -184,13 +192,13 @@ export default function AppleHomepage() {
           </Tabs.Root>
         </div>
         <div className={styles.scenarioVisual}>
-          <p className={styles.conceptLabel}>Illustrative experience · not a live action</p>
+          <p className={styles.conceptLabel}>Illustrative workflow · not a live product tour</p>
           <div className={styles.messageCard}>
-            <div className={styles.messageTop}><span className={styles.messageIcon}><ScenarioIcon size={25} /></span><span>Customer follow-up<small>{scenario.status}</small></span><Network className={styles.messageMark} size={22} aria-hidden="true" /></div>
+            <div className={styles.messageTop}><span className={styles.messageIcon}><ScenarioIcon size={25} /></span><span>One service job<small>{scenario.status}</small></span><Network className={styles.messageMark} size={22} aria-hidden="true" /></div>
             <div className={styles.messageBody} aria-live="polite" aria-atomic="true"><h3>{scenario.heading}</h3><p>{scenario.body}</p></div>
-            <div className={styles.messageFooter}><span><ShieldCheck size={16} /> Nothing sent automatically.</span><button type="button" onClick={() => setDetail("draft")}>Review example <ArrowUpRight size={16} /></button></div>
+            <div className={styles.messageFooter}><span><ShieldCheck size={16} /> Next: {scenario.next}</span></div>
           </div>
-          <p className={styles.scenarioNote}>A little less chasing. A clearer next step.</p>
+          <p className={styles.scenarioNote}>An example of how work can flow. Nothing is sent or scheduled.</p>
         </div>
       </section>
 
@@ -204,6 +212,20 @@ export default function AppleHomepage() {
         </div>
       </section>
 
+      <section id="start" className={styles.startSection} aria-labelledby="getting-started-heading">
+        <div className={styles.sectionHeading}>
+          <p className={styles.eyebrow}>Getting started</p>
+          <h2 id="getting-started-heading">Start with your business.<br /><span>We’ll take it from there.</span></h2>
+        </div>
+        <ol className={styles.startGrid}>
+          {START_STEPS.map((step, index) => {
+            const Icon = step.icon;
+            return <li key={step.title}><span className={styles.startIcon}><Icon size={25} strokeWidth={1.6} /></span><span className={styles.startNumber}>0{index + 1}</span><h3>{step.title}</h3><p>{step.body}</p></li>;
+          })}
+        </ol>
+        <p className={styles.startNote}>The demo is a place to explore—not your provisioned business workspace. We’ll confirm your setup together.</p>
+      </section>
+
       <section className={styles.finalCta} aria-labelledby="start-heading">
         <p className={styles.eyebrow}>Start with your business</p><h2 id="start-heading">See what a better<br />flow looks like.</h2>
         <a className={styles.primary} href={DEMO_URL}>See it in action</a>
@@ -212,8 +234,7 @@ export default function AppleHomepage() {
       <footer className={styles.footer}>
         <Link href="/" className={styles.footerBrand}><Image src={LOGO} alt="StudioFlows" width={1120} height={459} sizes="150px" /></Link>
         <p>One operating system. Your way of working.</p>
-        <nav aria-label="Footer"><Link href="/">Compare current homepage</Link><Link href="/privacy-policy">Privacy</Link><Link href="/terms-of-service">Terms</Link></nav>
-        <span>Design preview</span>
+        <nav aria-label="Footer"><Link href="/resources">Resources</Link><Link href="/ops-overload">When work depends on you</Link><Link href="/privacy-policy">Privacy</Link><Link href="/terms-of-service">Terms</Link></nav>
       </footer>
 
       <dialog ref={dialogRef} className={styles.dialog} aria-labelledby="apple-detail-heading" onClose={() => setDetail(null)} onCancel={() => setDetail(null)} onClick={(event) => { if (event.target === event.currentTarget) closeDetail(); }}>
@@ -237,7 +258,7 @@ export default function AppleHomepage() {
           </> : detail === "start" ? <>
             <p className={styles.eyebrow}>Getting started</p><h2 id="apple-detail-heading">Start with the work.<br /><span>Not the software.</span></h2>
             <p className={styles.modalIntro}>Explore the demo, then talk through a real workflow from your business. Confirm the fit and what’s available before choosing your setup.</p>
-            <ol className={styles.simpleSteps}><li><span>01</span>Pick the flow that feels familiar.</li><li><span>02</span>Bring one real example of your work.</li><li><span>03</span>Agree on what your business needs.</li></ol>
+            <ol className={styles.simpleSteps}>{START_STEPS.map((step, index) => <li key={step.title}><span>0{index + 1}</span>{step.title} {step.body}</li>)}</ol>
             <a className={styles.primary} href={DEMO_URL}>Explore the demo</a><a className={styles.modalContact} href={CONTACT_URL}>Talk to us</a>
           </> : detail === "control" ? <>
             <p className={styles.eyebrow}>Human judgment matters</p><h2 id="apple-detail-heading">Your business.<br /><span>Your call.</span></h2>

@@ -17,6 +17,7 @@ const DEMO_URL = "https://os.studioflows.co/demo/access";
 const LOGIN_URL = "https://os.studioflows.co/login";
 const CONTACT_URL = "mailto:support@studioflows.co?subject=Let%27s%20talk%20about%20StudioFlows";
 const LOGO = "/StudioFlows logo (1200 x 675 px) (1).png";
+const DEMO_NOTE = "Sign-in required · Explore the current demo workspace.";
 const ICONS: Record<ArchetypeId, LucideIcon> = {
   service: RefreshCw, field: Route, fulfillment: Package,
   cases: FolderOpen, booking: CalendarDays, projects: Layers3,
@@ -30,15 +31,15 @@ const QUESTIONS: readonly { id: QuestionId; first: string; accent: string; icon:
   { id: "start", first: "How do we", accent: "get started?", icon: ArrowUpRight },
 ];
 const EXAMPLE_STEPS = [
-  { label: "The customer asks", heading: "“Can you take care of this next week?”", body: "Start with the customer, the work they need, and the details your team will need next.", status: "Request received", next: "Confirm the scope", icon: UsersRound },
-  { label: "Prepare the work", heading: "A quote. A plan. A clear next step.", body: "Bring the requested service, proposed price, timing, and work details together. AI can help prepare the draft.", status: "Draft · not approved", next: "Review the proposed work", icon: Sparkles },
-  { label: "You approve", heading: "Your business. Your call.", body: "Check the scope, price, and timing. Make changes before anyone commits to the customer.", status: "Waiting for approval", next: "Approve or revise", icon: ShieldCheck },
-  { label: "The team follows through", heading: "Keep the handoff with the job.", body: "The team has the agreed details. Completion notes and the customer follow-up stay connected to the same work.", status: "Illustrative completion", next: "Review completion and follow-up", icon: Network },
+  { label: "The customer asks", heading: "“The upstairs rooms aren’t cooling.”", body: "Alex asks for an AC service visit on Tuesday. Maya in the office gathers the address, access instructions, and equipment details.", status: "Request received", owner: "Maya · Office", details: [["Job", "Inspect Alex’s upstairs AC"], ["Requested", "Tuesday morning"], ["Needed", "Address, access, equipment details"]], next: "Prepare a service-visit draft", icon: UsersRound },
+  { label: "Prepare the work", heading: "A service visit, ready to review.", body: "AI helps prepare the draft from Alex’s request. Maya checks the proposed scope and visit window before sending it to Jordan for approval.", status: "Draft · not approved", owner: "Maya · Office", details: [["Scope", "Inspect airflow and filter"], ["Visit", "Tuesday, 10 am–12 pm · proposed"], ["Price", "Confirm before approval"]], next: "Jordan reviews scope, price, and timing", icon: Sparkles },
+  { label: "You approve", heading: "Jordan checks it before the team commits.", body: "Jordan confirms the service price and Tuesday window, then approves the visit. Sam gets the agreed job details; Maya confirms the appointment with Alex.", status: "Approved in this example", owner: "Jordan · Owner", details: [["Decision", "Scope, price, and timing approved"], ["Assigned to", "Sam · Technician"], ["Customer update", "Maya confirms the visit"]], next: "Sam carries out the agreed work", icon: ShieldCheck },
+  { label: "The team follows through", heading: "Sam records the completed visit.", body: "Sam adds the completion notes to Alex’s job. Maya can use those same details for the customer follow-up, without chasing a separate update.", status: "Completed in this example", owner: "Sam · Technician", details: [["Work recorded", "Airflow checked; filter replaced"], ["Job history", "Completion notes stay with the request"], ["Follow-up", "Maya updates Alex"]], next: "Maya reviews the follow-up", icon: Network },
 ] as const;
 const START_STEPS = [
-  { title: "See it in action.", body: "Explore the current demo and get a feel for the workspace.", icon: CalendarDays },
-  { title: "Bring one real job.", body: "Talk through how work moves in your business today.", icon: FolderOpen },
-  { title: "Choose your setup.", body: "Confirm the fit, available capabilities, and help you need.", icon: SlidersHorizontal },
+  { title: "See it in action.", body: "Sign in to explore the current demo workspace. You can also walk through the job example on this page first.", icon: CalendarDays },
+  { title: "Bring one real job.", body: "We’ll trace its request, handoffs, and approvals with you, and identify the first step worth improving.", icon: FolderOpen },
+  { title: "Choose your setup.", body: "Confirm what’s available for that job, what needs configuring, and the help your team needs to start.", icon: SlidersHorizontal },
 ] as const;
 
 export default function AppleHomepage() {
@@ -99,7 +100,7 @@ export default function AppleHomepage() {
           </nav>
           <div className={styles.headerActions}>
             <a className={styles.login} href={LOGIN_URL}>Log in</a>
-            <a className={`${styles.primary} ${styles.headerCta}`} href={DEMO_URL}>See it in action</a>
+            <div className={styles.headerDemo}><a className={`${styles.primary} ${styles.headerCta}`} href={DEMO_URL} aria-describedby="header-demo-note">See it in action</a><small id="header-demo-note">Sign-in required</small></div>
             <button className={styles.menuButton} type="button" aria-label={menuOpen ? "Close navigation" : "Open navigation"} aria-expanded={menuOpen} aria-controls="apple-mobile-nav" onClick={() => setMenuOpen(!menuOpen)}>{menuOpen ? <X /> : <Menu />}</button>
           </div>
           {menuOpen ? <nav id="apple-mobile-nav" className={styles.mobileNav} aria-label="Mobile">
@@ -107,7 +108,7 @@ export default function AppleHomepage() {
             <a href="#how-it-works" onClick={() => setMenuOpen(false)}>How it works</a>
             <a href="#start" onClick={() => setMenuOpen(false)}>Get started</a>
             <a href="#questions" onClick={() => setMenuOpen(false)}>Your questions</a>
-            <a href={DEMO_URL}>See it in action</a>
+            <a href={DEMO_URL} aria-describedby="mobile-demo-note">See it in action</a><small id="mobile-demo-note">{DEMO_NOTE}</small>
           </nav> : null}
         </header>
 
@@ -119,7 +120,7 @@ export default function AppleHomepage() {
             <circle cx="1085" cy="577" r="7" fill="#8962ec" stroke="#e8dcff" strokeWidth="3" />
           </svg>
           <button type="button" className={styles.draftCard} onClick={() => setDetail("draft")} aria-label="Open an illustrative draft review">
-            <span className={styles.draftKicker}><Sparkles size={14} /> Ready when you are</span>
+            <span className={styles.draftKicker}><Sparkles size={14} /> Example · Ready to review</span>
             <strong>Draft is ready for your review.</strong>
             <span className={styles.draftAction}>Take a look <ChevronRight size={15} /></span>
           </button>
@@ -129,7 +130,10 @@ export default function AppleHomepage() {
           <p className={styles.eyebrow}>Built around your business</p>
           <h1 id="apple-hero-heading">Your business.<br /><span>In a better flow.</span></h1>
           <p className={styles.heroDescription}>The AI-native operating system<br className={styles.desktopBreak} /> for service businesses.</p>
-          <a className={styles.primary} href={DEMO_URL}>See it in action</a>
+          <p className={styles.heroPayoff}>Keep the request, job details, and next decision together so your team knows what to do next.</p>
+          <a className={styles.primary} href={DEMO_URL} aria-describedby="hero-demo-note">See it in action</a>
+          <p id="hero-demo-note" className={styles.demoNote}>{DEMO_NOTE}</p>
+          <a className={styles.exampleLink} href="#how-it-works">Walk through a job example <ChevronRight size={15} aria-hidden="true" /></a>
           <ul className={styles.benefits} aria-label="Our approach">
             <li><Network /><span>Tailored<br />workflows</span></li>
             <li><UsersRound /><span>Teams<br />and AI</span></li>
@@ -159,7 +163,7 @@ export default function AppleHomepage() {
                   <div><span className={styles.flowCaption}>A typical flow</span>
                     <ol aria-label={`${item.name} illustrative workflow`} className={styles.flowSteps}>{item.flow.map((step, index) => <li key={step}>{index > 0 ? <ChevronRight size={13} aria-hidden="true" /> : null}<span>{step}</span></li>)}</ol>
                   </div>
-                  <button type="button" className={styles.exploreButton} aria-label="Explore this flow" onClick={() => setDetail("flow")}><span>Explore this flow</span><Plus size={24} aria-hidden="true" /></button>
+                  <button type="button" className={styles.exploreButton} aria-label="Explore this flow" onClick={() => setDetail("flow")}><span>Explore</span><Plus size={24} aria-hidden="true" /></button>
                 </div>
               </Tabs.Content>
             ))}
@@ -183,22 +187,22 @@ export default function AppleHomepage() {
         <div className={styles.scenarioCopy}>
           <p className={styles.eyebrow}>People and AI. Working together.</p>
           <h2 id="scenario-heading">From the first ask.<br /><span>To a job well done.</span></h2>
-          <p>One job. The people, decisions,<br />and next steps that keep it moving.</p>
+          <p>Follow Alex’s AC service visit.<br />One request, one team, one job record.</p>
           <Tabs.Root value={exampleStep} onValueChange={setExampleStep}>
             <Tabs.List className={styles.scenarioTabs} aria-label="Follow an example request">
               {EXAMPLE_STEPS.map((step, index) => <Tabs.Trigger key={step.label} value={String(index)} aria-controls={`scenario-panel-${index}`} className={styles.scenarioTab}><span>0{index + 1}</span>{step.label}<ChevronRight size={16} aria-hidden="true" /></Tabs.Trigger>)}
             </Tabs.List>
-            {EXAMPLE_STEPS.map((step, index) => <Tabs.Content key={step.label} value={String(index)} id={`scenario-panel-${index}`} className={styles.srOnly}>{step.heading} {step.body}</Tabs.Content>)}
+            {EXAMPLE_STEPS.map((step, index) => <Tabs.Content key={step.label} value={String(index)} id={`scenario-panel-${index}`} className={styles.srOnly}>{step.heading} {step.body} Responsible: {step.owner}. {step.details.map(([label, value]) => `${label}: ${value}.`).join(" ")} Next: {step.next}.</Tabs.Content>)}
           </Tabs.Root>
         </div>
         <div className={styles.scenarioVisual}>
-          <p className={styles.conceptLabel}>Illustrative workflow · not a live product tour</p>
+          <p className={styles.conceptLabel}>Fictional job example · Illustrative workflow</p>
           <div className={styles.messageCard}>
-            <div className={styles.messageTop}><span className={styles.messageIcon}><ScenarioIcon size={25} /></span><span>One service job<small>{scenario.status}</small></span><Network className={styles.messageMark} size={22} aria-hidden="true" /></div>
-            <div className={styles.messageBody} aria-live="polite" aria-atomic="true"><h3>{scenario.heading}</h3><p>{scenario.body}</p></div>
+            <div className={styles.messageTop}><span className={styles.messageIcon}><ScenarioIcon size={25} /></span><span>AC service · Alex<small>{scenario.status}</small></span><Network className={styles.messageMark} size={22} aria-hidden="true" /></div>
+            <div className={styles.messageBody} aria-live="polite" aria-atomic="true"><h3>{scenario.heading}</h3><p>{scenario.body}</p><p className={styles.jobOwner}>Responsible: <strong>{scenario.owner}</strong></p><dl className={styles.jobDetails}>{scenario.details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>
             <div className={styles.messageFooter}><span><ShieldCheck size={16} /> Next: {scenario.next}</span></div>
           </div>
-          <p className={styles.scenarioNote}>An example of how work can flow. Nothing is sent or scheduled.</p>
+          <p className={styles.scenarioNote}>Fictional people and job details. Nothing is sent or scheduled.</p>
         </div>
       </section>
 
@@ -228,8 +232,10 @@ export default function AppleHomepage() {
 
       <section className={styles.finalCta} aria-labelledby="start-heading">
         <p className={styles.eyebrow}>Start with your business</p><h2 id="start-heading">See what a better<br />flow looks like.</h2>
-        <a className={styles.primary} href={DEMO_URL}>See it in action</a>
-        <a className={styles.contactLink} href={CONTACT_URL}>Or talk it through with us <ChevronRight size={16} /></a>
+        <p className={styles.finalPayoff}>Bring one real job. We’ll help map its handoffs, find the first useful improvement, and confirm what StudioFlows can support today.</p>
+        <a className={styles.primary} href={DEMO_URL} aria-describedby="final-demo-note">See it in action</a>
+        <p id="final-demo-note" className={styles.demoNote}>{DEMO_NOTE}</p>
+        <a className={styles.contactLink} href={CONTACT_URL}>Talk through your first job <ChevronRight size={16} /></a>
       </section>
       <footer className={styles.footer}>
         <Link href="/" className={styles.footerBrand}><Image src={LOGO} alt="StudioFlows" width={1120} height={459} sizes="150px" /></Link>
@@ -246,28 +252,28 @@ export default function AppleHomepage() {
             <p className={styles.modalIntro}>Start with your flow. Add your industry’s details. Make it your own.</p>
             <div className={styles.examplePicker} role="group" aria-label="Choose a business example">{active.examples.map((item, index) => <button key={item.name} type="button" aria-pressed={exampleIndex === index} onClick={() => setExampleIndex(index)}>{item.name}</button>)}</div>
             <div aria-live="polite" aria-atomic="true">
-              <p className={styles.exampleLabel}>{example.name} · Illustrative configuration</p>
+              <p className={styles.exampleLabel}>{example.name} · Example setup</p>
               <ol className={styles.layers}>
-                <li><Network /><div><p>01 · Global core OS</p><h3>The shared foundation</h3><span>People, work, files, AI context, and permissions.</span></div></li>
-                <li><Route /><div><p>02 · Archetype</p><h3>{active.name}</h3><span>{active.flow.join(" → ")}</span></div></li>
-                <li><Layers3 /><div><p>03 · Business-type pack</p><h3>{example.name}</h3><span>{example.pack}</span></div></li>
-                <li><SlidersHorizontal /><div><p>04 · Tenant configuration</p><h3>Your business. Your rules.</h3><span>{example.configuration}</span></div></li>
+                <li><Network /><div><p>01 · Shared workspace</p><h3>Keep the team and work together</h3><span>People, work, files, AI context, and permissions.</span></div></li>
+                <li><Route /><div><p>02 · Your work pattern</p><h3>{active.name}</h3><span>{active.flow.join(" → ")}</span></div></li>
+                <li><Layers3 /><div><p>03 · Your industry’s details</p><h3>{example.name}</h3><span>{example.pack}</span></div></li>
+                <li><SlidersHorizontal /><div><p>04 · Your business rules</p><h3>Your business. Your rules.</h3><span>{example.configuration}</span></div></li>
               </ol>
             </div>
-            <p className={styles.modalNote}>These examples explain the model, not a catalog of released packs. More than one kind of work? A primary flow can be complemented by supporting capability packs.</p>
+            <p className={styles.modalNote}>These are example setups. We’ll confirm what’s available for your business. Handle more than one kind of work? Start with your main flow and add the supporting steps your team needs.</p>
           </> : detail === "start" ? <>
             <p className={styles.eyebrow}>Getting started</p><h2 id="apple-detail-heading">Start with the work.<br /><span>Not the software.</span></h2>
             <p className={styles.modalIntro}>Explore the demo, then talk through a real workflow from your business. Confirm the fit and what’s available before choosing your setup.</p>
             <ol className={styles.simpleSteps}>{START_STEPS.map((step, index) => <li key={step.title}><span>0{index + 1}</span>{step.title} {step.body}</li>)}</ol>
-            <a className={styles.primary} href={DEMO_URL}>Explore the demo</a><a className={styles.modalContact} href={CONTACT_URL}>Talk to us</a>
+            <a className={styles.primary} href={DEMO_URL} aria-describedby="modal-demo-note">Explore the demo</a><p id="modal-demo-note" className={styles.demoNote}>{DEMO_NOTE}</p><a className={styles.modalContact} href={CONTACT_URL}>Talk through your first job</a>
           </> : detail === "control" ? <>
             <p className={styles.eyebrow}>Human judgment matters</p><h2 id="apple-detail-heading">Your business.<br /><span>Your call.</span></h2>
-            <p className={styles.modalIntro}>In this example, AI prepares a follow-up. You check the details and decide what happens next. A draft is not a sent message.</p>
+            <p className={styles.modalIntro}>In Alex’s job example, AI helps prepare the service visit. Jordan checks the scope, price, and timing before approving it. Your team decides what happens next.</p>
             <div className={styles.controlExample}><ShieldCheck size={36} /><h3>Review before action.</h3><p>Your team’s roles, permissions, and approval rules belong in the setup—not in the fine print.</p><small>Illustrative design principle. Actual controls depend on the configured workflow.</small></div>
           </> : <>
             <p className={styles.eyebrow}>An example of people + AI</p><h2 id="apple-detail-heading">A useful draft.<br /><span>You take it from here.</span></h2>
-            <p className={styles.modalIntro}>AI assistance should have a specific job. Here, that job is preparing a customer follow-up for a person to review.</p>
-            <div className={styles.draftExample}><span>Illustrative draft · not sent</span><h3>Next steps for your project</h3><p>Hi Alex — we’re reviewing the next steps for your project. I’ll confirm the timing with you shortly.</p><div><ShieldCheck size={18} /> Check the context, timing, and wording before using a draft.</div></div>
+            <p className={styles.modalIntro}>AI assistance should have a specific job. Here, it helps Maya prepare Alex’s service visit for Jordan to review.</p>
+            <div className={styles.draftExample}><span>Fictional example · draft not approved</span><h3>AC service for Alex</h3><p>Inspect the upstairs AC’s airflow and filter. Proposed visit: Tuesday, 10 am–12 pm. Confirm the price and customer details before approval.</p><div><ShieldCheck size={18} /> Jordan reviews scope, price, and timing before the team commits.</div></div>
             <p className={styles.modalNote}>This is a design example, not a live AI response. No customer data is connected and no message will be sent.</p>
           </>}
         </div>

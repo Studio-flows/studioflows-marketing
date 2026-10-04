@@ -184,26 +184,25 @@ export default function AppleHomepage() {
       </section>
 
       <section id="how-it-works" className={styles.scenarioSection} aria-labelledby="scenario-heading">
+        <Tabs.Root value={exampleStep} onValueChange={setExampleStep} className={styles.scenarioLayout}>
         <div className={styles.scenarioCopy}>
           <p className={styles.eyebrow}>People and AI. Working together.</p>
           <h2 id="scenario-heading">From the first ask.<br /><span>To a job well done.</span></h2>
           <p>Follow Alex’s AC service visit.<br />One request, one team, one job record.</p>
-          <Tabs.Root value={exampleStep} onValueChange={setExampleStep}>
             <Tabs.List className={styles.scenarioTabs} aria-label="Follow an example request">
               {EXAMPLE_STEPS.map((step, index) => <Tabs.Trigger key={step.label} value={String(index)} aria-controls={`scenario-panel-${index}`} className={styles.scenarioTab}><span>0{index + 1}</span>{step.label}<ChevronRight size={16} aria-hidden="true" /></Tabs.Trigger>)}
             </Tabs.List>
-            {EXAMPLE_STEPS.map((step, index) => <Tabs.Content key={step.label} value={String(index)} id={`scenario-panel-${index}`} className={styles.srOnly}>{step.heading} {step.body} Responsible: {step.owner}. {step.details.map(([label, value]) => `${label}: ${value}.`).join(" ")} Next: {step.next}.</Tabs.Content>)}
-          </Tabs.Root>
         </div>
         <div className={styles.scenarioVisual}>
           <p className={styles.conceptLabel}>Fictional job example · Illustrative workflow</p>
-          <div className={styles.messageCard}>
+          <Tabs.Content key={exampleStep} value={exampleStep} id={`scenario-panel-${exampleStep}`} className={styles.messageCard}>
             <div className={styles.messageTop}><span className={styles.messageIcon}><ScenarioIcon size={25} /></span><span>AC service · Alex<small>{scenario.status}</small></span><Network className={styles.messageMark} size={22} aria-hidden="true" /></div>
             <div className={styles.messageBody} aria-live="polite" aria-atomic="true"><h3>{scenario.heading}</h3><p>{scenario.body}</p><p className={styles.jobOwner}>Responsible: <strong>{scenario.owner}</strong></p><dl className={styles.jobDetails}>{scenario.details.map(([label, value]) => <div key={label}><dt>{label}</dt><dd>{value}</dd></div>)}</dl></div>
             <div className={styles.messageFooter}><span><ShieldCheck size={16} /> Next: {scenario.next}</span></div>
-          </div>
+          </Tabs.Content>
           <p className={styles.scenarioNote}>Fictional people and job details. Nothing is sent or scheduled.</p>
         </div>
+        </Tabs.Root>
       </section>
 
       <section id="questions" className={styles.questionsSection} aria-labelledby="questions-heading">

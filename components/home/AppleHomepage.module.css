@@ -76,6 +76,7 @@
 .galleryArrows svg { width: 19px; }
 
 .scenarioSection { display: grid; grid-template-columns: .85fr 1.15fr; gap: 65px; max-width: 1280px; padding: 130px 40px; margin: auto; align-items: center; scroll-margin-top: 20px; }
+.scenarioLayout { display: contents; }
 .scenarioCopy h2 span { color: #7062d7; }
 .scenarioCopy > p:not(.eyebrow) { font-size: 19px; line-height: 1.55; margin: 26px 0 30px; letter-spacing: -.02em; }
 .scenarioTabs { display: flex; flex-direction: column; gap: 3px; max-width: 340px; }
@@ -173,6 +174,7 @@
   .questionCard { padding: 24px; min-height: 310px; }
 }
 @media (max-width: 900px) {
+  .hero { height: auto; } .heroCopy { padding-bottom: 60px; }
   .nav { display: none; } .headerActions { margin-left: auto; } .menuButton { display: grid; place-items: center; border: 0; background: transparent; width: 40px; height: 40px; color: #30303b; }
   .mobileNav { position: absolute; top: 70px; right: 0; display: grid; gap: 6px; padding: 16px; width: 230px; background: #ffffffed; border: 1px solid #efedf6; border-radius: 20px; backdrop-filter: blur(20px); box-shadow: 0 20px 55px #00000018; }
   .mobileNav a { padding: 12px; font-size: 15px; }

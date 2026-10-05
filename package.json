@@ -5,7 +5,10 @@
     "build": "next build",
     "start": "next start",
     "dev": "next dev",
-    "dev:fresh": "node scripts/dev-fresh.mjs"
+    "dev:fresh": "node scripts/dev-fresh.mjs",
+    "typecheck": "tsc --noEmit",
+    "test:geo": "node --experimental-strip-types --test test/geo-landing-pages.test.ts",
+    "verify:gate2": "node --experimental-strip-types scripts/verify-geo-gate2.ts"
   },
   "dependencies": {
     "@radix-ui/react-progress": "^1.1.8",

@@ -16,7 +16,7 @@ export type EvidenceState =
   | "live-serp-confirmed-no-volume"
   | "first-party-query-data-pending";
 
-export type QueryDecision = "implement-now" | "brief-next" | "hold-for-evidence";
+export type QueryDecision = "implemented" | "implement-now" | "brief-next" | "hold-for-evidence";
 
 export type QueryEvidence = {
   source: "approved-plan" | "bing-keyword-research" | "live-measurement-audit";
@@ -84,7 +84,7 @@ export const QUERY_TO_PAGE_REGISTRY = [
       },
       pendingFirstPartyEvidence,
     ],
-    decision: "implement-now",
+    decision: "implemented",
   },
   {
     id: "business-runs-without-you",
@@ -114,7 +114,7 @@ export const QUERY_TO_PAGE_REGISTRY = [
       },
       pendingFirstPartyEvidence,
     ],
-    decision: "implement-now",
+    decision: "implemented",
   },
   {
     id: "owner-is-the-operating-system",
@@ -168,7 +168,7 @@ export const QUERY_TO_PAGE_REGISTRY = [
       approvedPlanEvidence("Approved quote handoff is in the approved Gate 2 quote-to-job cluster."),
       pendingFirstPartyEvidence,
     ],
-    decision: "brief-next",
+    decision: "implement-now",
   },
   {
     id: "work-order-readiness",
@@ -236,7 +236,7 @@ export const QUERY_TO_PAGE_REGISTRY = [
       approvedPlanEvidence("Scope-change propagation is in the approved Gate 2 quote-to-job cluster."),
       pendingFirstPartyEvidence,
     ],
-    decision: "brief-next",
+    decision: "implement-now",
   },
   {
     id: "operational-readiness",
@@ -314,6 +314,10 @@ export const QUERY_TO_PAGE_REGISTRY = [
 
 export const GATE_2_IMPLEMENTATION_QUEUE = QUERY_TO_PAGE_REGISTRY.filter(
   ({ decision }) => decision === "implement-now",
+);
+
+export const GATE_2_IMPLEMENTED_TARGETS = QUERY_TO_PAGE_REGISTRY.filter(
+  ({ decision }) => decision === "implemented",
 );
 
 export function validateQueryRegistry(registry: ReadonlyArray<QueryTarget>): ReadonlyArray<string> {

@@ -39,7 +39,7 @@ function authorityArticleSection(): string {
     "",
   ]);
 
-  return ["## Owner-dependency field guides", "", ...lines].join("\n");
+  return ["## Operational field guides", "", ...lines].join("\n");
 }
 
 export function buildLlmsTxt(): string {

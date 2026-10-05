@@ -42,6 +42,20 @@ export const PUBLIC_ROUTE_REGISTRY = [
     priority: 0.85,
   },
   {
+    path: "/resources/approved-quote-handoff",
+    title: "Approved Quote Handoff",
+    description: "A quote-to-job release packet for turning customer approval into ready work.",
+    changeFrequency: "monthly",
+    priority: 0.84,
+  },
+  {
+    path: "/resources/scope-change-propagation",
+    title: "Scope Change Process",
+    description: "A downstream change trace for keeping service jobs on one approved version.",
+    changeFrequency: "monthly",
+    priority: 0.83,
+  },
+  {
     path: "/",
     title: "The AI-Native Operating System for Service Businesses",
     description: "An operating system shaped around your service business, with connected teams, work, and AI.",

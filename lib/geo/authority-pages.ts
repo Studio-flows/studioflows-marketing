@@ -18,8 +18,44 @@ export type AuthorityLink = {
   href: string;
 };
 
-export type AuthorityPageDefinition = {
-  slug: "founder-bottleneck" | "business-that-runs-without-you";
+export type AuthorityPageSlug =
+  | "founder-bottleneck"
+  | "business-that-runs-without-you"
+  | "approved-quote-handoff"
+  | "scope-change-propagation";
+
+export type AuthorityAnswerPoints = readonly [string, string, string];
+
+export type ProcessBlueprintArtifact = {
+  kind: "process-blueprint";
+  entryState: string;
+  exitState: string;
+  releaseRecord: {
+    acceptedBasis: string;
+    blockers: ReadonlyArray<string>;
+    owner: string;
+    releaseProof: string;
+  };
+};
+
+export type ScenarioTraceSurface = {
+  name: string;
+  before: string;
+  after: string;
+  owner: string;
+  verification: string;
+};
+
+export type ScenarioTraceArtifact = {
+  kind: "scenario-trace";
+  trigger: string;
+  baseline: string;
+  outcome: string;
+  surfaces: ReadonlyArray<ScenarioTraceSurface>;
+};
+
+type AuthorityPageCommon = {
+  slug: AuthorityPageSlug;
   path: string;
   title: string;
   eyebrow: string;
@@ -46,10 +82,39 @@ export type AuthorityPageDefinition = {
   primaryQuery: string;
 };
 
-const PUBLISHED_ON = "2026-08-06";
+export type LegacyAuthorityPageDefinition = AuthorityPageCommon & {
+  template: "legacy-authority";
+};
+
+export type ProcessBlueprintPageDefinition = AuthorityPageCommon & {
+  template: "process-blueprint";
+  heroAnswer: string;
+  answerPoints: AuthorityAnswerPoints;
+  artifact: ProcessBlueprintArtifact;
+};
+
+export type ScenarioTracePageDefinition = AuthorityPageCommon & {
+  template: "scenario-trace";
+  heroAnswer: string;
+  answerPoints: AuthorityAnswerPoints;
+  artifact: ScenarioTraceArtifact;
+};
+
+export type AuthorityPageDefinition =
+  | LegacyAuthorityPageDefinition
+  | ProcessBlueprintPageDefinition
+  | ScenarioTracePageDefinition;
+
+export type ModernAuthorityPageDefinition =
+  | ProcessBlueprintPageDefinition
+  | ScenarioTracePageDefinition;
+
+const INITIAL_PUBLISHED_ON = "2026-08-06";
+const QUOTE_HANDOFF_BATCH_PUBLISHED_ON = "2026-08-09";
 
 export const AUTHORITY_PAGES = {
   "founder-bottleneck": {
+    template: "legacy-authority",
     slug: "founder-bottleneck",
     path: "/resources/founder-bottleneck",
     title: "Founder Bottleneck: How to Find Where Work Waits on You",
@@ -157,11 +222,12 @@ export const AUTHORITY_PAGES = {
       label: "Run the diagnostic",
       href: "/silent-collapse",
     },
-    publishedOn: PUBLISHED_ON,
-    modifiedOn: PUBLISHED_ON,
+    publishedOn: INITIAL_PUBLISHED_ON,
+    modifiedOn: INITIAL_PUBLISHED_ON,
     primaryQuery: "founder bottleneck",
   },
   "business-that-runs-without-you": {
+    template: "legacy-authority",
     slug: "business-that-runs-without-you",
     path: "/resources/business-that-runs-without-you",
     title: "How to Build a Business That Can Run Without You",
@@ -284,13 +350,354 @@ export const AUTHORITY_PAGES = {
       label: "Run the diagnostic",
       href: "/silent-collapse",
     },
-    publishedOn: PUBLISHED_ON,
-    modifiedOn: PUBLISHED_ON,
+    publishedOn: INITIAL_PUBLISHED_ON,
+    modifiedOn: INITIAL_PUBLISHED_ON,
     primaryQuery: "business can run without you",
   },
-} as const satisfies Record<AuthorityPageDefinition["slug"], AuthorityPageDefinition>;
+  "approved-quote-handoff": {
+    template: "process-blueprint",
+    slug: "approved-quote-handoff",
+    path: "/resources/approved-quote-handoff",
+    title: "Approved Quote Handoff: Turn Approval Into Ready Work",
+    eyebrow: "Quote to job · Release control",
+    description:
+      "A quote-to-job handoff for carrying approved scope, assumptions, customer commitments, readiness blockers, and ownership into scheduling.",
+    directAnswer:
+      "An approved quote is ready for scheduling only when the next owner can identify the accepted quote version, committed scope, exclusions, assumptions, customer inputs, timing constraints, readiness blockers, and decision authority from one job record. Approval confirms what the customer accepted. The handoff must also prove that the operation can release that work without reconstructing the sale from inboxes, calls, or memory.",
+    heroAnswer:
+      "An approved quote becomes ready work when one job record carries the accepted version, execution conditions, named next owner, and release acknowledgement.",
+    answerPoints: [
+      "Use the accepted quote version as the commercial baseline.",
+      "Keep approved work separate from operational readiness until required inputs have owners.",
+      "Release only to a named next owner with acknowledgement and an exception path.",
+    ],
+    frameworkName: "The quote-to-job release packet",
+    frameworkIntroduction:
+      "Build the packet from one accepted quote. Keep the quote as the commercial source, then carry only the facts the next owner needs to prepare, schedule, and control the job.",
+    framework: [
+      {
+        number: "01",
+        title: "Freeze the accepted basis",
+        instruction:
+          "Record the exact quote version, accepted package, acceptance date and method, customer authority, and any approved attachment. Link to the accepted source instead of copying an editable draft.",
+        evidence:
+          "One identifiable quote version and an acceptance record. A scheduler can distinguish the accepted basis from every earlier revision.",
+      },
+      {
+        number: "02",
+        title: "Translate the commitments",
+        instruction:
+          "Carry forward deliverables, exclusions, assumptions, price basis, payment or billing trigger, promised timing, site constraints, and customer-provided inputs. Resolve contradictions before release.",
+        evidence:
+          "A job record whose scope and commercial boundaries agree with the accepted quote, with unresolved conflicts named as blockers.",
+      },
+      {
+        number: "03",
+        title: "Test operational readiness",
+        instruction:
+          "Check the people, access, materials, equipment, information, dependencies, and permissions required to perform the work. Keep the status approved until each required condition is ready or assigned.",
+        evidence:
+          "A readiness state for every required input, plus a named owner and due time for each open blocker.",
+      },
+      {
+        number: "04",
+        title: "Assign the next decision",
+        instruction:
+          "Name the person who can schedule or prepare the job, the bounds of that authority, the response deadline, and the conditions that must return to commercial, safety, financial, or customer approval.",
+        evidence:
+          "One accountable next owner, a decision window, and an exception path that does not default to 'ask the founder.'",
+      },
+      {
+        number: "05",
+        title: "Release and acknowledge",
+        instruction:
+          "Move the job to ready only after the packet is complete. Have the next owner acknowledge the release, retire superseded instructions, and preserve the accepted source for later changes or billing questions.",
+        evidence:
+          "A timestamped release and acknowledgement. The next owner can state what was sold, what is still open, and where the accepted basis lives.",
+      },
+    ],
+    artifact: {
+      kind: "process-blueprint",
+      entryState: "Customer acceptance recorded",
+      exitState: "Ready work acknowledged by the next owner",
+      releaseRecord: {
+        acceptedBasis:
+          "The accepted two-day equipment-service quote, including after-hours access and the optional part that was not purchased.",
+        blockers: [
+          "Customer-provided shutdown confirmation",
+          "After-hours access confirmation",
+        ],
+        owner: "The coordinator, acting within documented scheduling authority.",
+        releaseProof:
+          "The linked quote version, resolved access condition, approved-not-ready state history, and scheduler acknowledgement.",
+      },
+    },
+    exampleTitle: "Approval arrives, but the access promise is missing",
+    exampleLabel: "Illustrative service-business example",
+    example: [
+      "A customer accepts a two-day equipment-service quote. The accepted version includes after-hours site access, one customer-provided shutdown, and an optional replacement part that was not purchased. Sales marks the opportunity won and sends the price and address to scheduling.",
+      "The coordinator can see that the quote was approved but cannot tell who will arrange the shutdown, whether the after-hours window is confirmed, or whether the optional part belongs on the work order. The job is commercially approved and operationally blocked.",
+      "The release packet links the accepted version, carries the exclusion and access promise into the job record, assigns the shutdown confirmation to the customer contact, and keeps the job in approved-not-ready status. Scheduling receives it only after the access condition is confirmed. No one has to reinterpret the sale, and the optional part cannot appear as unapproved work.",
+    ],
+    failureSignals: [
+      "The scheduler receives a total price and address but not the accepted scope or exclusions.",
+      "The job is marked ready while a customer input, access condition, or required resource has no owner.",
+      "A revised quote exists, but the work order still points to an earlier version.",
+      "Sales remains the only person who can explain a promise that affects execution.",
+      "The crew discovers a commercial assumption after travel, assignment, or material preparation has begun.",
+    ],
+    limitations: [
+      "This framework does not determine whether a quote, signature, email, or other acceptance creates an enforceable contract. Use the legal and commercial rules that apply to the business and transaction.",
+      "Do not treat customer approval as proof that safety, licensing, access, privacy, credit, or technical readiness requirements are satisfied.",
+      "Not every field belongs in every handoff. Carry the minimum information required to execute and control the job, and restrict sensitive data to people who need it.",
+      "Material changes after release require their own authorized change record; editing the original handoff in place destroys the accepted baseline.",
+    ],
+    sources: [
+      {
+        organization: "Federal Acquisition Regulation",
+        title: "FAR 4.801 — General contract-file requirements",
+        url: "https://www.acquisition.gov/far/4.801",
+        relevance:
+          "Federal procurement guidance calls for records that document the complete transaction history and support informed decisions. This page adapts that traceability principle; it does not apply federal procurement rules to private service work.",
+      },
+      {
+        organization: "Federal Acquisition Regulation",
+        title: "FAR 4.803 — Contents of contract files",
+        url: "https://www.acquisition.gov/far/4.803",
+        relevance:
+          "Its examples connect quotations, approvals, awards, modifications, notices to proceed, orders, and payment records. The release packet uses that record-continuity principle outside the federal contracting context.",
+      },
+      {
+        organization: "U.S. Government Accountability Office",
+        title: "Standards for Internal Control in the Federal Government",
+        url: "https://www.gao.gov/greenbook",
+        relevance:
+          "The Green Book anchors the control ideas of documented responsibilities, reliable information, and evidence that a control was performed. Its standards govern federal internal control; this page uses them as a design reference.",
+      },
+    ],
+    relatedLinks: [
+      {
+        title: "Scope change process",
+        description: "Carry an approved change through every execution surface without losing the baseline.",
+        href: "/resources/scope-change-propagation",
+      },
+      {
+        title: "Founder bottleneck diagnosis",
+        description: "Find the missing context and decisions that still make handoffs wait for the owner.",
+        href: "/resources/founder-bottleneck",
+      },
+      {
+        title: "Real Estate Media OS",
+        description: "See how quote, scheduling, field work, delivery, and payment can remain connected in one vertical flow.",
+        href: "/real-estate-media",
+      },
+    ],
+    action: {
+      title: "Trace your quote-to-job handoff",
+      description:
+        "The Ops Teardown follows a real work item from commitment to delivery and identifies the first missing input, owner, or control worth repairing.",
+      label: "Start the Ops Teardown",
+      href: "/services/custom-ops-hub",
+    },
+    publishedOn: QUOTE_HANDOFF_BATCH_PUBLISHED_ON,
+    modifiedOn: QUOTE_HANDOFF_BATCH_PUBLISHED_ON,
+    primaryQuery: "approved quote handoff",
+  },
+  "scope-change-propagation": {
+    template: "scenario-trace",
+    slug: "scope-change-propagation",
+    path: "/resources/scope-change-propagation",
+    title: "Scope Change Process: Keep the Job in One Version",
+    eyebrow: "Quote to job · Change control",
+    description:
+      "A scope change process for updating authority, price, schedule, readiness, crew instructions, customer communication, and billing from one baseline.",
+    directAnswer:
+      "A scope change is complete only when an authorized record identifies the current baseline, the requested change, who approved it, its price and timing effects, its execution and safety effects, and every downstream record or owner that must change. The process ends when affected owners acknowledge the new version and superseded instructions can no longer direct the job.",
+    heroAnswer:
+      "A scope change is complete when one authorized record updates every affected execution surface and each downstream owner acknowledges the same effective version.",
+    answerPoints: [
+      "Anchor the change to the last accepted job baseline.",
+      "Evaluate commercial, schedule, resource, customer, billing, and safety effects before propagation.",
+      "Confirm affected owners received the new version and retire superseded instructions.",
+    ],
+    frameworkName: "The downstream change trace",
+    frameworkIntroduction:
+      "Start from the last accepted job version. Treat the change as a controlled transition between two known states, not as a message that each department must interpret on its own.",
+    framework: [
+      {
+        number: "01",
+        title: "Anchor the baseline",
+        instruction:
+          "Identify the accepted quote, scope, work order, schedule, and customer commitments currently governing the job. Stop if the team cannot agree which version is active.",
+        evidence:
+          "One versioned baseline with links to the records that currently control commercial and execution decisions.",
+      },
+      {
+        number: "02",
+        title: "Qualify the request and authority",
+        instruction:
+          "Record what changes, what remains unchanged, who requested it, who can approve it, and whether work must pause. Separate a question or preference from an authorized change.",
+        evidence:
+          "A written change statement, requester, decision owner, approval state, and explicit stop-or-continue instruction.",
+      },
+      {
+        number: "03",
+        title: "Map the effects",
+        instruction:
+          "Evaluate scope, price, payment, schedule, staffing, materials, access, safety, quality, delivery, and customer communication. Mark each dimension affected, unaffected, or unresolved.",
+        evidence:
+          "A completed impact record with an owner for every unresolved effect and no blank dimension silently treated as unchanged.",
+      },
+      {
+        number: "04",
+        title: "Propagate the approved version",
+        instruction:
+          "Update each affected execution surface: quote or change order, work order, schedule, resource plan, crew brief, customer notice, delivery requirement, and billing instruction. Link each update to the same change record.",
+        evidence:
+          "A downstream update list showing the new version, responsible owner, update time, and source change for every affected record.",
+      },
+      {
+        number: "05",
+        title: "Confirm receipt and retire the old path",
+        instruction:
+          "Require affected owners to acknowledge the change before their next irreversible action. Archive or mark old instructions superseded so search, chat, and printed notes cannot quietly restore the prior scope.",
+        evidence:
+          "Acknowledgements from affected owners and a trace showing that superseded instructions are retained for history but no longer operational.",
+      },
+    ],
+    artifact: {
+      kind: "scenario-trace",
+      trigger: "A customer-approved request changes an active job.",
+      baseline:
+        "The last accepted quote, scope, work order, schedule, and customer commitments.",
+      outcome:
+        "Every affected execution surface points to the same approved version.",
+      surfaces: [
+        {
+          name: "Change record",
+          before: "The original scope is the active instruction.",
+          after: "The approved addition is linked to the active baseline.",
+          owner: "Commercial authority",
+          verification: "Approval and the effective version are recorded.",
+        },
+        {
+          name: "Work order",
+          before: "One location and the original duration.",
+          after: "The second location and updated scope are included.",
+          owner: "Job preparation owner",
+          verification: "The work order references the approved change.",
+        },
+        {
+          name: "Schedule",
+          before: "The original duration, route, and assignment.",
+          after: "Travel, duration, and assignment reflect the change.",
+          owner: "Scheduler",
+          verification: "The current schedule matches the effective version.",
+        },
+        {
+          name: "Resource or crew plan",
+          before: "One address and the original field instructions.",
+          after: "Both locations, access, and resource changes are visible.",
+          owner: "Operations lead",
+          verification: "The crew acknowledges the update before dispatch.",
+        },
+        {
+          name: "Customer communication",
+          before: "The original confirmation remains current.",
+          after: "Timing, scope, and responsibilities reflect the approved change.",
+          owner: "Customer owner",
+          verification: "The customer receives the current confirmation.",
+        },
+        {
+          name: "Billing instruction",
+          before: "The original total and invoice instruction.",
+          after: "The approved price and billing trigger are current.",
+          owner: "Billing owner",
+          verification: "The invoice instruction references the change.",
+        },
+      ],
+    },
+    exampleTitle: "One added location splits the job into two realities",
+    exampleLabel: "Illustrative service-business example",
+    example: [
+      "A customer asks to add a second location after the first location is scheduled. Sales revises the quote and receives approval, but the scheduler still sees the original duration, the crew brief lists one address, and billing carries the original total.",
+      "The company has proof of customer approval but not a complete operational change. If the crew follows its brief, the second location is missed. If it follows the salesperson's message, the schedule and invoice are wrong.",
+      "The downstream change trace anchors the original job version, records the approved addition, evaluates travel, crew time, access, price, and delivery effects, then updates the work order, schedule, crew brief, customer confirmation, and billing instruction from the same change record. Each affected owner acknowledges the new version before dispatch.",
+    ],
+    failureSignals: [
+      "A customer-approved change appears in the quote but not in the schedule, work order, crew brief, or invoice instruction.",
+      "People learn about a change from chat, yet no record says which instruction it supersedes.",
+      "The approver can authorize price but nobody owns the delivery, staffing, or safety impact.",
+      "Blank impact fields are treated as no impact even though nobody checked them.",
+      "A temporary workaround remains active because it has no expiration, review point, or restoration owner.",
+    ],
+    limitations: [
+      "This framework is not legal advice and does not define contract-modification authority. Use the approval, notice, pricing, and signature requirements that govern the actual customer agreement.",
+      "Safety-critical or regulated work may require an immediate stop, formal hazard review, training, permits, or approval before any changed work begins.",
+      "Not every change affects every downstream record. The control is to evaluate each relevant dimension and record why it is unaffected, not to generate unnecessary updates.",
+      "Urgency does not erase traceability. If an emergency procedure permits temporary action, record the authority, boundaries, affected work, and required follow-up review.",
+    ],
+    sources: [
+      {
+        organization: "Federal Acquisition Regulation",
+        title: "FAR 43.102 — Policy for contract modifications",
+        url: "https://www.acquisition.gov/far/43.102",
+        relevance:
+          "Federal policy ties modifications to defined authority and addresses pricing before execution. This page adapts the authority-and-impact principle without applying federal contracting rules to private service agreements.",
+      },
+      {
+        organization: "Federal Acquisition Regulation",
+        title: "FAR Subpart 43.2 — Change Orders",
+        url: "https://www.acquisition.gov/far/subpart-43.2",
+        relevance:
+          "The subpart emphasizes written changes, cost segregation, supporting documentation, and adjustments to price or delivery. Those controls inform the trace while remaining specific to federal contracting.",
+      },
+      {
+        organization: "Occupational Safety and Health Administration",
+        title: "Process Safety Management — Management of Change",
+        url: "https://www.osha.gov/enforcement/directives/cpl-02-02-045",
+        relevance:
+          "For covered highly hazardous processes, OSHA describes pre-implementation review of technical basis, safety impact, procedures, duration, authorization, and training. This page uses that discipline only as a safety-critical change reference.",
+      },
+      {
+        organization: "National Institute of Standards and Technology",
+        title: "NIST SP 800-171 Rev. 3 — Configuration Change Control",
+        url: "https://nvlpubs.nist.gov/nistpubs/SpecialPublications/800-171r3/NIST.SP.800-171r3.html",
+        relevance:
+          "In a cybersecurity context, NIST calls for reviewing, approving, documenting, and monitoring changes against a baseline. The downstream trace adapts that baseline-control pattern to service operations.",
+      },
+    ],
+    relatedLinks: [
+      {
+        title: "Approved quote handoff",
+        description: "Create the accepted job baseline that later changes must reference.",
+        href: "/resources/approved-quote-handoff",
+      },
+      {
+        title: "Business that runs without you",
+        description: "Test whether normal work and legitimate exceptions can move through explicit authority rules.",
+        href: "/resources/business-that-runs-without-you",
+      },
+      {
+        title: "Real Estate Media OS",
+        description: "See the downstream scheduling, field-work, delivery, and payment states a change can affect.",
+        href: "/real-estate-media",
+      },
+    ],
+    action: {
+      title: "Find where changes split your operation",
+      description:
+        "The Ops Teardown traces active work across handoffs and shows where a customer decision stops propagating to the people and records that execute it.",
+      label: "Start the Ops Teardown",
+      href: "/services/custom-ops-hub",
+    },
+    publishedOn: QUOTE_HANDOFF_BATCH_PUBLISHED_ON,
+    modifiedOn: QUOTE_HANDOFF_BATCH_PUBLISHED_ON,
+    primaryQuery: "scope change process",
+  },
+} as const satisfies Record<AuthorityPageSlug, AuthorityPageDefinition>;
 
-export function getAuthorityPage(slug: AuthorityPageDefinition["slug"]): AuthorityPageDefinition {
+export function getAuthorityPage(slug: AuthorityPageSlug): AuthorityPageDefinition {
   const page = AUTHORITY_PAGES[slug];
   if (!page) {
     throw new Error(`Unknown authority page: ${slug}`);

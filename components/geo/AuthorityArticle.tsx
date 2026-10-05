@@ -1,61 +1,24 @@
 import Link from "next/link";
 
 import { TrackedResourceLink } from "@/components/analytics/TrackedResourceLink";
+import { buildAuthorityPageJsonLd } from "@/lib/geo/authority-page-schema";
 import type { AuthorityPageDefinition } from "@/lib/geo/authority-pages";
-import { absoluteUrl } from "@/lib/seo";
 
 type AuthorityArticleProps = {
   page: AuthorityPageDefinition;
 };
 
-function buildArticleJsonLd(page: AuthorityPageDefinition) {
-  return {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "Article",
-        headline: page.title,
-        description: page.description,
-        mainEntityOfPage: absoluteUrl(page.path),
-        url: absoluteUrl(page.path),
-        datePublished: page.publishedOn,
-        dateModified: page.modifiedOn,
-        author: {
-          "@type": "Organization",
-          name: "StudioFlows",
-          url: absoluteUrl("/"),
-        },
-        publisher: {
-          "@type": "Organization",
-          name: "StudioFlows",
-          url: absoluteUrl("/"),
-        },
-        about: page.primaryQuery,
-        citation: page.sources.map(({ url }) => url),
-      },
-      {
-        "@type": "BreadcrumbList",
-        itemListElement: [
-          {
-            "@type": "ListItem",
-            position: 1,
-            name: "Resources",
-            item: absoluteUrl("/resources"),
-          },
-          {
-            "@type": "ListItem",
-            position: 2,
-            name: page.title,
-            item: absoluteUrl(page.path),
-          },
-        ],
-      },
-    ],
-  };
+function formatReviewDate(date: string): string {
+  return new Intl.DateTimeFormat("en-US", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "UTC",
+  }).format(new Date(`${date}T00:00:00Z`));
 }
 
 export function AuthorityArticle({ page }: AuthorityArticleProps) {
-  const jsonLd = buildArticleJsonLd(page);
+  const jsonLd = buildAuthorityPageJsonLd(page);
 
   return (
     <main className="min-h-screen overflow-hidden bg-[#080808] text-[#F2EFE8]">
@@ -115,7 +78,7 @@ export function AuthorityArticle({ page }: AuthorityArticleProps) {
               </div>
               <div className="mt-5">
                 <dt className="font-mono text-[10px] uppercase tracking-[0.2em] text-white/35">Last reviewed</dt>
-                <dd className="mt-1 text-white/72">August 6, 2026</dd>
+                <dd className="mt-1 text-white/72">{formatReviewDate(page.modifiedOn)}</dd>
               </div>
             </dl>
           </div>

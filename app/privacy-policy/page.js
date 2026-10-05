@@ -1,23 +1,11 @@
 import Link from "next/link";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Privacy Policy",
   description: "Privacy Policy for the StudioFlows marketing website.",
-  alternates: {
-    canonical: "/privacy-policy",
-  },
-  openGraph: {
-    title: "Privacy Policy | StudioFlows",
-    description: "Privacy Policy for the StudioFlows marketing website.",
-    url: "/privacy-policy",
-    type: "website",
-  },
-  twitter: {
-    card: "summary",
-    title: "Privacy Policy | StudioFlows",
-    description: "Privacy Policy for the StudioFlows marketing website.",
-  },
-};
+  path: "/privacy-policy",
+});
 
 const SECTIONS = [
   {

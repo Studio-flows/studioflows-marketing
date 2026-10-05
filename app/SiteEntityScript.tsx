@@ -1,4 +1,4 @@
-import { PUBLIC_SITE_ORIGIN } from "@/lib/seo";
+import { absoluteUrl, PUBLIC_SOCIAL_IMAGE, PUBLIC_SITE_ORIGIN, SITE_POSITIONING } from "@/lib/seo";
 
 const organizationId = `${PUBLIC_SITE_ORIGIN}/#organization`;
 const websiteId = `${PUBLIC_SITE_ORIGIN}/#website`;
@@ -11,11 +11,10 @@ const siteEntityGraph = {
       "@id": organizationId,
       name: "StudioFlows",
       url: PUBLIC_SITE_ORIGIN,
-      description:
-        "StudioFlows is an AI-native operating system for service businesses, shaped around their teams, work, and approval rules.",
+      description: SITE_POSITIONING.description,
       logo: {
         "@type": "ImageObject",
-        url: `${PUBLIC_SITE_ORIGIN}/StudioFlows%20logo%20%281200%20x%20675%20px%29%20%281%29.png`,
+        url: absoluteUrl(PUBLIC_SOCIAL_IMAGE.url),
       },
     },
     {
@@ -23,6 +22,11 @@ const siteEntityGraph = {
       "@id": websiteId,
       name: "StudioFlows",
       url: PUBLIC_SITE_ORIGIN,
+      description: SITE_POSITIONING.description,
+      audience: {
+        "@type": "Audience",
+        audienceType: "Owners, managers, and teams of service businesses across industries",
+      },
       publisher: {
         "@id": organizationId,
       },

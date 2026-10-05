@@ -3,27 +3,14 @@ import Link from "next/link";
 import EngagementPathsSection from "@/components/EngagementPathsSection";
 import PlatformWaitlistClient from "./PlatformWaitlistClient";
 import { PLATFORM_VERTICAL_MOLDS } from "@/lib/platform-molds";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Accelerate Waitlist",
   description:
-    "Join the Accelerate waitlist — StudioFlows OS plus the AI suite built in. Pre-built vertical molds for service businesses ready to run system-driven operations.",
-  alternates: {
-    canonical: "/platform",
-  },
-  openGraph: {
-    title: "Accelerate Waitlist | StudioFlows",
-    description:
-      "Accelerate your operations with pre-built vertical molds. Subscribe and run a complete system shaped for how your team works.",
-    url: "https://www.studioflows.co/platform",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Accelerate Waitlist | StudioFlows",
-    description: "System-driven results — join the waitlist for StudioFlows OS plus the AI suite.",
-  },
-};
+    "Join the Accelerate waitlist for StudioFlows OS and operating models for service businesses across industries. Waitlist only; not generally available.",
+  path: "/platform",
+});
 
 export default function PlatformPage() {
   return (

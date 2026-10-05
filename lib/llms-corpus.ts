@@ -3,10 +3,9 @@ import {
   LIVE_SIGNALS,
   OPERATING_LAYER_CARDS,
 } from "@/app/silent-collapse/data";
-import { ENGAGEMENT_PATHS, SECTION_INTRO } from "@/lib/offerings";
-import { REC_FIT_BUSINESSES } from "@/lib/rec-case-study";
+import { ARCHETYPES } from "@/components/home/archetype-content";
 import { AUTHORITY_PAGES } from "@/lib/geo/authority-pages";
-import { absoluteUrl, PUBLIC_ROUTE_REGISTRY, PUBLIC_SITE_ORIGIN } from "@/lib/seo";
+import { absoluteUrl, PUBLIC_ROUTE_REGISTRY, PUBLIC_SITE_ORIGIN, SITE_POSITIONING } from "@/lib/seo";
 
 function publicRouteSection(): string {
   const lines = PUBLIC_ROUTE_REGISTRY.map(
@@ -16,18 +15,19 @@ function publicRouteSection(): string {
   return ["## Public pages", "", ...lines].join("\n");
 }
 
-function engagementSection(): string {
-  const lines = ENGAGEMENT_PATHS.map((path) => {
-    const highlight = path.highlight ? ` (${path.highlight})` : "";
-    const status =
-      path.status === "waitlist"
-        ? "waitlist open"
-        : path.status === "live"
-          ? "available now"
-          : "planned — not live";
-    return `- ${path.label} — ${path.tagline}${highlight}: ${absoluteUrl(path.url)} — ${path.description} [${status}]`;
-  });
-  return ["## Three speeds to revenue", "", SECTION_INTRO.subcopy, "", ...lines].join("\n");
+function businessFlowsSection(): string {
+  const lines = ARCHETYPES.map((flow) =>
+    `- ${flow.name} (${flow.label}): ${flow.description} Examples: ${flow.examples.map((example) => example.name).join(", ")}.`,
+  );
+  return [
+    "## Who StudioFlows is for",
+    "",
+    "Service businesses across industries, organized by how their work moves. Creative studios and real estate media are examples within that audience, not its limits.",
+    "",
+    ...lines,
+    "",
+    "These are illustrative business flows and configuration examples from the public homepage, not a list of released industry packs or verified runtime capabilities.",
+  ].join("\n");
 }
 
 function authorityArticleSection(): string {
@@ -46,7 +46,7 @@ export function buildLlmsTxt(): string {
   return [
     "# StudioFlows",
     "",
-    "> StudioFlows helps founder-led service businesses fix operational drag. Pick your speed to revenue: Optimize your stack with AI execution agents (e.g. Vessa), Accelerate operations with StudioFlows OS plus the AI suite, or Custom Command for a bespoke build like REC.",
+    `> ${SITE_POSITIONING.description}`,
     "",
     `Authoritative public origin: ${PUBLIC_SITE_ORIGIN} (sole indexable marketing surface). App subdomains require account access and are not public product pages.`,
     "",
@@ -54,23 +54,22 @@ export function buildLlmsTxt(): string {
     "",
     authorityArticleSection(),
     "",
-    engagementSection(),
+    businessFlowsSection(),
     "",
-    "## Qualification",
+    "## Getting started and availability",
     "",
-    "- Ops Check at /apply is context only; the Custom Command qualifier at /services/custom-ops-hub determines fit for bespoke builds.",
-    "- Accelerate is waitlist-only — do not cite as generally available until status changes.",
+    `- Find your business flow and see the operating-system walkthrough at ${absoluteUrl("/")}.`,
+    "- The current demo at https://os.studioflows.co/demo/access requires sign-in and shows an existing demo workspace; it does not create a configured business for the visitor.",
+    `- Accelerate at ${absoluteUrl("/platform")} is waitlist-only; do not describe it as generally available.`,
+    `- The Ops Teardown at ${absoluteUrl("/services/custom-ops-hub")} is a guided operational audit for service businesses.`,
+    `- Real estate media at ${absoluteUrl("/real-estate-media")} is one industry operating-model example within the wider service-business audience.`,
     "",
     "## Do not cite",
     "",
     "- Noindexed routes: /final/*, /axiom, /enterprise, /apps, /apply, /login, /signup, /auth/*, /products (scaffold)",
     "- Account-gated app subdomains (consulting, axiom, vessa app login, etc.)",
     "",
-    "## Post-qualification only",
-    "",
-    "- consulting.studioflows.co — reached after qualified OPS Drag Audit ingest, not a discoverable marketing page",
-    "",
-    "Full documentation: /llms-full.txt",
+    `Full public reference: ${absoluteUrl("/llms-full.txt")}`,
     "",
   ].join("\n");
 }
@@ -91,10 +90,12 @@ export function buildLlmsFullTxt(): string {
     "",
   ]);
 
-  const moldLines = REC_FIT_BUSINESSES.flatMap((group) => [
-    `### ${group.category}`,
-    group.tagline,
-    ...group.items.map((item) => `- ${item.name}: ${item.pain}`),
+  const flowLines = ARCHETYPES.flatMap((flow) => [
+    `### ${flow.name}: ${flow.label}`,
+    flow.description,
+    `Unit of work: ${flow.unit}.`,
+    `Example flow: ${flow.flow.join(" → ")}.`,
+    ...flow.examples.map((example) => `- ${example.name}: ${example.pack} Business configuration: ${example.configuration}`),
     "",
   ]);
 
@@ -119,15 +120,15 @@ export function buildLlmsFullTxt(): string {
     "",
     ...faqLines,
     "",
-    "## Accelerate vertical molds (waitlist — labels only)",
+    "## Business flows and industry examples",
     "",
-    "Future out-of-the-box systems tailored to:",
+    "The homepage illustrates six ways service businesses organize work. The examples below describe possible industry packs and business configuration, not generally available features or completed customer deployments.",
     "",
-    ...moldLines,
+    ...flowLines,
     "",
-    "## REC proof (Custom Command)",
+    "## Industry-specific operating model",
     "",
-    `See ${PUBLIC_SITE_ORIGIN}/#rec-spotlight for REC case study — a Custom Command bespoke deployment, not the Accelerate subscription path.`,
+    `See ${absoluteUrl("/real-estate-media")} for the real estate media operating model. It is one service-business example, not the definition of StudioFlows or proof that every illustrated industry pack has shipped.`,
     "",
   ].join("\n");
 }
@@ -157,7 +158,7 @@ export function buildSilentCollapseJsonLd() {
         "@type": "WebPage",
         name: "Silent Collapse Diagnostic | StudioFlows",
         description:
-          "Campaign diagnostic for founder-led teams seeing silent operational collapse — signals, REC proof, and OPS Drag Audit handoff.",
+          "A diagnostic for service-business owners to find founder bottlenecks, stalled decisions, and broken handoffs, with an Ops Drag Audit path.",
         url: `${PUBLIC_SITE_ORIGIN}/silent-collapse`,
       },
       {

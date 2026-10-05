@@ -2,6 +2,54 @@ import type { Metadata, MetadataRoute } from "next";
 
 export const PUBLIC_SITE_ORIGIN = "https://www.studioflows.co";
 
+export const SITE_POSITIONING = {
+  title: "AI Operating System for Service Businesses",
+  description:
+    "StudioFlows is the AI-native operating system for service businesses of all types. Connect your team, work, and AI around how your business operates.",
+} as const;
+
+export const PUBLIC_SOCIAL_IMAGE = {
+  url: "/StudioFlows%20logo%20(1200%20x%20675%20px)%20(1).png",
+  width: 1120,
+  height: 459,
+  alt: "StudioFlows — AI operating system for service businesses",
+} as const;
+
+export function publicPageMetadata({
+  title,
+  description,
+  path,
+  article,
+}: {
+  title: string;
+  description: string;
+  path: string;
+  article?: { publishedTime: string; modifiedTime: string };
+}): Metadata {
+  const socialTitle = `${title} | StudioFlows`;
+  return {
+    title: { absolute: socialTitle },
+    description,
+    alternates: { canonical: path },
+    openGraph: {
+      title: socialTitle,
+      description,
+      url: path,
+      siteName: "StudioFlows",
+      locale: "en_US",
+      type: article ? "article" : "website",
+      ...article,
+      images: [PUBLIC_SOCIAL_IMAGE],
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: socialTitle,
+      description,
+      images: [PUBLIC_SOCIAL_IMAGE],
+    },
+  };
+}
+
 type SitemapChangeFrequency = MetadataRoute.Sitemap[0]["changeFrequency"];
 
 type PublicRouteDefinition = {
@@ -14,6 +62,12 @@ type PublicRouteDefinition = {
 
 export const PUBLIC_ROUTE_REGISTRY = [
   {
+    path: "/",
+    ...SITE_POSITIONING,
+    changeFrequency: "weekly",
+    priority: 1,
+  },
+  {
     path: "/resources",
     title: "Operational Resources",
     description: "Diagnostics and operating models for owner-dependent service businesses.",
@@ -23,7 +77,7 @@ export const PUBLIC_ROUTE_REGISTRY = [
   {
     path: "/silent-collapse",
     title: "Silent Collapse Diagnostic",
-    description: "Founder bottleneck diagnostic and Ops Drag Audit path.",
+    description: "Founder bottleneck diagnostic and Ops Drag Audit path for service businesses.",
     changeFrequency: "weekly",
     priority: 0.9,
   },
@@ -42,13 +96,6 @@ export const PUBLIC_ROUTE_REGISTRY = [
     priority: 0.85,
   },
   {
-    path: "/",
-    title: "The AI-Native Operating System for Service Businesses",
-    description: "An operating system shaped around your service business, with connected teams, work, and AI.",
-    changeFrequency: "weekly",
-    priority: 0.8,
-  },
-  {
     path: "/ops-overload",
     title: "When Operations Still Depend on You",
     description: "Find where service-business handoffs, decisions, and customer updates still depend on the owner.",
@@ -58,21 +105,21 @@ export const PUBLIC_ROUTE_REGISTRY = [
   {
     path: "/real-estate-media",
     title: "Real Estate Media OS",
-    description: "Operating system for real estate media companies where listing jobs still route through the owner.",
+    description: "One industry example of StudioFlows for service businesses: connected booking, field work, editing, and delivery for real estate media companies.",
     changeFrequency: "weekly",
     priority: 0.79,
   },
   {
     path: "/platform",
     title: "Accelerate Waitlist",
-    description: "Waitlist for StudioFlows OS and its service-business operating models.",
+    description: "Join the Accelerate waitlist for StudioFlows OS and operating models for service businesses across industries. Waitlist only; not generally available.",
     changeFrequency: "weekly",
     priority: 0.78,
   },
   {
     path: "/services/custom-ops-hub",
     title: "Ops Teardown",
-    description: "Custom Command audit for locating operational drag.",
+    description: "An Ops Teardown for service businesses to find where handoffs, exceptions, and status work still depend on the owner.",
     changeFrequency: "monthly",
     priority: 0.75,
   },

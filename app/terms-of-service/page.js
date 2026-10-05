@@ -1,23 +1,11 @@
 import Link from "next/link";
+import { publicPageMetadata } from "@/lib/seo";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "Terms of Service",
   description: "Terms of Service for the StudioFlows marketing website and SaaS services.",
-  alternates: {
-    canonical: "/terms-of-service",
-  },
-  openGraph: {
-    title: "Terms of Service | StudioFlows",
-    description: "Terms of Service for the StudioFlows marketing website and SaaS services.",
-    url: "/terms-of-service",
-    type: "website",
-  },
-  twitter: {
-    card: "summary",
-    title: "Terms of Service | StudioFlows",
-    description: "Terms of Service for the StudioFlows marketing website and SaaS services.",
-  },
-};
+  path: "/terms-of-service",
+});
 
 const SECTIONS = [
   {

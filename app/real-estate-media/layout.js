@@ -3,7 +3,7 @@ import { IBM_Plex_Mono } from "next/font/google";
 export const metadata = {
   title: "Real Estate Media | Media Ops Score",
   description:
-    "For founder-led real estate media studios. Photo, drone, reels, floor plans, 24–48h turnarounds. See what still routes to you after booking.",
+    "A real estate media industry example of StudioFlows, the operating system for service businesses across industries. Explore booking-to-delivery operations.",
 };
 
 const ibmPlexMono = IBM_Plex_Mono({

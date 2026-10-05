@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { publicPageMetadata } from "@/lib/seo";
 
 import { INITIATION_HOMEPAGE_CONTENT } from "@/lib/initiation-homepage-content";
 import {
@@ -21,16 +22,11 @@ import {
   SystemResetTransition,
 } from "@/components/home/InitiationHomeSections";
 
-export const metadata = {
+export const metadata = publicPageMetadata({
   title: "When Operations Still Depend on You",
   description: "Find where service-business handoffs, decisions, and customer updates still depend on the owner.",
-  alternates: { canonical: "/ops-overload" },
-  openGraph: {
-    title: "When Operations Still Depend on You",
-    description: "Find the operational pressure that keeps coming back to you.",
-    url: "/ops-overload",
-  },
-};
+  path: "/ops-overload",
+});
 
 const C = INITIATION_HOMEPAGE_CONTENT;
 const LIVE_DEMO_URL = "https://os.studioflows.co/demo/access";

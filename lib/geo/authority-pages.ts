@@ -20,6 +20,8 @@ export type AuthorityLink = {
 
 export type AuthorityPageDefinition = {
   slug: "founder-bottleneck" | "business-that-runs-without-you";
+  cluster: "owner-dependency";
+  template: "legacy-authority";
   path: string;
   title: string;
   eyebrow: string;
@@ -51,6 +53,8 @@ const PUBLISHED_ON = "2026-08-06";
 export const AUTHORITY_PAGES = {
   "founder-bottleneck": {
     slug: "founder-bottleneck",
+    cluster: "owner-dependency",
+    template: "legacy-authority",
     path: "/resources/founder-bottleneck",
     title: "Founder Bottleneck: How to Find Where Work Waits on You",
     eyebrow: "Owner dependency · Diagnosis",
@@ -163,6 +167,8 @@ export const AUTHORITY_PAGES = {
   },
   "business-that-runs-without-you": {
     slug: "business-that-runs-without-you",
+    cluster: "owner-dependency",
+    template: "legacy-authority",
     path: "/resources/business-that-runs-without-you",
     title: "How to Build a Business That Can Run Without You",
     eyebrow: "Owner dependency · Continuity",

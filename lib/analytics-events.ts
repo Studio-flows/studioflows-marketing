@@ -1,6 +1,14 @@
 export type DiagnosticId = "ops_check" | "silent_collapse" | "media_ops_score";
 
-export type ConversionEvent =
+export type GeoEventContext = {
+  geo_page_id?: string;
+  geo_cluster?: string;
+  geo_template?: string;
+  experiment_id?: string;
+};
+
+export type ConversionEvent = GeoEventContext &
+  (
   | {
       event: "resource_cta_click";
       resource_path: string;
@@ -29,7 +37,8 @@ export type ConversionEvent =
       event: "qualified_submission";
       application_id: "custom_ops_hub" | "ops_check_booking";
       source: string;
-    };
+    }
+  );
 
 declare global {
   interface Window {

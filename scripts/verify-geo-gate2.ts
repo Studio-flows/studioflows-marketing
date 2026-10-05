@@ -1,5 +1,6 @@
 import { AUTHORITY_PAGES } from "../lib/geo/authority-pages.ts";
 import type { AuthorityPageDefinition } from "../lib/geo/authority-pages.ts";
+import { buildGeoAuthorityExport } from "../lib/geo/authority-export.ts";
 import {
   GATE_2_IMPLEMENTATION_QUEUE,
   QUERY_TO_PAGE_REGISTRY,
@@ -11,6 +12,7 @@ import { PUBLIC_ROUTE_REGISTRY } from "../lib/seo.ts";
 const errors: Array<string> = [...validateQueryRegistry(QUERY_TO_PAGE_REGISTRY)];
 const publicPaths = new Set<string>(PUBLIC_ROUTE_REGISTRY.map(({ path }) => path));
 const authorityPaths = new Set<string>(Object.values(AUTHORITY_PAGES).map(({ path }) => path));
+const authorityExport = buildGeoAuthorityExport("0000000000000000000000000000000000000000");
 
 if (QUERY_TO_PAGE_REGISTRY.length !== 12) {
   errors.push(`Expected 12 query targets, received ${QUERY_TO_PAGE_REGISTRY.length}.`);
@@ -50,6 +52,15 @@ for (const authorityPage of Object.values(AUTHORITY_PAGES)) {
 
 if (GATE_2_MEASUREMENT_CRITERIA.length < 5) {
   errors.push("Gate 2 requires measurement criteria across search, behavior, and conversion evidence.");
+}
+
+if (
+  authorityExport.queryTargets.length !== QUERY_TO_PAGE_REGISTRY.length ||
+  authorityExport.measurementCriteria.length !== GATE_2_MEASUREMENT_CRITERIA.length ||
+  authorityExport.publicRoutes.length !== PUBLIC_ROUTE_REGISTRY.length ||
+  authorityExport.releasedAuthorityPages.length !== Object.keys(AUTHORITY_PAGES).length
+) {
+  errors.push("Pinned GEO authority export is not aligned with the marketing registries.");
 }
 
 if (errors.length > 0) {

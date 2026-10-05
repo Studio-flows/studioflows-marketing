@@ -243,6 +243,11 @@ export function AuthorityArticle({ page }: AuthorityArticleProps) {
               href={page.action.href}
               eventLabel={page.title}
               eventLocation={`authority_article_${page.slug}`}
+              geoContext={{
+                geo_page_id: page.slug,
+                geo_cluster: page.cluster,
+                geo_template: page.template,
+              }}
               className="inline-flex min-h-12 items-center justify-center rounded-full bg-[#17130B] px-6 text-sm font-semibold text-[#F2EFE8] transition hover:bg-black"
             >
               {page.action.label}

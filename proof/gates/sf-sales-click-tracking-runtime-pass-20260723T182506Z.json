@@ -1,0 +1,54 @@
+{
+  "gate": "sf-sales-click-tracking-v1",
+  "state": "RUNTIME_PASS",
+  "files_changed": [
+    "app/r/[token]/route.js",
+    "lib/outreach-link.mjs",
+    "tests/outreach-link.test.mjs"
+  ],
+  "tests_run": [
+    "node --test tests/outreach-link.test.mjs — 7/7 passed",
+    "Vercel preview build — compiled, linted, type-checked, and deployed",
+    "Preview runtime probe — real redirect handler returned 302",
+    "Staging Axiom verification — consulting.funnel_events row 822cbdd6-9d37-4885-9014-df96f7dfb8c4"
+  ],
+  "what_changed": [
+    "Added AES-256-GCM opaque outreach tokens",
+    "Added first-party /r/[token] redirect",
+    "Added bot classification and user-agent hashing",
+    "Added campaign, experiment, variant, market, vertical, and correlation attribution",
+    "Recorded click events through the existing consulting-ingest-event contract"
+  ],
+  "what_was_proven": [
+    "Preview environment loaded SF_OUTREACH_LINK_SECRET",
+    "A valid opaque token was generated and authenticated",
+    "The real route classified the probe as a human click",
+    "The click was written to staging consulting.funnel_events",
+    "The route redirected to os.studioflows.co with preserved non-personal attribution"
+  ],
+  "what_was_not_proven": [
+    "Production domain binding for go.studioflows.co",
+    "Production Axiom event persistence",
+    "Platform landing-event correlation on os.studioflows.co",
+    "GA4 and Clarity correlation across both repositories"
+  ],
+  "current_blocker": "Platform PR #305 must pass an authorized staging deployment and write the matching landing event.",
+  "next_single_action": "Promote Platform PR #305 through the governed staging gate and run one cross-repository correlation test.",
+  "do_not_touch": [
+    "auth",
+    "billing",
+    "Stripe",
+    "tenant provisioning",
+    "unrelated marketing routes",
+    "production data"
+  ],
+  "runtime_evidence": {
+    "deployment_id": "dpl_HX1RQ3afCJ1vsJ7HXiVTnMPxbLxR",
+    "deployment_commit": "57e2e2a471d9abdd4e879ceca2efd83439737bc4",
+    "correlation_id": "runtime-probe-1784831105941",
+    "event_id": "822cbdd6-9d37-4885-9014-df96f7dfb8c4",
+    "event_store": "axiom-staging-v2 consulting.funnel_events",
+    "redirect_status": 302,
+    "redirect_origin": "https://os.studioflows.co"
+  }
+}

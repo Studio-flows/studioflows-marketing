@@ -1,0 +1,46 @@
+{
+  "gate": "sf-sales-click-tracking-v1",
+  "state": "CODE_PASS",
+  "files_changed": [
+    "app/r/[token]/route.js",
+    "lib/outreach-link.mjs",
+    "tests/outreach-link.test.mjs",
+    "proof/gates/sf-sales-click-tracking-v1-20260723T173800Z.json"
+  ],
+  "tests_run": [
+    "node --test tests/outreach-link.test.mjs -> 7 passed, 0 failed",
+    "GitHub compare main...kiro/sf-sales-click-tracking-v1 -> scoped additions only"
+  ],
+  "what_changed": [
+    "Added an AES-256-GCM opaque outreach token contract.",
+    "Added a first-party /r/[token] redirect that records click events through the existing consulting-ingest-event endpoint.",
+    "Added destination allowlisting, UTM preservation, scanner classification, user-agent hashing, and fail-open redirects.",
+    "Opened draft PR #8; nothing merged or deployed."
+  ],
+  "what_was_proven": [
+    "Tokens round-trip without exposing prospect identifiers or destination data.",
+    "Tampered and expired tokens are rejected.",
+    "Only approved StudioFlows origins are accepted.",
+    "Attribution parameters are deterministic and non-personal.",
+    "Common security scanners and HEAD probes are separated from human clicks."
+  ],
+  "what_was_not_proven": [
+    "Full Next.js branch build was not run.",
+    "No preview or production deployment was proven.",
+    "No runtime event insert or redirect was proven.",
+    "go.studioflows.co DNS and Vercel domain binding were not proven.",
+    "GA4 and Clarity correlation were not proven."
+  ],
+  "current_blocker": "The branch needs a build-capable preview or approved deployment path plus required environment variables before runtime proof.",
+  "next_single_action": "Run a Vercel preview build for draft PR #8 without merging, then correct any exact build failure.",
+  "do_not_touch": [
+    "auth",
+    "billing",
+    "Stripe",
+    "tenant provisioning",
+    "scorecard backend",
+    "unrelated routes",
+    "environment files",
+    "lockfiles"
+  ]
+}

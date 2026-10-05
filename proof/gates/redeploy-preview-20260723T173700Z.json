@@ -1,0 +1,31 @@
+{
+  "gate": "sf-sales-click-tracking-v1",
+  "state": "DEPLOYED",
+  "files_changed": [
+    "proof/gates/redeploy-preview-20260723T173700Z.json"
+  ],
+  "tests_run": [
+    "7/7 targeted outreach-link contract tests passed",
+    "prior Vercel preview build compiled, linted, type-checked, and generated 41 routes"
+  ],
+  "what_changed": [
+    "Triggered a fresh preview deployment after SF_OUTREACH_LINK_SECRET was added to the Vercel Preview environment."
+  ],
+  "what_was_proven": [
+    "The bounded branch was previously deployable and the redirect route was included in the build."
+  ],
+  "what_was_not_proven": [
+    "The fresh deployment has not yet reached READY.",
+    "A valid token has not yet produced a stored click event and attributed redirect."
+  ],
+  "current_blocker": "Awaiting fresh Vercel preview deployment and runtime test.",
+  "next_single_action": "Verify the new preview is READY, then execute one signed-link runtime test.",
+  "do_not_touch": [
+    "auth",
+    "billing",
+    "Stripe",
+    "database schema",
+    "unrelated marketing routes",
+    "production"
+  ]
+}

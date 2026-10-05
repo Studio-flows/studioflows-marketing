@@ -11,7 +11,7 @@ export const SITE_POSITIONING = {
 export const PUBLIC_SOCIAL_IMAGE = {
   url: "/StudioFlows%20logo%20(1200%20x%20675%20px)%20(1).png",
   width: 1120,
-  height: 464,
+  height: 459,
   alt: "StudioFlows — AI operating system for service businesses",
 } as const;
 

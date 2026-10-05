@@ -2,23 +2,14 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { TrackedResourceLink } from "@/components/analytics/TrackedResourceLink";
-import { absoluteUrl } from "@/lib/seo";
+import { absoluteUrl, publicPageMetadata } from "@/lib/seo";
 
-export const metadata: Metadata = {
+export const metadata: Metadata = publicPageMetadata({
   title: "Operational Resources",
   description:
     "Diagnostics and operating models for finding owner dependency, broken handoffs, and operational drag in service businesses.",
-  alternates: {
-    canonical: "/resources",
-  },
-  openGraph: {
-    title: "Operational Resources | StudioFlows",
-    description:
-      "Diagnostics and operating models for finding owner dependency, broken handoffs, and operational drag.",
-    url: "/resources",
-    type: "website",
-  },
-};
+  path: "/resources",
+});
 
 const RESOURCES = [
   {

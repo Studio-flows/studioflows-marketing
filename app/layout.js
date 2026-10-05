@@ -1,29 +1,19 @@
 import "./globals.css";
 
 import { SiteEntityScript } from "./SiteEntityScript";
+import { publicPageMetadata, PUBLIC_SITE_ORIGIN, SITE_POSITIONING } from "@/lib/seo";
+
+const siteMetadata = publicPageMetadata({ ...SITE_POSITIONING, path: "/" });
 
 export const metadata = {
-  metadataBase: new URL("https://www.studioflows.co"),
+  metadataBase: new URL(PUBLIC_SITE_ORIGIN),
   title: {
-    default: "StudioFlows | Execution Infrastructure for Service Businesses",
+    default: `${SITE_POSITIONING.title} | StudioFlows`,
     template: "%s | StudioFlows",
   },
-  description:
-    "StudioFlows turns scattered business signals into approved, trackable execution for service businesses.",
-  openGraph: {
-    title: "StudioFlows | Execution Infrastructure for Service Businesses",
-    description:
-      "StudioFlows turns scattered business signals into approved, trackable execution for service businesses.",
-    url: "https://www.studioflows.co",
-    siteName: "StudioFlows",
-    type: "website",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "StudioFlows | Execution Infrastructure for Service Businesses",
-    description:
-      "StudioFlows turns scattered business signals into approved, trackable execution for service businesses.",
-  },
+  description: SITE_POSITIONING.description,
+  openGraph: siteMetadata.openGraph,
+  twitter: siteMetadata.twitter,
 };
 
 export default function RootLayout({ children }) {
